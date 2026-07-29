@@ -216,6 +216,7 @@
     <button class="navBtn" data-view="soforler">Şoförler</button>
     <button class="navBtn" data-view="seferler">Sefer Ekle</button>
     <button class="navBtn" data-view="sefertanimlari">Sefer Tanımları</button>
+    <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
   </div>
 
   <div id="alertBanner" style="display:none;"></div>
@@ -364,6 +365,36 @@
       <button id="newTripDefBtn" class="primary-btn">+ Yeni sefer tanımı</button>
     </div>
     <div class="list-wrap" id="tripDefList"></div>
+  </div>
+
+  <div id="irsaliyeView" style="display:none;">
+    <p style="font-weight:600; font-size:15px; margin-bottom:8px;">İrsaliye koçanı ver</p>
+    <div class="rem-form" style="grid-template-columns: 130px 130px 1fr 80px;">
+      <input type="date" id="irsDate" />
+      <input type="text" id="irsNo" placeholder="İrsaliye no / koçan no" />
+      <input type="text" id="irsPerson" placeholder="Teslim alan kişi" />
+      <button id="addIrsBtn" class="primary-btn">+ Ekle</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <p style="font-weight:600; font-size:15px; margin:0;">İrsaliye koçanları</p>
+      <input type="text" id="irsSearch" placeholder="İrsaliye no veya kişi ile ara..." style="min-width:220px;" />
+    </div>
+    <div class="list-wrap" id="irsList"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="irsEditModalOverlay">
+  <div class="modal-box">
+    <h3>İrsaliye kaydını düzenle</h3>
+    <div class="field-group">
+      <input type="date" id="irsEditDate" />
+      <input type="text" id="irsEditNo" placeholder="İrsaliye no / koçan no" />
+      <input type="text" id="irsEditPerson" placeholder="Teslim alan kişi" />
+    </div>
+    <div class="actions">
+      <button id="irsEditCancel">Vazgeç</button>
+      <button id="irsEditSave" class="primary-btn">Kaydet</button>
+    </div>
   </div>
 </div>
 
@@ -653,7 +684,7 @@
 
 <script>
 const STORAGE_KEY = 'cari-hesap-data-v1';
-let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [] };
+let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] };
 let currentAccId = null;
 let editingAccId = null;
 let activeTab = 'hepsi';
@@ -715,7 +746,7 @@ function updateEmptyDataBanner() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [] }, JSON.parse(raw));
+    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
   migrateLegacyFuelData();
   updateTabStyles();
@@ -762,12 +793,14 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('soforlerView').style.display = activeView === 'soforler' ? 'block' : 'none';
     document.getElementById('seferlerView').style.display = activeView === 'seferler' ? 'block' : 'none';
     document.getElementById('sefertanimlariView').style.display = activeView === 'sefertanimlari' ? 'block' : 'none';
+    document.getElementById('irsaliyeView').style.display = activeView === 'irsaliye' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
     if (activeView === 'yakit') renderFuelLogs();
     if (activeView === 'soforler') renderDrivers();
     if (activeView === 'seferler') renderTrips();
     if (activeView === 'sefertanimlari') renderTripDefs();
+    if (activeView === 'irsaliye') renderIrsaliyeler();
   });
 });
 
@@ -1248,7 +1281,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
   reader.onload = () => {
     try {
       const imported = JSON.parse(reader.result);
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [] }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, imported);
       save();
       updateTabStyles();
       renderList();
@@ -1657,7 +1690,7 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const imported = await res.json();
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [] }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, imported);
       save();
       updateTabStyles();
       renderList();
@@ -1671,6 +1704,99 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       gdriveSetStatus('Geri yükleme başarısız oldu, lütfen tekrar deneyin.');
     }
   });
+});
+
+// ---- İrsaliye Takip ----
+let editingIrsId = null;
+
+function renderIrsaliyeler() {
+  const list = document.getElementById('irsList');
+  const q = (document.getElementById('irsSearch').value || '').toLowerCase().trim();
+  let items = data.irsaliyeler.slice().sort((a,b) => b.date.localeCompare(a.date));
+  if (q) items = items.filter(i => (i.no||'').toLowerCase().includes(q) || (i.person||'').toLowerCase().includes(q));
+  if (items.length === 0) {
+    list.innerHTML = `<div class="empty">${q ? 'Eşleşen kayıt bulunamadı.' : 'Henüz irsaliye koçanı verilmemiş.'}</div>`;
+    return;
+  }
+  list.innerHTML = items.map(i => `
+    <div class="rem-row ${i.returned ? 'done' : ''}">
+      <div class="rem-left">
+        <input type="checkbox" class="irsReturnCheck" data-id="${i.id}" ${i.returned ? 'checked' : ''} />
+        <div>
+          <span class="rem-date">${fmtDate(i.date)}</span>
+          <p class="rem-desc ${i.returned ? 'done-text' : ''}"><b>İrs. No: ${escapeHtml(i.no)}</b> — ${escapeHtml(i.person)}
+            <span class="rem-acc">${i.returned ? 'Teslim alındı' + (i.returnDate ? ' (' + fmtDate(i.returnDate) + ')' : '') : 'Bekliyor'}</span>
+          </p>
+        </div>
+      </div>
+      <div class="rem-actions">
+        <button class="editIrsBtn" data-id="${i.id}">Düzenle</button>
+        <button class="delIrsBtn" data-id="${i.id}">Sil</button>
+      </div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.irsReturnCheck').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const i = data.irsaliyeler.find(x => x.id === chk.dataset.id);
+      i.returned = chk.checked;
+      i.returnDate = chk.checked ? todayStr() : null;
+      save();
+      renderIrsaliyeler();
+    });
+  });
+  list.querySelectorAll('.delIrsBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showConfirm('Bu irsaliye kaydını silmek istediğinize emin misiniz?', () => {
+        data.irsaliyeler = data.irsaliyeler.filter(i => i.id !== btn.dataset.id);
+        save();
+        renderIrsaliyeler();
+      });
+    });
+  });
+  list.querySelectorAll('.editIrsBtn').forEach(btn => {
+    btn.addEventListener('click', () => openIrsEdit(btn.dataset.id));
+  });
+}
+
+document.getElementById('irsSearch').addEventListener('input', () => {
+  renderIrsaliyeler();
+});
+
+document.getElementById('addIrsBtn').addEventListener('click', () => {
+  const date = document.getElementById('irsDate').value;
+  const no = document.getElementById('irsNo').value.trim();
+  const person = document.getElementById('irsPerson').value.trim();
+  if (!date || !no || !person) return;
+  data.irsaliyeler.push({ id: 'irs_' + Date.now(), date, no, person, returned: false, returnDate: null });
+  save();
+  document.getElementById('irsNo').value = '';
+  document.getElementById('irsPerson').value = '';
+  renderIrsaliyeler();
+});
+
+function openIrsEdit(id) {
+  editingIrsId = id;
+  const i = data.irsaliyeler.find(x => x.id === id);
+  document.getElementById('irsEditDate').value = i.date;
+  document.getElementById('irsEditNo').value = i.no;
+  document.getElementById('irsEditPerson').value = i.person;
+  document.getElementById('irsEditModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('irsEditCancel').addEventListener('click', () => {
+  document.getElementById('irsEditModalOverlay').style.display = 'none';
+});
+
+document.getElementById('irsEditSave').addEventListener('click', () => {
+  const date = document.getElementById('irsEditDate').value;
+  const no = document.getElementById('irsEditNo').value.trim();
+  const person = document.getElementById('irsEditPerson').value.trim();
+  if (!date || !no || !person) return;
+  const i = data.irsaliyeler.find(x => x.id === editingIrsId);
+  i.date = date; i.no = no; i.person = person;
+  save();
+  document.getElementById('irsEditModalOverlay').style.display = 'none';
+  renderIrsaliyeler();
 });
 
 load();
