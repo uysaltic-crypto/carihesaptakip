@@ -379,6 +379,10 @@
       <p style="font-weight:600; font-size:15px; margin:0;">İrsaliye koçanları</p>
       <input type="text" id="irsSearch" placeholder="İrsaliye no veya kişi ile ara..." style="min-width:220px;" />
     </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:8px;">
+      <input type="checkbox" id="irsShowReturned" />
+      Teslim alınanları göster
+    </label>
     <div class="list-wrap" id="irsList"></div>
   </div>
 </div>
@@ -1712,10 +1716,12 @@ let editingIrsId = null;
 function renderIrsaliyeler() {
   const list = document.getElementById('irsList');
   const q = (document.getElementById('irsSearch').value || '').toLowerCase().trim();
+  const showReturned = document.getElementById('irsShowReturned').checked;
   let items = data.irsaliyeler.slice().sort((a,b) => b.date.localeCompare(a.date));
+  if (!showReturned) items = items.filter(i => !i.returned);
   if (q) items = items.filter(i => (i.no||'').toLowerCase().includes(q) || (i.person||'').toLowerCase().includes(q));
   if (items.length === 0) {
-    list.innerHTML = `<div class="empty">${q ? 'Eşleşen kayıt bulunamadı.' : 'Henüz irsaliye koçanı verilmemiş.'}</div>`;
+    list.innerHTML = `<div class="empty">${q ? 'Eşleşen kayıt bulunamadı.' : (showReturned ? 'Henüz irsaliye koçanı verilmemiş.' : 'Bekleyen irsaliye koçanı yok.')}</div>`;
     return;
   }
   list.innerHTML = items.map(i => `
@@ -1759,6 +1765,10 @@ function renderIrsaliyeler() {
 }
 
 document.getElementById('irsSearch').addEventListener('input', () => {
+  renderIrsaliyeler();
+});
+
+document.getElementById('irsShowReturned').addEventListener('change', () => {
   renderIrsaliyeler();
 });
 
