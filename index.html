@@ -72,7 +72,7 @@
   .detail-actions { display: flex; gap: 8px; margin-top: 14px; }
   .tx-form { display: grid; grid-template-columns: 1fr 2fr 110px 110px 40px; gap: 8px; margin-bottom: 14px; }
   .tx-row {
-    display: grid; grid-template-columns: 1fr 2fr 110px 110px 40px 40px; gap: 8px;
+    display: grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap: 8px;
     padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; align-items: center;
   }
   .tx-row .amt { text-align: right; }
@@ -268,6 +268,9 @@
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
         <button id="addTxBtn" class="primary-btn">+</button>
       </div>
+      <div style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#999; font-weight:600;">
+        <span>Tarih</span><span>Açıklama</span><span style="text-align:right;">Borç</span><span style="text-align:right;">Alacak</span><span style="text-align:right;">Bakiye</span><span></span><span></span>
+      </div>
       <div class="list-wrap" id="txList" style="padding:0 12px;"></div>
     </div>
   </div>
@@ -375,14 +378,34 @@
       <input type="text" id="irsPerson" placeholder="Teslim alan kişi" />
       <button id="addIrsBtn" class="primary-btn">+ Ekle</button>
     </div>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
       <p style="font-weight:600; font-size:15px; margin:0;">İrsaliye koçanları</p>
-      <input type="text" id="irsSearch" placeholder="İrsaliye no veya kişi ile ara..." style="min-width:220px;" />
+      <div style="display:flex; gap:8px;">
+        <select id="irsSort">
+          <option value="date_desc">Tarih (yeni → eski)</option>
+          <option value="date_asc">Tarih (eski → yeni)</option>
+          <option value="no_asc">İrsaliye No (A-Z)</option>
+          <option value="person_asc">Kişi (A-Z)</option>
+          <option value="status">Durum (bekleyen önce)</option>
+        </select>
+        <input type="text" id="irsSearch" placeholder="İrsaliye no veya kişi ile ara..." style="min-width:200px;" />
+      </div>
     </div>
     <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:8px;">
       <input type="checkbox" id="irsShowReturned" />
       Teslim alınanları göster
     </label>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <label style="font-size:13px; color:#555;">Sırala:</label>
+      <select id="irsSort">
+        <option value="date_desc">Tarih (yeni → eski)</option>
+        <option value="date_asc">Tarih (eski → yeni)</option>
+        <option value="no_asc">İrsaliye no (A → Z)</option>
+        <option value="no_desc">İrsaliye no (Z → A)</option>
+        <option value="person_asc">Kişi (A → Z)</option>
+        <option value="person_desc">Kişi (Z → A)</option>
+      </select>
+    </div>
     <div class="list-wrap" id="irsList"></div>
   </div>
 </div>
@@ -1117,13 +1140,20 @@ function openDetail(id) {
 }
 
 function renderTx() {
-  const txs = (data.transactions[currentAccId] || []).slice().sort((a,b) => b.date.localeCompare(a.date));
+  const chronological = (data.transactions[currentAccId] || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  let running = 0;
+  const withRunning = chronological.map(t => {
+    running += (Number(t.debit)||0) - (Number(t.credit)||0);
+    return Object.assign({}, t, { runningBalance: running });
+  });
+  const txs = withRunning.slice().sort((a,b) => b.date.localeCompare(a.date));
   const rows = txs.map(t => {
     return `<div class="tx-row">
       <span>${fmtDate(t.date)}</span>
       <span>${escapeHtml(t.desc||'')}</span>
       <span class="amt">${t.debit ? fmt(t.debit) : ''}</span>
       <span class="amt">${t.credit ? fmt(t.credit) : ''}</span>
+      <span class="amt" style="font-weight:600;">${fmt(t.runningBalance)}</span>
       <button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#1a1a1a;">✎</button>
       <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>
     </div>`;
@@ -1717,7 +1747,18 @@ function renderIrsaliyeler() {
   const list = document.getElementById('irsList');
   const q = (document.getElementById('irsSearch').value || '').toLowerCase().trim();
   const showReturned = document.getElementById('irsShowReturned').checked;
-  let items = data.irsaliyeler.slice().sort((a,b) => b.date.localeCompare(a.date));
+  const sortBy = document.getElementById('irsSort').value;
+  let items = data.irsaliyeler.slice();
+  const sorters = {
+    date_desc: (a,b) => b.date.localeCompare(a.date),
+    date_asc: (a,b) => a.date.localeCompare(b.date),
+    no_asc: (a,b) => (a.no||'').localeCompare(b.no||'', 'tr', { numeric: true }),
+    no_desc: (a,b) => (b.no||'').localeCompare(a.no||'', 'tr', { numeric: true }),
+    person_asc: (a,b) => (a.person||'').localeCompare(b.person||'', 'tr'),
+    person_desc: (a,b) => (b.person||'').localeCompare(a.person||'', 'tr'),
+    status: (a,b) => (a.returned === b.returned) ? b.date.localeCompare(a.date) : (a.returned ? 1 : -1),
+  };
+  items.sort(sorters[sortBy] || sorters.date_desc);
   if (!showReturned) items = items.filter(i => !i.returned);
   if (q) items = items.filter(i => (i.no||'').toLowerCase().includes(q) || (i.person||'').toLowerCase().includes(q));
   if (items.length === 0) {
@@ -1769,6 +1810,10 @@ document.getElementById('irsSearch').addEventListener('input', () => {
 });
 
 document.getElementById('irsShowReturned').addEventListener('change', () => {
+  renderIrsaliyeler();
+});
+
+document.getElementById('irsSort').addEventListener('change', () => {
   renderIrsaliyeler();
 });
 
