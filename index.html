@@ -348,7 +348,10 @@
   <div id="seferlerView" style="display:none;">
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer ekle</p>
     <div class="rem-form" style="grid-template-columns: 1fr 120px 130px 1fr 130px 80px; align-items:end;">
-      <select id="tripDriver"><option value="">Şoför seçin</option></select>
+      <div>
+        <input type="text" id="tripDriverInput" list="tripDriverDatalist" placeholder="Şoför ara ve seçin..." autocomplete="off" />
+        <datalist id="tripDriverDatalist"></datalist>
+      </div>
       <input type="text" id="tripIrsaliyeNo" placeholder="İrsaliye no" />
       <input type="date" id="tripDate" />
       <div>
@@ -1971,14 +1974,12 @@ function upsertTripTx(trip) {
 }
 
 function populateTripDriverSelect() {
-  const sel = document.getElementById('tripDriver');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Şoför seçin</option>' +
-    data.drivers.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
-  sel.value = current;
+  const dl = document.getElementById('tripDriverDatalist');
+  dl.innerHTML = data.drivers.map(d => `<option value="${escapeHtml(d.name)}"></option>`).join('');
 }
 
 let selectedTripDefId = null;
+let selectedTripDriverId = null;
 
 function populateTripDefSelect() {
   const dl = document.getElementById('tripDefDatalist');
@@ -1994,6 +1995,12 @@ document.getElementById('tripDefInput').addEventListener('input', () => {
   } else {
     selectedTripDefId = null;
   }
+});
+
+document.getElementById('tripDriverInput').addEventListener('input', () => {
+  const val = document.getElementById('tripDriverInput').value;
+  const d = data.drivers.find(x => x.name === val);
+  selectedTripDriverId = d ? d.id : null;
 });
 
 function renderTrips() {
@@ -2091,7 +2098,7 @@ document.getElementById('tripEditSave').addEventListener('click', () => {
 
 document.getElementById('addTripBtn').addEventListener('click', () => {
   const irsaliyeNo = document.getElementById('tripIrsaliyeNo').value.trim();
-  const driverId = document.getElementById('tripDriver').value;
+  const driverId = selectedTripDriverId;
   const tripDefId = selectedTripDefId;
   const tripDef = data.tripDefs.find(x => x.id === tripDefId);
   const date = document.getElementById('tripDate').value;
@@ -2104,7 +2111,9 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   document.getElementById('tripIrsaliyeNo').value = '';
   document.getElementById('tripPrice').value = '';
   document.getElementById('tripDefInput').value = '';
+  document.getElementById('tripDriverInput').value = '';
   selectedTripDefId = null;
+  selectedTripDriverId = null;
   renderTrips();
   renderList();
 });
