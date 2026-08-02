@@ -359,7 +359,17 @@
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer geçmişi</p>
-    <input type="text" id="tripIrsaliyeSearch" placeholder="İrsaliye no ile ara..." style="width:100%; margin-bottom:8px;" />
+    <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+      <select id="tripSort">
+        <option value="date_desc">Tarih (yeni → eski)</option>
+        <option value="date_asc">Tarih (eski → yeni)</option>
+        <option value="driver_asc">Şoför (A-Z)</option>
+        <option value="price_desc">Tutar (yüksek → düşük)</option>
+        <option value="price_asc">Tutar (düşük → yüksek)</option>
+        <option value="no_asc">İrsaliye No (A-Z)</option>
+      </select>
+      <input type="text" id="tripIrsaliyeSearch" placeholder="İrsaliye no ile ara..." style="flex:1; min-width:200px;" />
+    </div>
     <div class="list-wrap" id="tripList"></div>
   </div>
 
@@ -1442,6 +1452,10 @@ document.getElementById('tripIrsaliyeSearch').addEventListener('input', () => {
   renderTrips();
 });
 
+document.getElementById('tripSort').addEventListener('change', () => {
+  renderTrips();
+});
+
 document.getElementById('remExcelBtn').addEventListener('click', () => {
   const rems = data.reminders.concat(vehicleVirtualReminders()).concat(driverVirtualReminders()).slice().sort((a,b) => a.date.localeCompare(b.date));
   if (rems.length === 0) { alert('Dökümü alınacak hatırlatıcı yok.'); return; }
@@ -1987,7 +2001,17 @@ function renderTrips() {
   populateTripDefSelect();
   const list = document.getElementById('tripList');
   const q = (document.getElementById('tripIrsaliyeSearch').value || '').toLowerCase().trim();
-  let trips = data.trips.slice().sort((a,b) => b.date.localeCompare(a.date));
+  const sortBy = document.getElementById('tripSort').value;
+  const driverName = (t) => { const d = data.drivers.find(x => x.id === t.driverId); return d ? d.name : ''; };
+  const tripSorters = {
+    date_desc: (a,b) => b.date.localeCompare(a.date),
+    date_asc: (a,b) => a.date.localeCompare(b.date),
+    driver_asc: (a,b) => driverName(a).localeCompare(driverName(b), 'tr'),
+    price_desc: (a,b) => (b.price||0) - (a.price||0),
+    price_asc: (a,b) => (a.price||0) - (b.price||0),
+    no_asc: (a,b) => (a.irsaliyeNo||'').localeCompare(b.irsaliyeNo||'', 'tr', { numeric: true }),
+  };
+  let trips = data.trips.slice().sort(tripSorters[sortBy] || tripSorters.date_desc);
   if (q) trips = trips.filter(t => (t.irsaliyeNo || '').toLowerCase().includes(q));
   if (trips.length === 0) {
     list.innerHTML = `<div class="empty">${q ? 'Bu irsaliye numarasıyla eşleşen sefer bulunamadı.' : 'Henüz sefer kaydı yok.'}</div>`;
