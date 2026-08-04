@@ -1418,14 +1418,19 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
   // En üste: seçilen araçların plakaları ve 1 km'de yaktığı yakıt karşılaştırması (en çoktan en aza)
   const summaryRows = selectedIds.map(vid => {
     const veh = data.vehicles.find(v => v.id === vid);
-    const perKm = computeVehicleConsumption(vid).perKm;
-    return { name: veh ? veh.name : '', perKm };
-  }).filter(r => r.perKm !== null).sort((a,b) => b.perKm - a.perKm);
+    const series = getVehicleKmSeries(vid);
+    const perEntryValues = [];
+    for (let i = 1; i < series.length; i++) {
+      const segKm = series[i].km - series[i-1].km;
+      if (segKm > 0 && series[i].liters) perEntryValues.push(Number((series[i].liters / segKm).toFixed(3)));
+    }
+    const avgPerKm = computeVehicleConsumption(vid).perKm;
+    return { name: veh ? veh.name : '', values: perEntryValues, avgPerKm };
+  }).filter(r => r.values.length > 0).sort((a,b) => (b.avgPerKm||0) - (a.avgPerKm||0));
 
   const rows = [
     ['1 km\'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)'],
-    summaryRows.map(r => r.name),
-    summaryRows.map(r => Number(r.perKm.toFixed(3))),
+    ...summaryRows.map(r => [r.name, ...r.values]),
     [],
     header
   ];
@@ -1460,7 +1465,8 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  const colCount = Math.max(selectedFields.length + 1, summaryRows.length);
+  const maxSummaryCols = summaryRows.reduce((m, r) => Math.max(m, r.values.length + 1), 0);
+  const colCount = Math.max(selectedFields.length + 1, maxSummaryCols);
   ws['!cols'] = Array.from({ length: colCount }, () => ({ wch: 16 }));
   XLSX.utils.book_append_sheet(wb, ws, 'Yakıt Raporu');
   XLSX.writeFile(wb, 'yakit-raporu-' + todayStr() + '.xlsx');
