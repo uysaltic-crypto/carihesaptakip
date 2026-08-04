@@ -347,7 +347,7 @@
 
   <div id="seferlerView" style="display:none;">
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer ekle</p>
-    <div class="rem-form" style="grid-template-columns: 1fr 120px 130px 1fr 130px 80px; align-items:end;">
+    <div class="rem-form" style="grid-template-columns: 1fr 120px 130px 1fr 1fr 130px 80px; align-items:end;">
       <div>
         <input type="text" id="tripDriverInput" list="tripDriverDatalist" placeholder="Şoför ara ve seçin..." autocomplete="off" />
         <datalist id="tripDriverDatalist"></datalist>
@@ -358,6 +358,7 @@
         <input type="text" id="tripDefInput" list="tripDefDatalist" placeholder="Sefer ara ve seçin..." autocomplete="off" />
         <datalist id="tripDefDatalist"></datalist>
       </div>
+      <select id="tripVehicle"><option value="">Araç seçin (opsiyonel)</option></select>
       <input type="number" id="tripPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
@@ -658,6 +659,7 @@
       <input type="date" id="tripEditDate" />
       <input type="text" id="tripEditDefInput" list="tripEditDefDatalist" placeholder="Sefer ara ve seçin..." autocomplete="off" />
       <datalist id="tripEditDefDatalist"></datalist>
+      <select id="tripEditVehicle"><option value="">Araç seçin (opsiyonel)</option></select>
       <input type="number" id="tripEditPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
     </div>
     <div class="actions">
@@ -1412,7 +1414,21 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
 
   const fieldLabels = { tarih: 'Tarih', litre: 'Litre', tutar: 'Tutar (TL)', litreFiyati: 'Litre Fiyatı (TL)', sonKm: 'Son KM', gidilenKm: 'Gidilen KM', perKm: '1 km\'de yakıt (lt)' };
   const header = ['Araç'].concat(selectedFields.map(f => fieldLabels[f]));
-  const rows = [header];
+
+  // En üste: seçilen araçların plakaları ve 1 km'de yaktığı yakıt karşılaştırması (en çoktan en aza)
+  const summaryRows = selectedIds.map(vid => {
+    const veh = data.vehicles.find(v => v.id === vid);
+    const perKm = computeVehicleConsumption(vid).perKm;
+    return { name: veh ? veh.name : '', perKm };
+  }).filter(r => r.perKm !== null).sort((a,b) => b.perKm - a.perKm);
+
+  const rows = [
+    ['1 km\'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)'],
+    summaryRows.map(r => r.name),
+    summaryRows.map(r => Number(r.perKm.toFixed(3))),
+    [],
+    header
+  ];
 
   selectedIds.forEach(vid => {
     const veh = data.vehicles.find(v => v.id === vid);
@@ -1444,7 +1460,8 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 20 }].concat(selectedFields.map(() => ({ wch: 14 })));
+  const colCount = Math.max(selectedFields.length + 1, summaryRows.length);
+  ws['!cols'] = Array.from({ length: colCount }, () => ({ wch: 16 }));
   XLSX.utils.book_append_sheet(wb, ws, 'Yakıt Raporu');
   XLSX.writeFile(wb, 'yakit-raporu-' + todayStr() + '.xlsx');
 
@@ -1986,6 +2003,14 @@ function populateTripDefSelect() {
   dl.innerHTML = data.tripDefs.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
 }
 
+function populateTripVehicleSelect() {
+  const sel = document.getElementById('tripVehicle');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Araç seçin (opsiyonel)</option>' +
+    data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+  sel.value = current;
+}
+
 document.getElementById('tripDefInput').addEventListener('input', () => {
   const val = document.getElementById('tripDefInput').value;
   const td = data.tripDefs.find(x => x.name === val);
@@ -2006,6 +2031,7 @@ document.getElementById('tripDriverInput').addEventListener('input', () => {
 function renderTrips() {
   populateTripDriverSelect();
   populateTripDefSelect();
+  populateTripVehicleSelect();
   const list = document.getElementById('tripList');
   const q = (document.getElementById('tripIrsaliyeSearch').value || '').toLowerCase().trim();
   const sortBy = document.getElementById('tripSort').value;
@@ -2026,11 +2052,12 @@ function renderTrips() {
   }
   list.innerHTML = trips.map(t => {
     const driver = data.drivers.find(d => d.id === t.driverId);
+    const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
     return `<div class="rem-row">
       <div class="rem-left">
         <div>
           <span class="rem-date">${fmtDate(t.date)}</span>
-          <p class="rem-desc">${t.irsaliyeNo ? `<b>İrs. No: ${escapeHtml(t.irsaliyeNo)}</b> — ` : ''}${driver ? escapeHtml(driver.name) : 'Silinmiş şoför'}<span class="rem-acc">${escapeHtml(t.desc||'')}</span></p>
+          <p class="rem-desc">${t.irsaliyeNo ? `<b>İrs. No: ${escapeHtml(t.irsaliyeNo)}</b> — ` : ''}${driver ? escapeHtml(driver.name) : 'Silinmiş şoför'}${veh ? ' (' + escapeHtml(veh.name) + ')' : ''}<span class="rem-acc">${escapeHtml(t.desc||'')}</span></p>
         </div>
       </div>
       <div class="rem-actions">
@@ -2065,6 +2092,9 @@ function openTripEdit(id) {
   document.getElementById('tripEditIrsaliyeNo').value = t.irsaliyeNo || '';
   document.getElementById('tripEditDate').value = t.date;
   document.getElementById('tripEditDefInput').value = t.desc || '';
+  const vehSel = document.getElementById('tripEditVehicle');
+  vehSel.innerHTML = '<option value="">Araç seçin (opsiyonel)</option>' + data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+  vehSel.value = t.vehicleId || '';
   document.getElementById('tripEditPrice').value = t.price || '';
   document.getElementById('tripEditDefDatalist').innerHTML = data.tripDefs.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
   document.getElementById('tripEditModalOverlay').style.display = 'flex';
@@ -2085,10 +2115,11 @@ document.getElementById('tripEditSave').addEventListener('click', () => {
   const irsaliyeNo = document.getElementById('tripEditIrsaliyeNo').value.trim();
   const date = document.getElementById('tripEditDate').value;
   const desc = document.getElementById('tripEditDefInput').value.trim();
+  const vehicleId = document.getElementById('tripEditVehicle').value || null;
   const price = parseFloat(document.getElementById('tripEditPrice').value) || null;
   if (!driverId || !date || !desc) return;
   const t = data.trips.find(x => x.id === editingTripId);
-  t.driverId = driverId; t.irsaliyeNo = irsaliyeNo; t.date = date; t.desc = desc; t.price = price;
+  t.driverId = driverId; t.irsaliyeNo = irsaliyeNo; t.date = date; t.desc = desc; t.vehicleId = vehicleId; t.price = price;
   upsertTripTx(t);
   save();
   document.getElementById('tripEditModalOverlay').style.display = 'none';
@@ -2102,9 +2133,10 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const tripDefId = selectedTripDefId;
   const tripDef = data.tripDefs.find(x => x.id === tripDefId);
   const date = document.getElementById('tripDate').value;
+  const vehicleId = document.getElementById('tripVehicle').value || null;
   const price = parseFloat(document.getElementById('tripPrice').value) || null;
   if (!driverId || !tripDefId || !date) return;
-  const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, date, desc: tripDef.name, price, linkedTxId: null };
+  const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, linkedTxId: null };
   upsertTripTx(trip);
   data.trips.push(trip);
   save();
@@ -2112,6 +2144,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   document.getElementById('tripPrice').value = '';
   document.getElementById('tripDefInput').value = '';
   document.getElementById('tripDriverInput').value = '';
+  document.getElementById('tripVehicle').value = '';
   selectedTripDefId = null;
   selectedTripDriverId = null;
   renderTrips();
