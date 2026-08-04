@@ -283,7 +283,7 @@
       <input type="date" id="remDate" />
       <input type="text" id="remDesc" placeholder="Hatırlatıcı açıklaması" />
       <input type="number" id="remAmount" placeholder="Tutar (opsiyonel)" min="0" step="0.01" />
-      <select id="remAcc"><option value="">Cari seçilmedi (genel)</option></select>
+      <input type="text" id="remAcc" list="remAccDatalist" placeholder="Cari ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="remAccDatalist"></datalist>
       <select id="remType">
         <option value="borc">Borç</option>
         <option value="alacak">Alacak</option>
@@ -319,7 +319,7 @@
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Araçların 1 km'de yaktığı yakıt karşılaştırması</p>
     <div class="list-wrap" id="perKmCompare" style="padding:14px 16px; margin-bottom:20px;"></div>
     <div class="rem-form" style="grid-template-columns: 1fr 140px 130px 110px 110px 80px;">
-      <select id="fuelLogVeh"><option value="">Araç seçin</option></select>
+      <input type="text" id="fuelLogVeh" list="fuelLogVehDatalist" placeholder="Araç ara ve seçin..." autocomplete="off" /><datalist id="fuelLogVehDatalist"></datalist>
       <input type="date" id="fuelLogDate" />
       <input type="number" id="fuelLogAmount" placeholder="Tutar (TL)" min="0" step="0.01" />
       <input type="number" id="fuelLogLiters" placeholder="Litre" min="0" step="0.01" />
@@ -329,7 +329,7 @@
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
       <p style="font-weight:600; font-size:15px; margin:0;">Araç bazlı yakıt geçmişi</p>
-      <select id="fuelLogFilterVeh" style="min-width:200px;"><option value="">Tüm araçlar</option></select>
+      <input type="text" id="fuelLogFilterVeh" list="fuelLogFilterVehDatalist" placeholder="Araç ara ve seçin (tümü için boş bırakın)..." autocomplete="off" /><datalist id="fuelLogFilterVehDatalist"></datalist>
     </div>
     <div class="summary" id="vehicleFuelStats" style="display:none;"></div>
     <div class="list-wrap" id="fuelLogList" style="margin-bottom:20px;"></div>
@@ -358,7 +358,7 @@
         <input type="text" id="tripDefInput" list="tripDefDatalist" placeholder="Sefer ara ve seçin..." autocomplete="off" />
         <datalist id="tripDefDatalist"></datalist>
       </div>
-      <select id="tripVehicle"><option value="">Araç seçin (opsiyonel)</option></select>
+      <input type="text" id="tripVehicle" list="tripVehicleDatalist" placeholder="Araç ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="tripVehicleDatalist"></datalist>
       <input type="number" id="tripPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
@@ -409,17 +409,6 @@
       <input type="checkbox" id="irsShowReturned" />
       Teslim alınanları göster
     </label>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-      <label style="font-size:13px; color:#555;">Sırala:</label>
-      <select id="irsSort">
-        <option value="date_desc">Tarih (yeni → eski)</option>
-        <option value="date_asc">Tarih (eski → yeni)</option>
-        <option value="no_asc">İrsaliye no (A → Z)</option>
-        <option value="no_desc">İrsaliye no (Z → A)</option>
-        <option value="person_asc">Kişi (A → Z)</option>
-        <option value="person_desc">Kişi (Z → A)</option>
-      </select>
-    </div>
     <div class="list-wrap" id="irsList"></div>
   </div>
 </div>
@@ -469,7 +458,7 @@
       <input type="date" id="remEditDate" />
       <input type="text" id="remEditDesc" placeholder="Hatırlatıcı açıklaması" />
       <input type="number" id="remEditAmount" placeholder="Tutar (opsiyonel)" min="0" step="0.01" />
-      <select id="remEditAcc"><option value="">Cari seçilmedi (genel)</option></select>
+      <input type="text" id="remEditAcc" list="remEditAccDatalist" placeholder="Cari ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="remEditAccDatalist"></datalist>
       <select id="remEditType">
         <option value="borc">Borç</option>
         <option value="alacak">Alacak</option>
@@ -542,7 +531,7 @@
   <div class="modal-box">
     <h3>Yakıt girişini düzenle</h3>
     <div class="field-group">
-      <select id="fuelLogEditVeh"></select>
+      <input type="text" id="fuelLogEditVeh" list="fuelLogEditVehDatalist" placeholder="Araç ara ve seçin..." autocomplete="off" /><datalist id="fuelLogEditVehDatalist"></datalist>
       <input type="date" id="fuelLogEditDate" />
       <input type="number" id="fuelLogEditAmount" placeholder="Tutar (TL)" min="0" step="0.01" />
       <input type="number" id="fuelLogEditLiters" placeholder="Litre" min="0" step="0.01" />
@@ -629,19 +618,23 @@
 <div class="modal-overlay" id="excelModalOverlay">
   <div class="modal-box" style="width:420px; max-height:85vh; overflow-y:auto;">
     <h3>Excel raporu ayarları</h3>
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Tarih aralığı (opsiyonel — boş bırakılırsa tüm geçmiş)</p>
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+      <input type="date" id="excelDateFrom" style="flex:1;" />
+      <input type="date" id="excelDateTo" style="flex:1;" />
+    </div>
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button id="excelQuickWeek" style="font-size:12px; padding:5px 10px;">Son 7 gün</button>
+      <button id="excelQuickMonth" style="font-size:12px; padding:5px 10px;">Son 30 gün</button>
+      <button id="excelQuickClear" style="font-size:12px; padding:5px 10px;">Temizle</button>
+    </div>
+
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Araçlar</p>
     <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #eee; margin-bottom:6px; font-weight:600;">
       <input type="checkbox" id="excelSelectAll" checked />
       Tümünü seç
     </label>
-    <div class="field-group" id="excelVehCheckList" style="max-height:200px; overflow-y:auto;"></div>
-
-    <p style="font-weight:600; font-size:13px; margin:16px 0 6px;">Raporlanacak alanlar</p>
-    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #eee; margin-bottom:6px; font-weight:600;">
-      <input type="checkbox" id="excelFieldSelectAll" checked />
-      Tümünü seç
-    </label>
-    <div class="field-group" id="excelFieldCheckList" style="max-height:220px; overflow-y:auto;"></div>
+    <div class="field-group" id="excelVehCheckList" style="max-height:220px; overflow-y:auto;"></div>
 
     <div class="actions">
       <button id="excelModalCancel">Vazgeç</button>
@@ -654,12 +647,12 @@
   <div class="modal-box">
     <h3>Seferi düzenle</h3>
     <div class="field-group">
-      <select id="tripEditDriver"></select>
+      <input type="text" id="tripEditDriver" list="tripEditDriverDatalist" placeholder="Şoför ara ve seçin..." autocomplete="off" /><datalist id="tripEditDriverDatalist"></datalist>
       <input type="text" id="tripEditIrsaliyeNo" placeholder="İrsaliye no" />
       <input type="date" id="tripEditDate" />
       <input type="text" id="tripEditDefInput" list="tripEditDefDatalist" placeholder="Sefer ara ve seçin..." autocomplete="off" />
       <datalist id="tripEditDefDatalist"></datalist>
-      <select id="tripEditVehicle"><option value="">Araç seçin (opsiyonel)</option></select>
+      <input type="text" id="tripEditVehicle" list="tripEditVehicleDatalist" placeholder="Araç ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="tripEditVehicleDatalist"></datalist>
       <input type="number" id="tripEditPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
     </div>
     <div class="actions">
@@ -700,7 +693,7 @@
         <img id="driverPsikoteknikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
         <button type="button" id="driverPsikoteknikPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
-      <select id="driverVeh"><option value="">Araç atanmadı</option></select>
+      <input type="text" id="driverVeh" list="driverVehDatalist" placeholder="Araç ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="driverVehDatalist"></datalist>
       <input id="driverNotes" placeholder="Not (opsiyonel)" />
     </div>
     <div class="actions">
@@ -823,6 +816,22 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+// ---- Arama yapılabilir seçim kutuları (input + datalist) için ortak yardımcılar ----
+function fillSearchableDatalist(datalistId, items, extraOptionLabel) {
+  const dl = document.getElementById(datalistId);
+  const extra = extraOptionLabel ? `<option value="${escapeHtml(extraOptionLabel)}"></option>` : '';
+  dl.innerHTML = extra + items.map(it => `<option value="${escapeHtml(it.name)}"></option>`).join('');
+}
+function resolveSearchableId(inputId, items) {
+  const val = document.getElementById(inputId).value.trim();
+  const found = items.find(it => it.name === val);
+  return found ? found.id : null;
+}
+function setSearchableValue(inputId, items, id) {
+  const found = items.find(it => it.id === id);
+  document.getElementById(inputId).value = found ? found.name : '';
+}
+
 // ---- Ana navigasyon ----
 document.querySelectorAll('.navBtn').forEach(b => {
   b.addEventListener('click', () => {
@@ -897,11 +906,7 @@ function updateAlertBanner() {
 }
 
 function populateRemAccSelect() {
-  const sel = document.getElementById('remAcc');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Cari seçilmedi (genel)</option>' +
-    data.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
-  sel.value = current;
+  fillSearchableDatalist('remAccDatalist', data.accounts);
 }
 
 function renderReminders() {
@@ -1007,13 +1012,11 @@ let editingRemId = null;
 function openRemEdit(id) {
   editingRemId = id;
   const r = data.reminders.find(x => x.id === id);
-  const sel = document.getElementById('remEditAcc');
-  sel.innerHTML = '<option value="">Cari seçilmedi (genel)</option>' +
-    data.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  fillSearchableDatalist('remEditAccDatalist', data.accounts);
   document.getElementById('remEditDate').value = r.date;
   document.getElementById('remEditDesc').value = r.desc;
   document.getElementById('remEditAmount').value = r.amount || '';
-  sel.value = r.accountId || '';
+  setSearchableValue('remEditAcc', data.accounts, r.accountId);
   document.getElementById('remEditType').value = r.type || 'borc';
   document.getElementById('remEditRecur').value = r.recurrence || 'none';
   document.getElementById('remModalOverlay').style.display = 'flex';
@@ -1027,7 +1030,7 @@ document.getElementById('remEditSave').addEventListener('click', () => {
   const date = document.getElementById('remEditDate').value;
   const desc = document.getElementById('remEditDesc').value.trim();
   const amount = parseFloat(document.getElementById('remEditAmount').value) || null;
-  const accountId = document.getElementById('remEditAcc').value || null;
+  const accountId = resolveSearchableId('remEditAcc', data.accounts);
   const type = document.getElementById('remEditType').value;
   const recurrence = document.getElementById('remEditRecur').value;
   if (!date || !desc) return;
@@ -1067,7 +1070,7 @@ document.getElementById('addRemBtn').addEventListener('click', () => {
   const date = document.getElementById('remDate').value;
   const desc = document.getElementById('remDesc').value.trim();
   const amount = parseFloat(document.getElementById('remAmount').value) || null;
-  const accountId = document.getElementById('remAcc').value || null;
+  const accountId = resolveSearchableId('remAcc', data.accounts);
   const type = document.getElementById('remType').value;
   const recurrence = document.getElementById('remRecur').value;
   if (!date || !desc) return;
@@ -1083,7 +1086,7 @@ document.getElementById('addRemBtn').addEventListener('click', () => {
 
 document.getElementById('addRemFromAccBtn').addEventListener('click', () => {
   document.querySelector('.navBtn[data-view="hatirlaticilar"]').click();
-  document.getElementById('remAcc').value = currentAccId;
+  setSearchableValue('remAcc', data.accounts, currentAccId);
   document.getElementById('remDesc').focus();
 });
 
@@ -1348,19 +1351,11 @@ document.getElementById('importFile').addEventListener('change', (e) => {
 });
 
 // ---- Excel Raporu ----
-const EXCEL_FIELDS = [
-  { key: 'tarih', label: 'Tarih' },
-  { key: 'litre', label: 'Litre' },
-  { key: 'tutar', label: 'Tutar (TL)' },
-  { key: 'litreFiyati', label: 'Litre Fiyatı (TL)' },
-  { key: 'sonKm', label: 'Son KM' },
-  { key: 'gidilenKm', label: 'Gidilen KM' },
-  { key: 'perKm', label: '1 km\'de yakıt (lt)' }
-];
-
 document.getElementById('excelReportBtn').addEventListener('click', () => {
   const box = document.getElementById('excelVehCheckList');
   document.getElementById('excelSelectAll').checked = true;
+  document.getElementById('excelDateFrom').value = '';
+  document.getElementById('excelDateTo').value = '';
   if (data.vehicles.length === 0) {
     box.innerHTML = `<div class="empty">Henüz araç eklenmedi.</div>`;
   } else {
@@ -1376,26 +1371,7 @@ document.getElementById('excelReportBtn').addEventListener('click', () => {
       });
     });
   }
-
-  document.getElementById('excelFieldSelectAll').checked = true;
-  const fieldBox = document.getElementById('excelFieldCheckList');
-  fieldBox.innerHTML = EXCEL_FIELDS.map(f => `
-    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0;">
-      <input type="checkbox" class="excelFieldCheck" value="${f.key}" checked />
-      ${escapeHtml(f.label)}
-    </label>
-  `).join('');
-  fieldBox.querySelectorAll('.excelFieldCheck').forEach(c => {
-    c.addEventListener('change', () => {
-      document.getElementById('excelFieldSelectAll').checked = document.querySelectorAll('.excelFieldCheck:checked').length === EXCEL_FIELDS.length;
-    });
-  });
-
   document.getElementById('excelModalOverlay').style.display = 'flex';
-});
-
-document.getElementById('excelFieldSelectAll').addEventListener('change', (e) => {
-  document.querySelectorAll('.excelFieldCheck').forEach(c => { c.checked = e.target.checked; });
 });
 
 document.getElementById('excelSelectAll').addEventListener('change', (e) => {
@@ -1406,70 +1382,64 @@ document.getElementById('excelModalCancel').addEventListener('click', () => {
   document.getElementById('excelModalOverlay').style.display = 'none';
 });
 
+document.getElementById('excelQuickWeek').addEventListener('click', () => {
+  const to = new Date(todayStr() + 'T00:00:00');
+  const from = new Date(to); from.setDate(from.getDate() - 7);
+  document.getElementById('excelDateFrom').value = from.toISOString().slice(0,10);
+  document.getElementById('excelDateTo').value = todayStr();
+});
+document.getElementById('excelQuickMonth').addEventListener('click', () => {
+  const to = new Date(todayStr() + 'T00:00:00');
+  const from = new Date(to); from.setDate(from.getDate() - 30);
+  document.getElementById('excelDateFrom').value = from.toISOString().slice(0,10);
+  document.getElementById('excelDateTo').value = todayStr();
+});
+document.getElementById('excelQuickClear').addEventListener('click', () => {
+  document.getElementById('excelDateFrom').value = '';
+  document.getElementById('excelDateTo').value = '';
+});
+
 document.getElementById('excelModalDownload').addEventListener('click', () => {
   const selectedIds = Array.from(document.querySelectorAll('.excelVehCheck:checked')).map(c => c.value);
   if (selectedIds.length === 0) { alert('Lütfen en az bir araç seçin.'); return; }
-  const selectedFields = Array.from(document.querySelectorAll('.excelFieldCheck:checked')).map(c => c.value);
-  if (selectedFields.length === 0) { alert('Lütfen en az bir alan seçin.'); return; }
+  const dateFrom = document.getElementById('excelDateFrom').value;
+  const dateTo = document.getElementById('excelDateTo').value;
 
-  const fieldLabels = { tarih: 'Tarih', litre: 'Litre', tutar: 'Tutar (TL)', litreFiyati: 'Litre Fiyatı (TL)', sonKm: 'Son KM', gidilenKm: 'Gidilen KM', perKm: '1 km\'de yakıt (lt)' };
-  const header = ['Araç'].concat(selectedFields.map(f => fieldLabels[f]));
-
-  // En üste: seçilen araçların plakaları ve 1 km'de yaktığı yakıt karşılaştırması (en çoktan en aza)
+  // Seçilen araçların, seçilen tarih aralığındaki her bireysel yakıt girişi için 1 km'de yakıt değerleri
   const summaryRows = selectedIds.map(vid => {
     const veh = data.vehicles.find(v => v.id === vid);
-    const series = getVehicleKmSeries(vid);
+    let series = data.fuelLogs.filter(l => l.vehicleId === vid && l.km);
+    if (dateFrom) series = series.filter(l => l.date >= dateFrom);
+    if (dateTo) series = series.filter(l => l.date <= dateTo);
+    series = series.slice().sort((a,b) => (a.km||0) - (b.km||0));
     const perEntryValues = [];
     for (let i = 1; i < series.length; i++) {
       const segKm = series[i].km - series[i-1].km;
       if (segKm > 0 && series[i].liters) perEntryValues.push(Number((series[i].liters / segKm).toFixed(3)));
     }
-    const avgPerKm = computeVehicleConsumption(vid).perKm;
-    return { name: veh ? veh.name : '', values: perEntryValues, avgPerKm };
-  }).filter(r => r.values.length > 0).sort((a,b) => (b.avgPerKm||0) - (a.avgPerKm||0));
+    const avg = perEntryValues.length ? perEntryValues.reduce((s,v) => s+v, 0) / perEntryValues.length : null;
+    return { name: veh ? veh.name : '', values: perEntryValues, avg };
+  }).filter(r => r.values.length > 0).sort((a,b) => (b.avg||0) - (a.avg||0));
+
+  if (summaryRows.length === 0) {
+    alert('Seçilen araç(lar) ve tarih aralığında karşılaştırma için yeterli veri (en az 2 km bilgili yakıt girişi) bulunamadı.');
+    return;
+  }
+
+  const titleParts = ["1 km'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)"];
+  if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
 
   const rows = [
-    ['1 km\'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)'],
+    [titleParts.join(' ')],
     ...summaryRows.map(r => [r.name, ...r.values]),
-    [],
-    header
   ];
-
-  selectedIds.forEach(vid => {
-    const veh = data.vehicles.find(v => v.id === vid);
-    const logs = data.fuelLogs.filter(l => l.vehicleId === vid).slice().sort((a,b) => a.date.localeCompare(b.date));
-    const kmSorted = getVehicleKmSeries(vid);
-    logs.forEach(l => {
-      const unitPrice = (l.amount && l.liters) ? (l.amount / l.liters) : '';
-      let gidilenKm = '';
-      let perKmRow = '';
-      if (l.km && l.liters) {
-        const idx = kmSorted.findIndex(x => x.id === l.id);
-        if (idx > 0) {
-          gidilenKm = l.km - kmSorted[idx-1].km;
-          if (gidilenKm > 0) perKmRow = Number((l.liters / gidilenKm).toFixed(3));
-        }
-      }
-      const values = { tarih: fmtDate(l.date), litre: l.liters || '', tutar: l.amount || '', litreFiyati: unitPrice ? Number(unitPrice.toFixed(2)) : '', sonKm: l.km || '', gidilenKm: gidilenKm || '', perKm: perKmRow };
-      rows.push([veh ? veh.name : ''].concat(selectedFields.map(f => values[f])));
-    });
-    let perKm = computeVehicleConsumption(vid).perKm;
-    if (perKm !== null) perKm = Number(perKm.toFixed(3));
-    else perKm = '';
-    const totalLiters = logs.reduce((s,l) => s + (l.liters||0), 0);
-    const totalAmount = logs.reduce((s,l) => s + (l.amount||0), 0);
-    const avgPrice = totalLiters > 0 ? Number((totalAmount/totalLiters).toFixed(2)) : '';
-    const summaryValues = { tarih: '', litre: totalLiters || '', tutar: totalAmount || '', litreFiyati: avgPrice, sonKm: '', gidilenKm: '', perKm: perKm };
-    rows.push([(veh ? veh.name : '') + ' - ÖZET (ORTALAMA)'].concat(selectedFields.map(f => summaryValues[f])));
-  });
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  const maxSummaryCols = summaryRows.reduce((m, r) => Math.max(m, r.values.length + 1), 0);
-  const colCount = Math.max(selectedFields.length + 1, maxSummaryCols);
-  ws['!cols'] = Array.from({ length: colCount }, () => ({ wch: 16 }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Yakıt Raporu');
-  XLSX.writeFile(wb, 'yakit-raporu-' + todayStr() + '.xlsx');
+  const maxCols = summaryRows.reduce((m, r) => Math.max(m, r.values.length + 1), 1);
+  ws['!cols'] = Array.from({ length: maxCols }, () => ({ wch: 12 }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Yakıt Karşılaştırma');
+  XLSX.writeFile(wb, 'yakit-karsilastirma-' + todayStr() + '.xlsx');
 
   document.getElementById('excelModalOverlay').style.display = 'none';
 });
@@ -2010,11 +1980,7 @@ function populateTripDefSelect() {
 }
 
 function populateTripVehicleSelect() {
-  const sel = document.getElementById('tripVehicle');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Araç seçin (opsiyonel)</option>' +
-    data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
-  sel.value = current;
+  fillSearchableDatalist('tripVehicleDatalist', data.vehicles);
 }
 
 document.getElementById('tripDefInput').addEventListener('input', () => {
@@ -2092,15 +2058,13 @@ let editingTripId = null;
 function openTripEdit(id) {
   editingTripId = id;
   const t = data.trips.find(x => x.id === id);
-  const sel = document.getElementById('tripEditDriver');
-  sel.innerHTML = data.drivers.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
-  sel.value = t.driverId;
+  fillSearchableDatalist('tripEditDriverDatalist', data.drivers);
+  setSearchableValue('tripEditDriver', data.drivers, t.driverId);
   document.getElementById('tripEditIrsaliyeNo').value = t.irsaliyeNo || '';
   document.getElementById('tripEditDate').value = t.date;
   document.getElementById('tripEditDefInput').value = t.desc || '';
-  const vehSel = document.getElementById('tripEditVehicle');
-  vehSel.innerHTML = '<option value="">Araç seçin (opsiyonel)</option>' + data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
-  vehSel.value = t.vehicleId || '';
+  fillSearchableDatalist('tripEditVehicleDatalist', data.vehicles);
+  setSearchableValue('tripEditVehicle', data.vehicles, t.vehicleId);
   document.getElementById('tripEditPrice').value = t.price || '';
   document.getElementById('tripEditDefDatalist').innerHTML = data.tripDefs.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
   document.getElementById('tripEditModalOverlay').style.display = 'flex';
@@ -2117,11 +2081,11 @@ document.getElementById('tripEditDefInput').addEventListener('input', () => {
 });
 
 document.getElementById('tripEditSave').addEventListener('click', () => {
-  const driverId = document.getElementById('tripEditDriver').value;
+  const driverId = resolveSearchableId('tripEditDriver', data.drivers);
   const irsaliyeNo = document.getElementById('tripEditIrsaliyeNo').value.trim();
   const date = document.getElementById('tripEditDate').value;
   const desc = document.getElementById('tripEditDefInput').value.trim();
-  const vehicleId = document.getElementById('tripEditVehicle').value || null;
+  const vehicleId = resolveSearchableId('tripEditVehicle', data.vehicles);
   const price = parseFloat(document.getElementById('tripEditPrice').value) || null;
   if (!driverId || !date || !desc) return;
   const t = data.trips.find(x => x.id === editingTripId);
@@ -2139,7 +2103,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const tripDefId = selectedTripDefId;
   const tripDef = data.tripDefs.find(x => x.id === tripDefId);
   const date = document.getElementById('tripDate').value;
-  const vehicleId = document.getElementById('tripVehicle').value || null;
+  const vehicleId = resolveSearchableId('tripVehicle', data.vehicles);
   const price = parseFloat(document.getElementById('tripPrice').value) || null;
   if (!driverId || !tripDefId || !date) return;
   const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, linkedTxId: null };
@@ -2493,19 +2457,11 @@ function renderFuelReport() {
 }
 
 function populateFuelLogVehSelect() {
-  const sel = document.getElementById('fuelLogVeh');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Araç seçin</option>' +
-    data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
-  sel.value = current;
+  fillSearchableDatalist('fuelLogVehDatalist', data.vehicles);
 }
 
 function populateFuelLogFilterSelect() {
-  const sel = document.getElementById('fuelLogFilterVeh');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Tüm araçlar</option>' +
-    data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
-  sel.value = current;
+  fillSearchableDatalist('fuelLogFilterVehDatalist', data.vehicles);
 }
 
 function renderVehicleFuelStats(vehicleId) {
@@ -2526,7 +2482,7 @@ function renderVehicleFuelStats(vehicleId) {
   `;
 }
 
-document.getElementById('fuelLogFilterVeh').addEventListener('change', () => {
+document.getElementById('fuelLogFilterVeh').addEventListener('input', () => {
   renderFuelLogs();
 });
 
@@ -2572,7 +2528,7 @@ function renderFuelLogs() {
   populateFuelLogFilterSelect();
   try { renderFuelReport(); } catch (e) { console.error('renderFuelReport hatası', e); }
   try { renderPerKmCompare(); } catch (e) { console.error('renderPerKmCompare hatası', e); }
-  const filterVehicleId = document.getElementById('fuelLogFilterVeh').value;
+  const filterVehicleId = resolveSearchableId('fuelLogFilterVeh', data.vehicles);
   try { renderVehicleFuelStats(filterVehicleId); } catch (e) { console.error('renderVehicleFuelStats hatası', e); }
   const list = document.getElementById('fuelLogList');
   let logs = data.fuelLogs.slice().sort((a,b) => b.date.localeCompare(a.date));
@@ -2631,9 +2587,8 @@ let editingFuelLogId = null;
 function openFuelLogEdit(id) {
   editingFuelLogId = id;
   const l = data.fuelLogs.find(x => x.id === id);
-  const sel = document.getElementById('fuelLogEditVeh');
-  sel.innerHTML = data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
-  sel.value = l.vehicleId;
+  fillSearchableDatalist('fuelLogEditVehDatalist', data.vehicles);
+  setSearchableValue('fuelLogEditVeh', data.vehicles, l.vehicleId);
   document.getElementById('fuelLogEditDate').value = l.date;
   document.getElementById('fuelLogEditAmount').value = l.amount || '';
   document.getElementById('fuelLogEditLiters').value = l.liters || '';
@@ -2646,7 +2601,7 @@ document.getElementById('fuelLogEditCancel').addEventListener('click', () => {
 });
 
 document.getElementById('fuelLogEditSave').addEventListener('click', () => {
-  const vehicleId = document.getElementById('fuelLogEditVeh').value;
+  const vehicleId = resolveSearchableId('fuelLogEditVeh', data.vehicles);
   const date = document.getElementById('fuelLogEditDate').value;
   const amount = parseFloat(document.getElementById('fuelLogEditAmount').value) || null;
   const liters = parseFloat(document.getElementById('fuelLogEditLiters').value) || null;
@@ -2661,7 +2616,7 @@ document.getElementById('fuelLogEditSave').addEventListener('click', () => {
 });
 
 document.getElementById('addFuelLogBtn').addEventListener('click', () => {
-  const vehicleId = document.getElementById('fuelLogVeh').value;
+  const vehicleId = resolveSearchableId('fuelLogVeh', data.vehicles);
   const date = document.getElementById('fuelLogDate').value;
   const amount = parseFloat(document.getElementById('fuelLogAmount').value) || null;
   const liters = parseFloat(document.getElementById('fuelLogLiters').value) || null;
@@ -2669,6 +2624,7 @@ document.getElementById('addFuelLogBtn').addEventListener('click', () => {
   if (!vehicleId || !date) return;
   data.fuelLogs.push({ id: 'fl_' + Date.now(), vehicleId, date, amount, liters, km });
   save();
+  document.getElementById('fuelLogVeh').value = '';
   document.getElementById('fuelLogAmount').value = '';
   document.getElementById('fuelLogLiters').value = '';
   document.getElementById('fuelLogKm').value = '';
