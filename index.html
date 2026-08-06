@@ -738,6 +738,15 @@ function fmtDate(d) {
   return `${day}/${m}/${y}`;
 }
 
+function migrateTripDefsLowercase() {
+  let changed = false;
+  data.tripDefs.forEach(td => {
+    const lower = td.name.toLocaleLowerCase('tr-TR');
+    if (td.name !== lower) { td.name = lower; changed = true; }
+  });
+  if (changed) save();
+}
+
 function migrateTripTxDescriptions() {
   let changed = false;
   Object.keys(data.transactions).forEach(accId => {
@@ -798,6 +807,7 @@ function load() {
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
   migrateLegacyFuelData();
   migrateTripTxDescriptions();
+  migrateTripDefsLowercase();
   updateTabStyles();
   renderList();
   renderReminders();
@@ -1123,6 +1133,7 @@ function renderList() {
   const q = (document.getElementById('searchInput').value || '').toLowerCase();
   let accs = data.accounts.filter(a => a.name.toLowerCase().includes(q));
   if (activeTab !== 'hepsi') accs = accs.filter(a => a.type === activeTab);
+  accs = accs.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
 
   const scopeAccs = activeTab === 'hepsi' ? data.accounts : data.accounts.filter(a => a.type === activeTab);
   let totalReceivable = 0, totalPayable = 0;
@@ -1949,7 +1960,7 @@ document.getElementById('tripDefModalCancel').addEventListener('click', () => {
 });
 
 document.getElementById('tripDefModalSave').addEventListener('click', () => {
-  const name = document.getElementById('tripDefName').value.trim();
+  const name = document.getElementById('tripDefName').value.trim().toLocaleLowerCase('tr-TR');
   if (!name) return;
   const price = parseFloat(document.getElementById('tripDefPrice').value) || 0;
   const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price };
@@ -2033,8 +2044,8 @@ function renderTrips() {
   const sortBy = document.getElementById('tripSort').value;
   const driverName = (t) => { const d = data.drivers.find(x => x.id === t.driverId); return d ? d.name : ''; };
   const tripSorters = {
-    date_desc: (a,b) => b.date.localeCompare(a.date),
-    date_asc: (a,b) => a.date.localeCompare(b.date),
+    date_desc: (a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
+    date_asc: (a,b) => a.date.localeCompare(b.date) || b.id.localeCompare(a.id),
     driver_asc: (a,b) => driverName(a).localeCompare(driverName(b), 'tr'),
     price_desc: (a,b) => (b.price||0) - (a.price||0),
     price_asc: (a,b) => (a.price||0) - (b.price||0),
