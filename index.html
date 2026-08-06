@@ -738,6 +738,19 @@ function fmtDate(d) {
   return `${day}/${m}/${y}`;
 }
 
+function migrateTripTxDescriptions() {
+  let changed = false;
+  Object.keys(data.transactions).forEach(accId => {
+    (data.transactions[accId] || []).forEach(t => {
+      if (t.desc && t.desc.includes('Sefer hakedişi: ')) {
+        t.desc = t.desc.replace('Sefer hakedişi: ', '');
+        changed = true;
+      }
+    });
+  });
+  if (changed) save();
+}
+
 function migrateLegacyFuelData() {
   let changed = false;
   data.vehicles.forEach(v => {
@@ -784,6 +797,7 @@ function load() {
     if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
   migrateLegacyFuelData();
+  migrateTripTxDescriptions();
   updateTabStyles();
   renderList();
   renderReminders();
