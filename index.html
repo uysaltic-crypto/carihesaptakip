@@ -372,7 +372,7 @@
         <option value="price_asc">Tutar (düşük → yüksek)</option>
         <option value="no_asc">İrsaliye No (A-Z)</option>
       </select>
-      <input type="text" id="tripIrsaliyeSearch" placeholder="İrsaliye no ile ara..." style="flex:1; min-width:200px;" />
+      <input type="text" id="tripIrsaliyeSearch" placeholder="İrsaliye no, şoför, araç veya sefer adıyla ara..." style="flex:1; min-width:200px;" />
     </div>
     <div class="list-wrap" id="tripList"></div>
   </div>
@@ -1864,6 +1864,15 @@ document.getElementById('irsEditSave').addEventListener('click', () => {
   renderIrsaliyeler();
 });
 
+document.getElementById('tripIrsaliyeNo').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const driverField = document.getElementById('tripDriverInput');
+    driverField.focus();
+    driverField.select();
+  }
+});
+
 load();
 
 // ---- Sefer Tanımları ----
@@ -1950,13 +1959,13 @@ function upsertTripTx(trip) {
     });
   }
   const driver = data.drivers.find(d => d.id === trip.driverId);
-  if (driver && driver.accountId && trip.price) {
+  if (driver && driver.accountId && trip.price !== null && trip.price !== undefined) {
     const txId = trip.linkedTxId || ('tx_' + Date.now());
     if (!data.transactions[driver.accountId]) data.transactions[driver.accountId] = [];
     data.transactions[driver.accountId].push({
       id: txId,
       date: trip.date,
-      desc: (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + 'Sefer hakedişi: ' + trip.desc,
+      desc: (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + trip.desc,
       debit: 0,
       credit: trip.price
     });
@@ -1968,7 +1977,8 @@ function upsertTripTx(trip) {
 
 function populateTripDriverSelect() {
   const dl = document.getElementById('tripDriverDatalist');
-  dl.innerHTML = data.drivers.map(d => `<option value="${escapeHtml(d.name)}"></option>`).join('');
+  const sorted = data.drivers.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
+  dl.innerHTML = sorted.map(d => `<option value="${escapeHtml(d.name)}"></option>`).join('');
 }
 
 let selectedTripDefId = null;
@@ -2017,7 +2027,14 @@ function renderTrips() {
     no_asc: (a,b) => (a.irsaliyeNo||'').localeCompare(b.irsaliyeNo||'', 'tr', { numeric: true }),
   };
   let trips = data.trips.slice().sort(tripSorters[sortBy] || tripSorters.date_desc);
-  if (q) trips = trips.filter(t => (t.irsaliyeNo || '').toLowerCase().includes(q));
+  if (q) trips = trips.filter(t => {
+    const drv = data.drivers.find(d => d.id === t.driverId);
+    const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
+    return (t.irsaliyeNo || '').toLowerCase().includes(q) ||
+      (drv && drv.name.toLowerCase().includes(q)) ||
+      (veh && veh.name.toLowerCase().includes(q)) ||
+      (t.desc || '').toLowerCase().includes(q);
+  });
   if (trips.length === 0) {
     list.innerHTML = `<div class="empty">${q ? 'Bu irsaliye numarasıyla eşleşen sefer bulunamadı.' : 'Henüz sefer kaydı yok.'}</div>`;
     return;
@@ -2086,7 +2103,8 @@ document.getElementById('tripEditSave').addEventListener('click', () => {
   const date = document.getElementById('tripEditDate').value;
   const desc = document.getElementById('tripEditDefInput').value.trim();
   const vehicleId = resolveSearchableId('tripEditVehicle', data.vehicles);
-  const price = parseFloat(document.getElementById('tripEditPrice').value) || null;
+  const priceVal = document.getElementById('tripEditPrice').value;
+  const price = priceVal === '' ? null : parseFloat(priceVal);
   if (!driverId || !date || !desc) return;
   const t = data.trips.find(x => x.id === editingTripId);
   t.driverId = driverId; t.irsaliyeNo = irsaliyeNo; t.date = date; t.desc = desc; t.vehicleId = vehicleId; t.price = price;
@@ -2104,7 +2122,8 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const tripDef = data.tripDefs.find(x => x.id === tripDefId);
   const date = document.getElementById('tripDate').value;
   const vehicleId = resolveSearchableId('tripVehicle', data.vehicles);
-  const price = parseFloat(document.getElementById('tripPrice').value) || null;
+  const priceVal = document.getElementById('tripPrice').value;
+  const price = priceVal === '' ? null : parseFloat(priceVal);
   if (!driverId || !tripDefId || !date) return;
   const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, linkedTxId: null };
   upsertTripTx(trip);
