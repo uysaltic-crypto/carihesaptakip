@@ -70,7 +70,7 @@
   .detail-head .bal-label { font-size: 12px; color: #777; margin: 0; text-align: right; }
   .detail-head .bal-value { font-size: 20px; font-weight: 600; margin: 2px 0 0; text-align: right; }
   .detail-actions { display: flex; gap: 8px; margin-top: 14px; }
-  .tx-form { display: grid; grid-template-columns: 1fr 2fr 110px 110px 40px; gap: 8px; margin-bottom: 14px; }
+  .tx-form { display: grid; grid-template-columns: 1fr 2fr 100px 100px 130px 40px; gap: 8px; margin-bottom: 14px; }
   .tx-row {
     display: grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap: 8px;
     padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; align-items: center;
@@ -266,6 +266,7 @@
         <input type="text" id="txDesc" placeholder="Açıklama" />
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
+        <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
         <button id="addTxBtn" class="primary-btn">+</button>
       </div>
       <div style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#999; font-weight:600;">
@@ -738,6 +739,24 @@ function fmtDate(d) {
   return `${day}/${m}/${y}`;
 }
 
+function migrateTripDescLowercase() {
+  let changed = false;
+  data.trips.forEach(trip => {
+    const lower = (trip.desc || '').toLocaleLowerCase('tr-TR');
+    if (trip.desc !== lower) {
+      trip.desc = lower;
+      changed = true;
+      if (trip.linkedTxId) {
+        Object.keys(data.transactions).forEach(accId => {
+          const tx = (data.transactions[accId] || []).find(t => t.id === trip.linkedTxId);
+          if (tx) tx.desc = (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + trip.desc;
+        });
+      }
+    }
+  });
+  if (changed) save();
+}
+
 function migrateTripDefsLowercase() {
   let changed = false;
   data.tripDefs.forEach(td => {
@@ -808,6 +827,7 @@ function load() {
   migrateLegacyFuelData();
   migrateTripTxDescriptions();
   migrateTripDefsLowercase();
+  migrateTripDescLowercase();
   updateTabStyles();
   renderList();
   renderReminders();
@@ -1325,14 +1345,32 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const desc = document.getElementById('txDesc').value.trim();
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txCredit').value) || 0;
+  const dueDate = document.getElementById('txDueDate').value;
   if (!date || (!debit && !credit)) return;
   if (!data.transactions[currentAccId]) data.transactions[currentAccId] = [];
   data.transactions[currentAccId].push({ id: 'tx_' + Date.now(), date, desc, debit, credit });
+  if (dueDate) {
+    const acc = data.accounts.find(a => a.id === currentAccId);
+    const rem = {
+      id: 'rem_' + Date.now(),
+      date: dueDate,
+      desc: 'Fatura son ödeme günü' + (desc ? ': ' + desc : ''),
+      amount: debit || credit || null,
+      accountId: currentAccId,
+      type: debit ? 'borc' : 'alacak',
+      recurrence: 'none',
+      done: false,
+      linkedTxId: null
+    };
+    data.reminders.push(rem);
+  }
   save();
   document.getElementById('txDesc').value = '';
   document.getElementById('txDebit').value = '';
   document.getElementById('txCredit').value = '';
+  document.getElementById('txDueDate').value = '';
   openDetail(currentAccId);
+  renderReminders();
 });
 
 document.getElementById('exportBtn').addEventListener('click', () => {
