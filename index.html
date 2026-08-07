@@ -757,6 +757,23 @@ function migrateTripDescLowercase() {
   if (changed) save();
 }
 
+function migrateTripTxVehiclePlate() {
+  let changed = false;
+  data.trips.forEach(trip => {
+    if (!trip.linkedTxId || !trip.vehicleId) return;
+    const veh = data.vehicles.find(v => v.id === trip.vehicleId);
+    if (!veh) return;
+    Object.keys(data.transactions).forEach(accId => {
+      const tx = (data.transactions[accId] || []).find(t => t.id === trip.linkedTxId);
+      if (tx && !tx.desc.includes('(' + veh.name + ')')) {
+        tx.desc = (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + trip.desc + ' (' + veh.name + ')';
+        changed = true;
+      }
+    });
+  });
+  if (changed) save();
+}
+
 function migrateTripDefsLowercase() {
   let changed = false;
   data.tripDefs.forEach(td => {
@@ -828,6 +845,7 @@ function load() {
   migrateTripTxDescriptions();
   migrateTripDefsLowercase();
   migrateTripDescLowercase();
+  migrateTripTxVehiclePlate();
   updateTabStyles();
   renderList();
   renderReminders();
@@ -1203,13 +1221,13 @@ function openDetail(id) {
 }
 
 function renderTx() {
-  const chronological = (data.transactions[currentAccId] || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  const chronological = (data.transactions[currentAccId] || []).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   let running = 0;
   const withRunning = chronological.map(t => {
     running += (Number(t.debit)||0) - (Number(t.credit)||0);
     return Object.assign({}, t, { runningBalance: running });
   });
-  const txs = withRunning.slice().sort((a,b) => b.date.localeCompare(a.date));
+  const txs = withRunning.slice().sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   const rows = txs.map(t => {
     return `<div class="tx-row">
       <span>${fmtDate(t.date)}</span>
@@ -1927,12 +1945,51 @@ document.getElementById('irsEditSave').addEventListener('click', () => {
   renderIrsaliyeler();
 });
 
+function focusAndSelect(id) {
+  const el = document.getElementById(id);
+  el.focus();
+  if (el.select) el.select();
+}
+
+document.getElementById('tripDriverInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    focusAndSelect('tripIrsaliyeNo');
+  }
+});
+
 document.getElementById('tripIrsaliyeNo').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    const driverField = document.getElementById('tripDriverInput');
-    driverField.focus();
-    driverField.select();
+    focusAndSelect('tripDate');
+  }
+});
+
+document.getElementById('tripDate').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    focusAndSelect('tripDefInput');
+  }
+});
+
+document.getElementById('tripDefInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('tripVehicle').focus();
+  }
+});
+
+document.getElementById('tripVehicle').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    focusAndSelect('tripPrice');
+  }
+});
+
+document.getElementById('tripPrice').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('addTripBtn').click();
   }
 });
 
@@ -2023,12 +2080,13 @@ function upsertTripTx(trip) {
   }
   const driver = data.drivers.find(d => d.id === trip.driverId);
   if (driver && driver.accountId && trip.price !== null && trip.price !== undefined) {
+    const veh = trip.vehicleId ? data.vehicles.find(v => v.id === trip.vehicleId) : null;
     const txId = trip.linkedTxId || ('tx_' + Date.now());
     if (!data.transactions[driver.accountId]) data.transactions[driver.accountId] = [];
     data.transactions[driver.accountId].push({
       id: txId,
       date: trip.date,
-      desc: (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + trip.desc,
+      desc: (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + trip.desc + (veh ? ' (' + veh.name + ')' : ''),
       debit: 0,
       credit: trip.price
     });
@@ -2201,6 +2259,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   selectedTripDriverId = null;
   renderTrips();
   renderList();
+  document.getElementById('tripDriverInput').focus();
 });
 
 // ---- Şoförler ----
