@@ -553,6 +553,8 @@
       <input type="text" id="txEditDesc" placeholder="Açıklama" />
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
+      <label style="font-size:12px; color:#777;">Son ödeme günü (opsiyonel)</label>
+      <input type="date" id="txEditDueDate" />
     </div>
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
@@ -1265,6 +1267,7 @@ function openTxEdit(id) {
   document.getElementById('txEditDesc').value = t.desc || '';
   document.getElementById('txEditDebit').value = t.debit || '';
   document.getElementById('txEditCredit').value = t.credit || '';
+  document.getElementById('txEditDueDate').value = t.dueDate || '';
   document.getElementById('txModalOverlay').style.display = 'flex';
 }
 
@@ -1277,12 +1280,15 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   const desc = document.getElementById('txEditDesc').value.trim();
   const debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
+  const dueDate = document.getElementById('txEditDueDate').value || null;
   if (!date) return;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === editingTxId);
-  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit;
+  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate;
+  upsertTxDueReminder(t, currentAccId);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
   openDetail(currentAccId);
+  renderReminders();
 });
 
 document.getElementById('searchInput').addEventListener('input', renderList);
@@ -1358,30 +1364,39 @@ document.getElementById('backBtn').addEventListener('click', () => {
   renderList();
 });
 
+function upsertTxDueReminder(tx, accountId) {
+  if (tx.dueReminderId) {
+    data.reminders = data.reminders.filter(r => r.id !== tx.dueReminderId);
+    tx.dueReminderId = null;
+  }
+  if (tx.dueDate) {
+    const remId = 'rem_' + Date.now();
+    data.reminders.push({
+      id: remId,
+      date: tx.dueDate,
+      desc: 'Fatura son ödeme günü' + (tx.desc ? ': ' + tx.desc : ''),
+      amount: tx.debit || tx.credit || null,
+      accountId: accountId,
+      type: tx.debit ? 'borc' : 'alacak',
+      recurrence: 'none',
+      done: false,
+      linkedTxId: null
+    });
+    tx.dueReminderId = remId;
+  }
+}
+
 document.getElementById('addTxBtn').addEventListener('click', () => {
   const date = document.getElementById('txDate').value;
   const desc = document.getElementById('txDesc').value.trim();
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txCredit').value) || 0;
-  const dueDate = document.getElementById('txDueDate').value;
+  const dueDate = document.getElementById('txDueDate').value || null;
   if (!date || (!debit && !credit)) return;
   if (!data.transactions[currentAccId]) data.transactions[currentAccId] = [];
-  data.transactions[currentAccId].push({ id: 'tx_' + Date.now(), date, desc, debit, credit });
-  if (dueDate) {
-    const acc = data.accounts.find(a => a.id === currentAccId);
-    const rem = {
-      id: 'rem_' + Date.now(),
-      date: dueDate,
-      desc: 'Fatura son ödeme günü' + (desc ? ': ' + desc : ''),
-      amount: debit || credit || null,
-      accountId: currentAccId,
-      type: debit ? 'borc' : 'alacak',
-      recurrence: 'none',
-      done: false,
-      linkedTxId: null
-    };
-    data.reminders.push(rem);
-  }
+  const tx = { id: 'tx_' + Date.now(), date, desc, debit, credit, dueDate, dueReminderId: null };
+  data.transactions[currentAccId].push(tx);
+  upsertTxDueReminder(tx, currentAccId);
   save();
   document.getElementById('txDesc').value = '';
   document.getElementById('txDebit').value = '';
