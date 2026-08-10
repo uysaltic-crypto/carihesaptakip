@@ -347,6 +347,10 @@
   </div>
 
   <div id="seferlerView" style="display:none;">
+    <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
+      <div id="seferPageTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+      <button id="newSeferPageBtn" style="font-size:12px; padding:6px 10px;">+ Yeni sayfa</button>
+    </div>
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer ekle</p>
     <div class="rem-form" style="grid-template-columns: 1fr 120px 130px 1fr 1fr 130px 80px; align-items:end;">
       <div>
@@ -646,6 +650,20 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="seferPageModalOverlay">
+  <div class="modal-box" style="width:320px;">
+    <h3 id="seferPageModalTitle">Yeni sefer sayfası</h3>
+    <div class="field-group">
+      <input type="text" id="seferPageName" placeholder="Sayfa adı (ör. İstanbul Seferleri)" />
+    </div>
+    <div class="actions">
+      <button id="seferPageDelete" style="display:none; color:#b3261e;">Sayfayı sil</button>
+      <button id="seferPageCancel">Vazgeç</button>
+      <button id="seferPageSave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="tripEditModalOverlay">
   <div class="modal-box">
     <h3>Seferi düzenle</h3>
@@ -670,6 +688,12 @@
     <h3 id="driverModalTitle">Yeni şoför</h3>
     <div class="field-group">
       <input id="driverName" placeholder="Ad soyad" />
+      <label style="font-size:12px; color:#777;">Sefer grubu</label>
+      <select id="driverCategory">
+        <option value="tir">Tır</option>
+        <option value="kirkayak">Kırkayak</option>
+        <option value="balikesir">Balıkesir</option>
+      </select>
       <input id="driverPhone" placeholder="Telefon (opsiyonel)" />
       <input id="driverLicenseNo" placeholder="Ehliyet no (opsiyonel)" />
       <label style="font-size:12px; color:#777;">Ehliyet süresi</label>
@@ -711,6 +735,11 @@
     <h3 id="tripDefModalTitle">Yeni sefer tanımı</h3>
     <div class="field-group">
       <input id="tripDefName" placeholder="Sefer adı / güzergah" />
+      <select id="tripDefCategory">
+        <option value="tir">Tır</option>
+        <option value="kirkayak">Kırkayak</option>
+        <option value="balikesir">Balıkesir</option>
+      </select>
       <input type="number" id="tripDefPrice" placeholder="Sabit fiyat (TL)" min="0" step="0.01" />
     </div>
     <div class="actions">
@@ -722,7 +751,7 @@
 
 <script>
 const STORAGE_KEY = 'cari-hesap-data-v1';
-let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] };
+let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' };
 let currentAccId = null;
 let editingAccId = null;
 let activeTab = 'hepsi';
@@ -781,6 +810,10 @@ function migrateTripDefsLowercase() {
   data.tripDefs.forEach(td => {
     const lower = td.name.toLocaleLowerCase('tr-TR');
     if (td.name !== lower) { td.name = lower; changed = true; }
+    if (!td.category) { td.category = 'tir'; changed = true; }
+  });
+  data.drivers.forEach(d => {
+    if (!d.category) { d.category = 'tir'; changed = true; }
   });
   if (changed) save();
 }
@@ -841,7 +874,7 @@ function updateEmptyDataBanner() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, JSON.parse(raw));
+    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
   migrateLegacyFuelData();
   migrateTripTxDescriptions();
@@ -1429,7 +1462,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
   reader.onload = () => {
     try {
       const imported = JSON.parse(reader.result);
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, imported);
       save();
       updateTabStyles();
       renderList();
@@ -1830,7 +1863,7 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const imported = await res.json();
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [] }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, imported);
       save();
       updateTabStyles();
       renderList();
@@ -2019,20 +2052,28 @@ function renderTripDefs() {
     list.innerHTML = `<div class="empty">Henüz sefer tanımı yok.</div>`;
     return;
   }
-  list.innerHTML = data.tripDefs.map(td => `
-    <div class="acc-row" style="cursor:default;">
-      <div>
-        <p class="name">${escapeHtml(td.name)}</p>
-      </div>
-      <div style="display:flex; align-items:center; gap:14px;">
-        <span class="bal">${fmt(td.price||0)}</span>
-        <div class="veh-actions">
-          <button class="editTripDefBtn" data-id="${td.id}">Düzenle</button>
-          <button class="delTripDefBtn" data-id="${td.id}">Sil</button>
+  const categories = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', label: 'Kırkayak' }, { key: 'balikesir', label: 'Balıkesir' }];
+  list.innerHTML = categories.map(cat => {
+    const items = data.tripDefs.filter(td => (td.category || 'tir') === cat.key);
+    if (items.length === 0) return '';
+    return `
+      <p style="font-weight:600; font-size:14px; margin:14px 0 6px; color:#555;">${cat.label}</p>
+      ${items.map(td => `
+        <div class="acc-row" style="cursor:default;">
+          <div>
+            <p class="name">${escapeHtml(td.name)}</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:14px;">
+            <span class="bal">${fmt(td.price||0)}</span>
+            <div class="veh-actions">
+              <button class="editTripDefBtn" data-id="${td.id}">Düzenle</button>
+              <button class="delTripDefBtn" data-id="${td.id}">Sil</button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  `).join('');
+      `).join('')}
+    `;
+  }).join('');
   list.querySelectorAll('.editTripDefBtn').forEach(btn => {
     btn.addEventListener('click', () => openTripDefEdit(btn.dataset.id));
   });
@@ -2054,6 +2095,7 @@ function openTripDefEdit(id) {
   document.getElementById('tripDefModalTitle').textContent = 'Sefer tanımını düzenle';
   document.getElementById('tripDefName').value = td.name;
   document.getElementById('tripDefPrice').value = td.price || '';
+  document.getElementById('tripDefCategory').value = td.category || 'tir';
   document.getElementById('tripDefModalOverlay').style.display = 'flex';
 }
 
@@ -2062,6 +2104,7 @@ document.getElementById('newTripDefBtn').addEventListener('click', () => {
   document.getElementById('tripDefModalTitle').textContent = 'Yeni sefer tanımı';
   document.getElementById('tripDefName').value = '';
   document.getElementById('tripDefPrice').value = '';
+  document.getElementById('tripDefCategory').value = 'tir';
   document.getElementById('tripDefModalOverlay').style.display = 'flex';
 });
 
@@ -2073,7 +2116,8 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
   const name = document.getElementById('tripDefName').value.trim().toLocaleLowerCase('tr-TR');
   if (!name) return;
   const price = parseFloat(document.getElementById('tripDefPrice').value) || 0;
-  const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price };
+  const category = document.getElementById('tripDefCategory').value;
+  const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price, category };
   if (editingTripDefId) {
     const idx = data.tripDefs.findIndex(x => x.id === editingTripDefId);
     data.tripDefs[idx] = td;
@@ -2119,10 +2163,86 @@ function populateTripDriverSelect() {
 
 let selectedTripDefId = null;
 let selectedTripDriverId = null;
+let activeSeferPageId = null;
+let editingSeferPageId = null;
+
+function renderSeferPageTabs() {
+  const box = document.getElementById('seferPageTabs');
+  const pages = [{ id: null, name: data.genelSeferPageName || 'Genel' }].concat(data.seferSayfalari);
+  box.innerHTML = pages.map(p => `
+    <button class="seferPageTabBtn" data-id="${p.id === null ? '__GENEL__' : p.id}" style="font-size:12px; padding:6px 10px; ${p.id === activeSeferPageId ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+      ${escapeHtml(p.name)}
+    </button>
+  `).join('');
+  box.querySelectorAll('.seferPageTabBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeSeferPageId = btn.dataset.id === '__GENEL__' ? null : btn.dataset.id;
+      renderTrips();
+    });
+    btn.addEventListener('dblclick', () => openSeferPageEdit(btn.dataset.id));
+  });
+}
+
+document.getElementById('newSeferPageBtn').addEventListener('click', () => {
+  editingSeferPageId = '__NEW__';
+  document.getElementById('seferPageModalTitle').textContent = 'Yeni sefer sayfası';
+  document.getElementById('seferPageName').value = '';
+  document.getElementById('seferPageDelete').style.display = 'none';
+  document.getElementById('seferPageModalOverlay').style.display = 'flex';
+});
+
+function openSeferPageEdit(id) {
+  editingSeferPageId = id;
+  document.getElementById('seferPageModalTitle').textContent = 'Sayfayı düzenle';
+  if (id === '__GENEL__') {
+    document.getElementById('seferPageName').value = data.genelSeferPageName || 'Genel';
+    document.getElementById('seferPageDelete').style.display = 'none';
+  } else {
+    const p = data.seferSayfalari.find(x => x.id === id);
+    document.getElementById('seferPageName').value = p.name;
+    document.getElementById('seferPageDelete').style.display = 'inline-block';
+  }
+  document.getElementById('seferPageModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('seferPageCancel').addEventListener('click', () => {
+  document.getElementById('seferPageModalOverlay').style.display = 'none';
+});
+
+document.getElementById('seferPageSave').addEventListener('click', () => {
+  const name = document.getElementById('seferPageName').value.trim();
+  if (!name) return;
+  if (editingSeferPageId === '__GENEL__') {
+    data.genelSeferPageName = name;
+  } else if (editingSeferPageId === '__NEW__' || !editingSeferPageId) {
+    const newPage = { id: 'sp_' + Date.now(), name };
+    data.seferSayfalari.push(newPage);
+    activeSeferPageId = newPage.id;
+  } else {
+    const p = data.seferSayfalari.find(x => x.id === editingSeferPageId);
+    if (p) p.name = name;
+  }
+  save();
+  document.getElementById('seferPageModalOverlay').style.display = 'none';
+  renderTrips();
+});
+
+document.getElementById('seferPageDelete').addEventListener('click', () => {
+  showConfirm('Bu sayfayı silmek istediğinize emin misiniz? Bu sayfadaki seferler silinmez, "Genel" sayfasına taşınır.', () => {
+    data.trips.forEach(t => { if (t.pageId === editingSeferPageId) t.pageId = null; });
+    data.seferSayfalari = data.seferSayfalari.filter(p => p.id !== editingSeferPageId);
+    if (activeSeferPageId === editingSeferPageId) activeSeferPageId = null;
+    save();
+    document.getElementById('seferPageModalOverlay').style.display = 'none';
+    renderTrips();
+  });
+});
 
 function populateTripDefSelect() {
   const dl = document.getElementById('tripDefDatalist');
-  dl.innerHTML = data.tripDefs.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
+  const driver = selectedTripDriverId ? data.drivers.find(d => d.id === selectedTripDriverId) : null;
+  const filtered = driver ? data.tripDefs.filter(td => td.category === driver.category) : data.tripDefs;
+  dl.innerHTML = filtered.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
 }
 
 function populateTripVehicleSelect() {
@@ -2144,12 +2264,14 @@ document.getElementById('tripDriverInput').addEventListener('input', () => {
   const val = document.getElementById('tripDriverInput').value;
   const d = data.drivers.find(x => x.name === val);
   selectedTripDriverId = d ? d.id : null;
+  populateTripDefSelect();
 });
 
 function renderTrips() {
   populateTripDriverSelect();
   populateTripDefSelect();
   populateTripVehicleSelect();
+  renderSeferPageTabs();
   const list = document.getElementById('tripList');
   const q = (document.getElementById('tripIrsaliyeSearch').value || '').toLowerCase().trim();
   const sortBy = document.getElementById('tripSort').value;
@@ -2162,7 +2284,7 @@ function renderTrips() {
     price_asc: (a,b) => (a.price||0) - (b.price||0),
     no_asc: (a,b) => (a.irsaliyeNo||'').localeCompare(b.irsaliyeNo||'', 'tr', { numeric: true }),
   };
-  let trips = data.trips.slice().sort(tripSorters[sortBy] || tripSorters.date_desc);
+  let trips = data.trips.filter(t => (t.pageId || null) === activeSeferPageId).slice().sort(tripSorters[sortBy] || tripSorters.date_desc);
   if (q) trips = trips.filter(t => {
     const drv = data.drivers.find(d => d.id === t.driverId);
     const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
@@ -2261,7 +2383,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const priceVal = document.getElementById('tripPrice').value;
   const price = priceVal === '' ? null : parseFloat(priceVal);
   if (!driverId || !tripDefId || !date) return;
-  const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, linkedTxId: null };
+  const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, pageId: activeSeferPageId, linkedTxId: null };
   upsertTripTx(trip);
   data.trips.push(trip);
   save();
@@ -2359,6 +2481,7 @@ function openDriverEdit(id) {
   document.getElementById('driverModalTitle').textContent = 'Şoförü düzenle';
   populateDriverVehSelect();
   document.getElementById('driverName').value = d.name;
+  document.getElementById('driverCategory').value = d.category || 'tir';
   document.getElementById('driverPhone').value = d.phone || '';
   document.getElementById('driverLicenseNo').value = d.licenseNo || '';
   document.getElementById('driverLicenseExpiry').value = d.licenseExpiry || '';
@@ -2375,6 +2498,7 @@ document.getElementById('newDriverBtn').addEventListener('click', () => {
   document.getElementById('driverModalTitle').textContent = 'Yeni şoför';
   populateDriverVehSelect();
   document.getElementById('driverName').value = '';
+  document.getElementById('driverCategory').value = 'tir';
   document.getElementById('driverPhone').value = '';
   document.getElementById('driverLicenseNo').value = '';
   document.getElementById('driverLicenseExpiry').value = '';
@@ -2415,6 +2539,7 @@ document.getElementById('driverModalSave').addEventListener('click', () => {
     psikoteknikPolicyImg: tempDriverImages.psikoteknik,
     vehicleId: document.getElementById('driverVeh').value || null,
     notes: document.getElementById('driverNotes').value.trim(),
+    category: document.getElementById('driverCategory').value,
     accountId
   };
   if (editingDriverId) {
