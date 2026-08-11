@@ -1563,17 +1563,19 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
   const dateFrom = document.getElementById('excelDateFrom').value;
   const dateTo = document.getElementById('excelDateTo').value;
 
-  // Seçilen araçların, seçilen tarih aralığındaki her bireysel yakıt girişi için 1 km'de yakıt değerleri
+  // Seçilen araçların, seçilen tarih aralığındaki her bireysel yakıt girişi için 1 km'de yakıt değerleri.
+  // Hesaplama için bir önceki dolum referans alınır; bu referans aralığın dışında kalsa bile kullanılır,
+  // aksi halde aralığın ilk girişi hesaplanamadan düşer.
   const summaryRows = selectedIds.map(vid => {
     const veh = data.vehicles.find(v => v.id === vid);
-    let series = data.fuelLogs.filter(l => l.vehicleId === vid && l.km);
-    if (dateFrom) series = series.filter(l => l.date >= dateFrom);
-    if (dateTo) series = series.filter(l => l.date <= dateTo);
-    series = series.slice().sort((a,b) => (a.km||0) - (b.km||0));
+    const fullSeries = data.fuelLogs.filter(l => l.vehicleId === vid && l.km).slice().sort((a,b) => (a.km||0) - (b.km||0));
     const perEntryValues = [];
-    for (let i = 1; i < series.length; i++) {
-      const segKm = series[i].km - series[i-1].km;
-      if (segKm > 0 && series[i].liters) perEntryValues.push(Number((series[i].liters / segKm).toFixed(3)));
+    for (let i = 1; i < fullSeries.length; i++) {
+      const entry = fullSeries[i];
+      const inRange = (!dateFrom || entry.date >= dateFrom) && (!dateTo || entry.date <= dateTo);
+      if (!inRange) continue;
+      const segKm = entry.km - fullSeries[i-1].km;
+      if (segKm > 0 && entry.liters) perEntryValues.push(Number((entry.liters / segKm).toFixed(3)));
     }
     const avg = perEntryValues.length ? perEntryValues.reduce((s,v) => s+v, 0) / perEntryValues.length : null;
     return { name: veh ? veh.name : '', values: perEntryValues, avg };
