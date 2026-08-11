@@ -342,6 +342,7 @@
   <div id="soforlerView" style="display:none;">
     <div class="toolbar">
       <button id="newDriverBtn" class="primary-btn">+ Yeni şoför</button>
+      <button id="driverExcelBtn">📊 Excel raporu al</button>
     </div>
     <div id="driverList"></div>
   </div>
@@ -619,6 +620,34 @@
   <div style="max-width:92vw; max-height:92vh; display:flex; flex-direction:column; align-items:center; gap:10px;">
     <img id="imgPreviewImg" style="max-width:92vw; max-height:80vh; border-radius:8px; box-shadow:0 4px 24px rgba(0,0,0,0.4);" />
     <button id="imgPreviewClose">Kapat</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="driverExcelModalOverlay">
+  <div class="modal-box" style="width:420px; max-height:85vh; overflow-y:auto;">
+    <h3>Şoför sefer raporu</h3>
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Tarih aralığı (opsiyonel — boş bırakılırsa tüm geçmiş)</p>
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+      <input type="date" id="driverExcelDateFrom" style="flex:1;" />
+      <input type="date" id="driverExcelDateTo" style="flex:1;" />
+    </div>
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button id="driverExcelQuickWeek" style="font-size:12px; padding:5px 10px;">Son 7 gün</button>
+      <button id="driverExcelQuickMonth" style="font-size:12px; padding:5px 10px;">Son 30 gün</button>
+      <button id="driverExcelQuickClear" style="font-size:12px; padding:5px 10px;">Temizle</button>
+    </div>
+
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Şoförler</p>
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #eee; margin-bottom:6px; font-weight:600;">
+      <input type="checkbox" id="driverExcelSelectAll" checked />
+      Tümünü seç
+    </label>
+    <div class="field-group" id="driverExcelCheckList" style="max-height:220px; overflow-y:auto;"></div>
+
+    <div class="actions">
+      <button id="driverExcelModalCancel">Vazgeç</button>
+      <button id="driverExcelModalDownload" class="primary-btn">İndir</button>
+    </div>
   </div>
 </div>
 
@@ -2041,6 +2070,100 @@ document.getElementById('tripPrice').addEventListener('keydown', (e) => {
   }
 });
 
+// ---- Şoför Sefer Raporu (Excel) ----
+document.getElementById('driverExcelBtn').addEventListener('click', () => {
+  const box = document.getElementById('driverExcelCheckList');
+  document.getElementById('driverExcelSelectAll').checked = true;
+  document.getElementById('driverExcelDateFrom').value = '';
+  document.getElementById('driverExcelDateTo').value = '';
+  if (data.drivers.length === 0) {
+    box.innerHTML = `<div class="empty">Henüz şoför eklenmedi.</div>`;
+  } else {
+    box.innerHTML = data.drivers.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr')).map(d => `
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0;">
+        <input type="checkbox" class="driverExcelCheck" value="${d.id}" checked />
+        ${escapeHtml(d.name)}
+      </label>
+    `).join('');
+    box.querySelectorAll('.driverExcelCheck').forEach(c => {
+      c.addEventListener('change', () => {
+        document.getElementById('driverExcelSelectAll').checked = document.querySelectorAll('.driverExcelCheck:checked').length === data.drivers.length;
+      });
+    });
+  }
+  document.getElementById('driverExcelModalOverlay').style.display = 'flex';
+});
+
+document.getElementById('driverExcelSelectAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.driverExcelCheck').forEach(c => { c.checked = e.target.checked; });
+});
+
+document.getElementById('driverExcelModalCancel').addEventListener('click', () => {
+  document.getElementById('driverExcelModalOverlay').style.display = 'none';
+});
+
+document.getElementById('driverExcelQuickWeek').addEventListener('click', () => {
+  const to = new Date(todayStr() + 'T00:00:00');
+  const from = new Date(to); from.setDate(from.getDate() - 7);
+  document.getElementById('driverExcelDateFrom').value = from.toISOString().slice(0,10);
+  document.getElementById('driverExcelDateTo').value = todayStr();
+});
+document.getElementById('driverExcelQuickMonth').addEventListener('click', () => {
+  const to = new Date(todayStr() + 'T00:00:00');
+  const from = new Date(to); from.setDate(from.getDate() - 30);
+  document.getElementById('driverExcelDateFrom').value = from.toISOString().slice(0,10);
+  document.getElementById('driverExcelDateTo').value = todayStr();
+});
+document.getElementById('driverExcelQuickClear').addEventListener('click', () => {
+  document.getElementById('driverExcelDateFrom').value = '';
+  document.getElementById('driverExcelDateTo').value = '';
+});
+
+document.getElementById('driverExcelModalDownload').addEventListener('click', () => {
+  const selectedIds = Array.from(document.querySelectorAll('.driverExcelCheck:checked')).map(c => c.value);
+  if (selectedIds.length === 0) { alert('Lütfen en az bir şoför seçin.'); return; }
+  const dateFrom = document.getElementById('driverExcelDateFrom').value;
+  const dateTo = document.getElementById('driverExcelDateTo').value;
+
+  const rows = [['Şoför', 'Sefer Adı', 'Adet', 'Toplam Tutar (TL)']];
+  let anyData = false;
+
+  selectedIds.forEach(did => {
+    const driver = data.drivers.find(d => d.id === did);
+    let trips = data.trips.filter(t => t.driverId === did);
+    if (dateFrom) trips = trips.filter(t => t.date >= dateFrom);
+    if (dateTo) trips = trips.filter(t => t.date <= dateTo);
+    if (trips.length === 0) return;
+    anyData = true;
+    const byDesc = {};
+    trips.forEach(t => {
+      const key = t.desc || '(isimsiz sefer)';
+      if (!byDesc[key]) byDesc[key] = { count: 0, total: 0 };
+      byDesc[key].count += 1;
+      byDesc[key].total += (t.price || 0);
+    });
+    Object.keys(byDesc).sort((a,b) => byDesc[b].count - byDesc[a].count).forEach(desc => {
+      rows.push([driver.name, desc, byDesc[desc].count, byDesc[desc].total]);
+    });
+    const totalCount = trips.length;
+    const totalAmount = trips.reduce((s,t) => s + (t.price||0), 0);
+    rows.push([driver.name + ' - TOPLAM', '', totalCount, totalAmount]);
+  });
+
+  if (!anyData) {
+    alert('Seçilen şoför(ler) ve tarih aralığında sefer kaydı bulunamadı.');
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 20 }, { wch: 26 }, { wch: 10 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Şoför Sefer Raporu');
+  XLSX.writeFile(wb, 'sofor-sefer-raporu-' + todayStr() + '.xlsx');
+
+  document.getElementById('driverExcelModalOverlay').style.display = 'none';
+});
+
 load();
 
 // ---- Sefer Tanımları ----
@@ -2054,7 +2177,7 @@ function renderTripDefs() {
   }
   const categories = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', label: 'Kırkayak' }, { key: 'balikesir', label: 'Balıkesir' }];
   list.innerHTML = categories.map(cat => {
-    const items = data.tripDefs.filter(td => (td.category || 'tir') === cat.key);
+    const items = data.tripDefs.filter(td => (td.category || 'tir') === cat.key).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
     if (items.length === 0) return '';
     return `
       <p style="font-weight:600; font-size:14px; margin:14px 0 6px; color:#555;">${cat.label}</p>
@@ -2241,7 +2364,7 @@ document.getElementById('seferPageDelete').addEventListener('click', () => {
 function populateTripDefSelect() {
   const dl = document.getElementById('tripDefDatalist');
   const driver = selectedTripDriverId ? data.drivers.find(d => d.id === selectedTripDriverId) : null;
-  const filtered = driver ? data.tripDefs.filter(td => td.category === driver.category) : data.tripDefs;
+  const filtered = (driver ? data.tripDefs.filter(td => td.category === driver.category) : data.tripDefs).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
   dl.innerHTML = filtered.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
 }
 
