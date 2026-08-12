@@ -384,6 +384,10 @@
   </div>
 
   <div id="sefertanimlariView" style="display:none;">
+    <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
+      <div id="tripDefPageTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+      <button id="newSeferPageBtn2" style="font-size:12px; padding:6px 10px;">+ Yeni sayfa</button>
+    </div>
     <div class="toolbar">
       <button id="newTripDefBtn" class="primary-btn">+ Yeni sefer tanımı</button>
     </div>
@@ -817,6 +821,17 @@ function migrateTripDescLowercase() {
   if (changed) save();
 }
 
+function migrateRefreshAllTripTx() {
+  if (data.trips.length === 0) return;
+  data.trips.forEach(trip => {
+    // Sefer adını da güncel (küçük harf) haliyle eşitle
+    trip.desc = (trip.desc || '').toLocaleLowerCase('tr-TR');
+    // Bağlı cari hareketini, güncel kurallara (irsaliye no + sefer adı + araç plakası) göre baştan oluştur
+    upsertTripTx(trip);
+  });
+  save();
+}
+
 function migrateTripTxVehiclePlate() {
   let changed = false;
   data.trips.forEach(trip => {
@@ -908,8 +923,7 @@ function load() {
   migrateLegacyFuelData();
   migrateTripTxDescriptions();
   migrateTripDefsLowercase();
-  migrateTripDescLowercase();
-  migrateTripTxVehiclePlate();
+  migrateRefreshAllTripTx();
   updateTabStyles();
   renderList();
   renderReminders();
@@ -2172,14 +2186,16 @@ load();
 let editingTripDefId = null;
 
 function renderTripDefs() {
+  renderSeferPageTabs();
   const list = document.getElementById('tripDefList');
-  if (data.tripDefs.length === 0) {
-    list.innerHTML = `<div class="empty">Henüz sefer tanımı yok.</div>`;
+  const pageDefs = data.tripDefs.filter(td => (td.pageId || null) === activeSeferPageId);
+  if (pageDefs.length === 0) {
+    list.innerHTML = `<div class="empty">Bu sayfada henüz sefer tanımı yok.</div>`;
     return;
   }
   const categories = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', label: 'Kırkayak' }, { key: 'balikesir', label: 'Balıkesir' }];
   list.innerHTML = categories.map(cat => {
-    const items = data.tripDefs.filter(td => (td.category || 'tir') === cat.key).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
+    const items = pageDefs.filter(td => (td.category || 'tir') === cat.key).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
     if (items.length === 0) return '';
     return `
       <p style="font-weight:600; font-size:14px; margin:14px 0 6px; color:#555;">${cat.label}</p>
@@ -2242,7 +2258,8 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
   if (!name) return;
   const price = parseFloat(document.getElementById('tripDefPrice').value) || 0;
   const category = document.getElementById('tripDefCategory').value;
-  const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price, category };
+  const existing = editingTripDefId ? data.tripDefs.find(x => x.id === editingTripDefId) : null;
+  const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price, category, pageId: existing ? existing.pageId : activeSeferPageId };
   if (editingTripDefId) {
     const idx = data.tripDefs.findIndex(x => x.id === editingTripDefId);
     data.tripDefs[idx] = td;
@@ -2292,21 +2309,30 @@ let activeSeferPageId = null;
 let editingSeferPageId = null;
 
 function renderSeferPageTabs() {
-  const box = document.getElementById('seferPageTabs');
   const pages = [{ id: null, name: data.genelSeferPageName || 'Genel' }].concat(data.seferSayfalari);
-  box.innerHTML = pages.map(p => `
-    <button class="seferPageTabBtn" data-id="${p.id === null ? '__GENEL__' : p.id}" style="font-size:12px; padding:6px 10px; ${p.id === activeSeferPageId ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
-      ${escapeHtml(p.name)}
-    </button>
-  `).join('');
-  box.querySelectorAll('.seferPageTabBtn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeSeferPageId = btn.dataset.id === '__GENEL__' ? null : btn.dataset.id;
-      renderTrips();
+  const boxIds = ['seferPageTabs', 'tripDefPageTabs'];
+  boxIds.forEach(boxId => {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    box.innerHTML = pages.map(p => `
+      <button class="seferPageTabBtn" data-id="${p.id === null ? '__GENEL__' : p.id}" style="font-size:12px; padding:6px 10px; ${p.id === activeSeferPageId ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+        ${escapeHtml(p.name)}
+      </button>
+    `).join('');
+    box.querySelectorAll('.seferPageTabBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeSeferPageId = btn.dataset.id === '__GENEL__' ? null : btn.dataset.id;
+        renderTrips();
+        renderTripDefs();
+      });
+      btn.addEventListener('dblclick', () => openSeferPageEdit(btn.dataset.id));
     });
-    btn.addEventListener('dblclick', () => openSeferPageEdit(btn.dataset.id));
   });
 }
+
+document.getElementById('newSeferPageBtn2').addEventListener('click', () => {
+  document.getElementById('newSeferPageBtn').click();
+});
 
 document.getElementById('newSeferPageBtn').addEventListener('click', () => {
   editingSeferPageId = '__NEW__';
@@ -2350,23 +2376,28 @@ document.getElementById('seferPageSave').addEventListener('click', () => {
   save();
   document.getElementById('seferPageModalOverlay').style.display = 'none';
   renderTrips();
+  renderTripDefs();
 });
 
 document.getElementById('seferPageDelete').addEventListener('click', () => {
-  showConfirm('Bu sayfayı silmek istediğinize emin misiniz? Bu sayfadaki seferler silinmez, "Genel" sayfasına taşınır.', () => {
+  showConfirm('Bu sayfayı silmek istediğinize emin misiniz? Bu sayfadaki seferler ve sefer tanımları silinmez, "Genel" sayfasına taşınır.', () => {
     data.trips.forEach(t => { if (t.pageId === editingSeferPageId) t.pageId = null; });
+    data.tripDefs.forEach(td => { if (td.pageId === editingSeferPageId) td.pageId = null; });
     data.seferSayfalari = data.seferSayfalari.filter(p => p.id !== editingSeferPageId);
     if (activeSeferPageId === editingSeferPageId) activeSeferPageId = null;
     save();
     document.getElementById('seferPageModalOverlay').style.display = 'none';
     renderTrips();
+    renderTripDefs();
   });
 });
 
 function populateTripDefSelect() {
   const dl = document.getElementById('tripDefDatalist');
   const driver = selectedTripDriverId ? data.drivers.find(d => d.id === selectedTripDriverId) : null;
-  const filtered = (driver ? data.tripDefs.filter(td => td.category === driver.category) : data.tripDefs).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
+  let filtered = data.tripDefs.filter(td => (td.pageId || null) === activeSeferPageId);
+  if (driver) filtered = filtered.filter(td => td.category === driver.category);
+  filtered = filtered.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
   dl.innerHTML = filtered.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
 }
 
