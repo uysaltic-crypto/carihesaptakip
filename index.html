@@ -832,12 +832,9 @@ function stripCategoryWords(str) {
 
 function migrateRefreshAllTripTx() {
   if (data.trips.length === 0) return;
-  data.tripDefs.forEach(td => {
-    td.name = stripCategoryWords(td.name.toLocaleLowerCase('tr-TR'));
-  });
   data.trips.forEach(trip => {
-    // Sefer adını da güncel (küçük harf, kategori ifadesi temizlenmiş) haliyle eşitle
-    trip.desc = stripCategoryWords((trip.desc || '').toLocaleLowerCase('tr-TR'));
+    // Sefer adını da güncel (küçük harf) haliyle eşitle
+    trip.desc = (trip.desc || '').toLocaleLowerCase('tr-TR');
     // Bağlı cari hareketini, güncel kurallara (irsaliye no + sefer adı + araç plakası) göre baştan oluştur
     upsertTripTx(trip);
   });
@@ -2266,7 +2263,7 @@ document.getElementById('tripDefModalCancel').addEventListener('click', () => {
 });
 
 document.getElementById('tripDefModalSave').addEventListener('click', () => {
-  const name = stripCategoryWords(document.getElementById('tripDefName').value.trim().toLocaleLowerCase('tr-TR'));
+  const name = document.getElementById('tripDefName').value.trim().toLocaleLowerCase('tr-TR');
   if (!name) return;
   const price = parseFloat(document.getElementById('tripDefPrice').value) || 0;
   const category = document.getElementById('tripDefCategory').value;
