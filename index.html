@@ -2404,7 +2404,7 @@ document.getElementById('seferPageDelete').addEventListener('click', () => {
 function populateTripDefSelect() {
   const dl = document.getElementById('tripDefDatalist');
   const driver = selectedTripDriverId ? data.drivers.find(d => d.id === selectedTripDriverId) : null;
-  let filtered = data.tripDefs.filter(td => (td.pageId || null) === activeSeferPageId);
+  let filtered = data.tripDefs;
   if (driver) filtered = filtered.filter(td => td.category === driver.category);
   filtered = filtered.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
   dl.innerHTML = filtered.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
