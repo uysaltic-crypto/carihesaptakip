@@ -564,6 +564,11 @@
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
       <label style="font-size:12px; color:#777;">Son ödeme günü (opsiyonel)</label>
       <input type="date" id="txEditDueDate" />
+      <label style="font-size:12px; color:#777;">Yazı rengi</label>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="color" id="txEditColor" value="#1a1a1a" style="width:44px; height:32px; padding:2px;" />
+        <button type="button" id="txEditColorReset" style="font-size:12px;">Varsayılana dön</button>
+      </div>
     </div>
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
@@ -1307,16 +1312,28 @@ function openDetail(id) {
   renderTx();
 }
 
+let lastTxDisplayOrder = [];
+
 function renderTx() {
-  const chronological = (data.transactions[currentAccId] || []).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const list = data.transactions[currentAccId] || [];
+  // Her hareketin bir manuel sıra numarası (order) olduğundan emin ol; yoksa tarih+id'ye göre ata
+  if (list.some(t => t.order === undefined || t.order === null)) {
+    const chrono = list.slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    chrono.forEach((t, idx) => { t.order = idx; });
+    save();
+  }
+  // Bakiye, eskiden yeniye (order küçükten büyüğe) hesaplanır
+  const chronological = list.slice().sort((a,b) => a.order - b.order);
   let running = 0;
   const withRunning = chronological.map(t => {
     running += (Number(t.debit)||0) - (Number(t.credit)||0);
     return Object.assign({}, t, { runningBalance: running });
   });
-  const txs = withRunning.slice().sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  // Görünüm: en yeni/en üstteki en yüksek order değerine sahip olacak şekilde azalan sırada
+  const txs = withRunning.slice().sort((a,b) => b.order - a.order);
+  lastTxDisplayOrder = txs.map(t => t.id);
   const rows = txs.map(t => {
-    return `<div class="tx-row">
+    return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab;">
       <span>${fmtDate(t.date)}</span>
       <span>${escapeHtml(t.desc||'')}</span>
       <span class="amt">${t.debit ? fmt(t.debit) : ''}</span>
@@ -1328,6 +1345,37 @@ function renderTx() {
   }).join('');
   document.getElementById('txList').innerHTML = rows || `<div class="empty">Henüz hareket yok.</div>`;
 }
+
+let draggedTxId = null;
+document.getElementById('txList').addEventListener('dragstart', (e) => {
+  const row = e.target.closest('.tx-row');
+  if (row) draggedTxId = row.dataset.id;
+});
+document.getElementById('txList').addEventListener('dragover', (e) => {
+  e.preventDefault();
+});
+document.getElementById('txList').addEventListener('drop', (e) => {
+  e.preventDefault();
+  const targetRow = e.target.closest('.tx-row');
+  if (!targetRow || !draggedTxId) return;
+  const targetId = targetRow.dataset.id;
+  if (targetId === draggedTxId) return;
+  const seq = lastTxDisplayOrder.slice();
+  const fromIdx = seq.indexOf(draggedTxId);
+  const toIdx = seq.indexOf(targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  seq.splice(fromIdx, 1);
+  seq.splice(toIdx, 0, draggedTxId);
+  const list = data.transactions[currentAccId] || [];
+  const n = seq.length;
+  seq.forEach((id, idx) => {
+    const t = list.find(x => x.id === id);
+    if (t) t.order = n - idx;
+  });
+  save();
+  draggedTxId = null;
+  renderTx();
+});
 
 document.getElementById('txList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('.delTxBtn');
