@@ -1333,7 +1333,8 @@ function renderTx() {
   const txs = withRunning.slice().sort((a,b) => b.order - a.order);
   lastTxDisplayOrder = txs.map(t => t.id);
   const rows = txs.map(t => {
-    return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab;">
+    const colorStyle = t.color ? `color:${t.color};` : '';
+    return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; ${colorStyle}">
       <span>${fmtDate(t.date)}</span>
       <span>${escapeHtml(t.desc||'')}</span>
       <span class="amt">${t.debit ? fmt(t.debit) : ''}</span>
@@ -1401,8 +1402,13 @@ function openTxEdit(id) {
   document.getElementById('txEditDebit').value = t.debit || '';
   document.getElementById('txEditCredit').value = t.credit || '';
   document.getElementById('txEditDueDate').value = t.dueDate || '';
+  document.getElementById('txEditColor').value = t.color || '#1a1a1a';
   document.getElementById('txModalOverlay').style.display = 'flex';
 }
+
+document.getElementById('txEditColorReset').addEventListener('click', () => {
+  document.getElementById('txEditColor').value = '#1a1a1a';
+});
 
 document.getElementById('txEditCancel').addEventListener('click', () => {
   document.getElementById('txModalOverlay').style.display = 'none';
@@ -1414,9 +1420,10 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   const debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
   const dueDate = document.getElementById('txEditDueDate').value || null;
+  const color = document.getElementById('txEditColor').value;
   if (!date) return;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === editingTxId);
-  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate;
+  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate; t.color = (color === '#1a1a1a') ? null : color;
   upsertTxDueReminder(t, currentAccId);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
