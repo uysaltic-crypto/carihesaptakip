@@ -60,6 +60,10 @@
   .pos { color: #1a7d3a; }
   .neg { color: #b3261e; }
   .list-wrap { background: #fff; border-radius: 10px; border: 1px solid #eee; overflow: hidden; }
+  .tx-col { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .col-resizer { position: absolute; top: 0; right: -5px; bottom: 0; width: 10px; cursor: col-resize; z-index: 2; }
+  .col-resizer:hover, .col-resizer.resizing { background: rgba(43,127,255,0.25); }
+  @media (max-width: 720px) { .col-resizer { display: none; } }
   .empty { text-align: center; color: #999; padding: 40px 0; font-size: 14px; }
   .detail-card {
     background: #fff; border-radius: 10px; border: 1px solid #eee; padding: 16px 20px; margin-bottom: 20px;
@@ -72,7 +76,7 @@
   .detail-actions { display: flex; gap: 8px; margin-top: 14px; }
   .tx-form { display: grid; grid-template-columns: 1fr 2fr 100px 100px 130px 40px; gap: 8px; margin-bottom: 14px; }
   .tx-row {
-    display: grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap: 8px;
+    display: grid; grid-template-columns: 90px 1.4fr 90px 90px 90px 90px 100px 36px 36px; gap: 8px;
     padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; align-items: center;
   }
   .tx-row .amt { text-align: right; }
@@ -261,18 +265,22 @@
       </div>
 
       <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Hareketler</p>
-      <div class="tx-form">
+      <div class="tx-form" id="txFormGrid">
         <input type="date" id="txDate" />
+        <input type="text" id="txIrsNo" placeholder="İrsaliye no" style="display:none;" />
         <input type="text" id="txDesc" placeholder="Açıklama" />
+        <input type="text" id="txPlaka" placeholder="Plaka" style="display:none;" />
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
         <button id="addTxBtn" class="primary-btn">+</button>
       </div>
-      <div style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#999; font-weight:600;">
-        <span>Tarih</span><span>Açıklama</span><span style="text-align:right;">Borç</span><span style="text-align:right;">Alacak</span><span style="text-align:right;">Bakiye</span><span></span><span></span>
+      <div id="txTableScroll" style="overflow-x:auto;">
+        <div id="txListHeader" style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#999; font-weight:600; min-width:max-content;">
+          <span>Tarih</span><span>Açıklama</span><span style="text-align:right;">Borç</span><span style="text-align:right;">Alacak</span><span style="text-align:right;">Bakiye</span><span></span><span></span>
+        </div>
+        <div class="list-wrap" id="txList" style="padding:0 12px; min-width:max-content;"></div>
       </div>
-      <div class="list-wrap" id="txList" style="padding:0 12px;"></div>
     </div>
   </div>
 
@@ -559,16 +567,17 @@
     <h3>Hareketi düzenle</h3>
     <div class="field-group">
       <input type="date" id="txEditDate" />
+      <input type="text" id="txEditIrsNo" placeholder="İrsaliye no" style="display:none;" />
       <input type="text" id="txEditDesc" placeholder="Açıklama" />
+      <input type="text" id="txEditPlaka" placeholder="Plaka" style="display:none;" />
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
       <label style="font-size:12px; color:#777;">Son ödeme günü (opsiyonel)</label>
       <input type="date" id="txEditDueDate" />
       <label style="font-size:12px; color:#777;">Yazı rengi</label>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <input type="color" id="txEditColor" value="#1a1a1a" style="width:44px; height:32px; padding:2px;" />
-        <button type="button" id="txEditColorReset" style="font-size:12px;">Varsayılana dön</button>
-      </div>
+      <div id="txEditColorPalette" style="display:grid; grid-template-columns: repeat(6, 1fr); gap:6px;"></div>
+      <button type="button" id="txEditColorMore" style="font-size:12px; text-align:left; display:flex; align-items:center; gap:6px;">🖌️ Diğer renkler...</button>
+      <input type="color" id="txEditColor" value="#1a1a1a" style="display:none;" />
     </div>
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
@@ -837,12 +846,14 @@ function stripCategoryWords(str) {
 
 function migrateRefreshAllTripTx() {
   if (data.trips.length === 0) return;
+  if (data.migratedTripTxRefreshDone) return; // Bu düzeltme sadece bir kez çalışır, elle yapılan değişiklikleri silmemek için
   data.trips.forEach(trip => {
     // Sefer adını da güncel (küçük harf) haliyle eşitle
     trip.desc = (trip.desc || '').toLocaleLowerCase('tr-TR');
     // Bağlı cari hareketini, güncel kurallara (irsaliye no + sefer adı + araç plakası) göre baştan oluştur
     upsertTripTx(trip);
   });
+  data.migratedTripTxRefreshDone = true;
   save();
 }
 
@@ -934,17 +945,22 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
-  migrateLegacyFuelData();
-  migrateTripTxDescriptions();
-  migrateTripDefsLowercase();
-  migrateRefreshAllTripTx();
-  updateTabStyles();
-  renderList();
-  renderReminders();
-  renderVehicles();
-  updateAlertBanner();
-  updateRemBadge();
-  updateEmptyDataBanner();
+  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx];
+  migrations.forEach(fn => {
+    try { fn(); } catch (e) { console.error('Düzeltme (migration) hatası: ' + fn.name, e); }
+  });
+  try {
+    updateTabStyles();
+    renderList();
+    renderReminders();
+    renderVehicles();
+    updateAlertBanner();
+    updateRemBadge();
+    updateEmptyDataBanner();
+  } catch (e) {
+    console.error('Ekran render hatası', e);
+    alert('Program açılırken beklenmeyen bir hata oluştu, bazı ekranlar boş görünebilir. Bu genelde geçici bir veri sorunudur — lütfen "F12" ile tarayıcı konsolunu açıp buradaki hatayı bana iletin: ' + e.message);
+  }
 }
 
 function save() {
@@ -1301,6 +1317,79 @@ document.getElementById('accList').addEventListener('click', (e) => {
   if (row) openDetail(row.dataset.id);
 });
 
+let currentAccIsDriver = false;
+const TX_FORM_GRID_NORMAL = '1fr 2fr 100px 100px 130px 40px';
+const TX_FORM_GRID_DRIVER = '1fr 90px 1.5fr 90px 100px 100px 130px 40px';
+
+// Kullanıcının sürükleyerek ayarlayabileceği sütun genişlikleri
+const TX_COL_LABELS = { date: 'Tarih', irsNo: 'İrs. No', desc: 'Açıklama', plaka: 'Plaka', debit: 'Borç', credit: 'Alacak', balance: 'Bakiye' };
+const TX_COL_ALIGN_RIGHT = { debit: true, credit: true, balance: true };
+const TX_COL_DEFAULTS = { date: 110, irsNo: 90, desc: 260, plaka: 90, debit: 100, credit: 100, balance: 110 };
+const TX_COLS_NORMAL = ['date', 'desc', 'debit', 'credit', 'balance'];
+const TX_COLS_DRIVER = ['date', 'irsNo', 'desc', 'plaka', 'debit', 'credit', 'balance'];
+
+function getTxColWidths() {
+  if (!data.txColWidths) data.txColWidths = {};
+  Object.keys(TX_COL_DEFAULTS).forEach(k => {
+    if (!data.txColWidths[k]) data.txColWidths[k] = TX_COL_DEFAULTS[k];
+  });
+  return data.txColWidths;
+}
+
+function txGridTemplate(isDriver) {
+  const w = getTxColWidths();
+  const cols = isDriver ? TX_COLS_DRIVER : TX_COLS_NORMAL;
+  return cols.map(k => w[k] + 'px').join(' ') + ' 1fr 36px 36px';
+}
+
+function applyTxGrid() {
+  const tpl = txGridTemplate(currentAccIsDriver);
+  const header = document.getElementById('txListHeader');
+  if (header) header.style.gridTemplateColumns = tpl;
+  document.querySelectorAll('#txList .tx-row').forEach(row => { row.style.gridTemplateColumns = tpl; });
+}
+
+function renderTxHeader() {
+  const cols = currentAccIsDriver ? TX_COLS_DRIVER : TX_COLS_NORMAL;
+  const header = document.getElementById('txListHeader');
+  header.style.gridTemplateColumns = txGridTemplate(currentAccIsDriver);
+  header.innerHTML = cols.map(k => {
+    const alignStyle = TX_COL_ALIGN_RIGHT[k] ? 'text-align:right;' : '';
+    return `<div class="tx-col" style="${alignStyle}">${TX_COL_LABELS[k]}<div class="col-resizer" data-col="${k}" title="Sütunu daraltmak/genişletmek için sürükleyin"></div></div>`;
+  }).join('') + '<span></span><span></span><span></span>';
+}
+
+document.getElementById('txListHeader').addEventListener('mousedown', (e) => {
+  const handle = e.target.closest('.col-resizer');
+  if (!handle) return;
+  e.preventDefault();
+  const col = handle.dataset.col;
+  const widths = getTxColWidths();
+  const startX = e.clientX;
+  const startWidth = widths[col];
+  handle.classList.add('resizing');
+  function onMove(ev) {
+    widths[col] = Math.max(40, startWidth + (ev.clientX - startX));
+    applyTxGrid();
+  }
+  function onUp() {
+    handle.classList.remove('resizing');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    save();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+});
+
+function updateTxLayout(isDriver) {
+  currentAccIsDriver = isDriver;
+  document.getElementById('txIrsNo').style.display = isDriver ? '' : 'none';
+  document.getElementById('txPlaka').style.display = isDriver ? '' : 'none';
+  document.getElementById('txFormGrid').style.gridTemplateColumns = isDriver ? TX_FORM_GRID_DRIVER : TX_FORM_GRID_NORMAL;
+  renderTxHeader();
+}
+
 function openDetail(id) {
   currentAccId = id;
   const acc = data.accounts.find(a => a.id === id);
@@ -1309,6 +1398,7 @@ function openDetail(id) {
   document.getElementById('detBalance').textContent = fmt(balanceOf(id));
   document.getElementById('listView').style.display = 'none';
   document.getElementById('detailView').style.display = 'block';
+  updateTxLayout(acc.type === 'sofor');
   renderTx();
 }
 
@@ -1316,10 +1406,16 @@ let lastTxDisplayOrder = [];
 
 function renderTx() {
   const list = data.transactions[currentAccId] || [];
-  // Her hareketin bir manuel sıra numarası (order) olduğundan emin ol; yoksa tarih+id'ye göre ata
-  if (list.some(t => t.order === undefined || t.order === null)) {
-    const chrono = list.slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-    chrono.forEach((t, idx) => { t.order = idx; });
+  // Sırası olmayan hareketlere (yalnızca onlara) sıra numarası ata; mevcut sıraları BOZMADAN,
+  // en sona (en yeni) eklenmiş gibi yerleştir.
+  const missing = list.filter(t => t.order === undefined || t.order === null);
+  if (missing.length > 0) {
+    const haveOrder = list.filter(t => t.order !== undefined && t.order !== null);
+    let maxOrder = haveOrder.length ? Math.max(...haveOrder.map(t => t.order)) : -1;
+    missing
+      .slice()
+      .sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+      .forEach(t => { maxOrder += 1; t.order = maxOrder; });
     save();
   }
   // Bakiye, eskiden yeniye (order küçükten büyüğe) hesaplanır
@@ -1332,14 +1428,26 @@ function renderTx() {
   // Görünüm: en yeni/en üstteki en yüksek order değerine sahip olacak şekilde azalan sırada
   const txs = withRunning.slice().sort((a,b) => b.order - a.order);
   lastTxDisplayOrder = txs.map(t => t.id);
+  const cols = currentAccIsDriver ? TX_COLS_DRIVER : TX_COLS_NORMAL;
+  const rowGrid = txGridTemplate(currentAccIsDriver);
   const rows = txs.map(t => {
     const colorStyle = t.color ? `color:${t.color};` : '';
-    return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; ${colorStyle}">
-      <span>${fmtDate(t.date)}</span>
-      <span>${escapeHtml(t.desc||'')}</span>
-      <span class="amt">${t.debit ? fmt(t.debit) : ''}</span>
-      <span class="amt">${t.credit ? fmt(t.credit) : ''}</span>
-      <span class="amt" style="font-weight:600;">${fmt(t.runningBalance)}</span>
+    const cells = cols.map(k => {
+      let val = '';
+      if (k === 'date') val = fmtDate(t.date);
+      else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
+      else if (k === 'desc') val = escapeHtml(t.desc || '');
+      else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
+      else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
+      else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
+      else if (k === 'balance') val = fmt(t.runningBalance);
+      const cls = TX_COL_ALIGN_RIGHT[k] ? 'tx-col amt' : 'tx-col';
+      const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
+      return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
+    }).join('');
+    return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; grid-template-columns:${rowGrid}; ${colorStyle}">
+      ${cells}
+      <span></span>
       <button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#1a1a1a;">✎</button>
       <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>
     </div>`;
@@ -1394,21 +1502,64 @@ document.getElementById('txList').addEventListener('click', (e) => {
 
 let editingTxId = null;
 
+// "Standart Renkler" paleti — Office'teki standart renk sırasına yakın
+const STANDARD_TX_COLORS = [
+  { name: 'Varsayılan', hex: '#1a1a1a' },
+  { name: 'Koyu Kırmızı', hex: '#C00000' },
+  { name: 'Kırmızı', hex: '#FF0000' },
+  { name: 'Turuncu', hex: '#FFC000' },
+  { name: 'Sarı', hex: '#FFFF00' },
+  { name: 'Açık Yeşil', hex: '#92D050' },
+  { name: 'Yeşil', hex: '#00B050' },
+  { name: 'Turkuaz', hex: '#00B0F0' },
+  { name: 'Mavi', hex: '#0070C0' },
+  { name: 'Koyu Mavi', hex: '#002060' },
+  { name: 'Mor', hex: '#7030A0' },
+];
+
+function renderTxColorPalette(selectedHex) {
+  const sel = (selectedHex || '#1a1a1a').toLowerCase();
+  const box = document.getElementById('txEditColorPalette');
+  box.innerHTML = STANDARD_TX_COLORS.map(c => {
+    const isSel = c.hex.toLowerCase() === sel;
+    const border = isSel ? '2px solid #2b7fff' : '1px solid #ddd';
+    const swatchBg = c.hex === '#1a1a1a' ? '#fff' : c.hex;
+    const inner = c.hex === '#1a1a1a' ? '<span style="display:block; width:100%; height:100%; background:linear-gradient(135deg, transparent 45%, #b3261e 45%, #b3261e 55%, transparent 55%); border-radius:5px;"></span>' : '';
+    return `<button type="button" class="txColorSwatch" data-hex="${c.hex}" title="${c.name}" style="width:26px; height:26px; border-radius:6px; padding:0; border:${border}; background:${swatchBg}; cursor:pointer;">${inner}</button>`;
+  }).join('');
+}
+
+document.getElementById('txEditColorPalette').addEventListener('click', (e) => {
+  const btn = e.target.closest('.txColorSwatch');
+  if (!btn) return;
+  document.getElementById('txEditColor').value = btn.dataset.hex;
+  renderTxColorPalette(btn.dataset.hex);
+});
+
+document.getElementById('txEditColorMore').addEventListener('click', () => {
+  document.getElementById('txEditColor').click();
+});
+
+document.getElementById('txEditColor').addEventListener('input', (e) => {
+  renderTxColorPalette(e.target.value);
+});
+
 function openTxEdit(id) {
   editingTxId = id;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === id);
   document.getElementById('txEditDate').value = t.date;
   document.getElementById('txEditDesc').value = t.desc || '';
+  document.getElementById('txEditIrsNo').style.display = currentAccIsDriver ? '' : 'none';
+  document.getElementById('txEditPlaka').style.display = currentAccIsDriver ? '' : 'none';
+  document.getElementById('txEditIrsNo').value = t.irsaliyeNo || '';
+  document.getElementById('txEditPlaka').value = t.vehiclePlate || '';
   document.getElementById('txEditDebit').value = t.debit || '';
   document.getElementById('txEditCredit').value = t.credit || '';
   document.getElementById('txEditDueDate').value = t.dueDate || '';
   document.getElementById('txEditColor').value = t.color || '#1a1a1a';
+  renderTxColorPalette(t.color || '#1a1a1a');
   document.getElementById('txModalOverlay').style.display = 'flex';
 }
-
-document.getElementById('txEditColorReset').addEventListener('click', () => {
-  document.getElementById('txEditColor').value = '#1a1a1a';
-});
 
 document.getElementById('txEditCancel').addEventListener('click', () => {
   document.getElementById('txModalOverlay').style.display = 'none';
@@ -1424,6 +1575,10 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   if (!date) return;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === editingTxId);
   t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate; t.color = (color === '#1a1a1a') ? null : color;
+  if (currentAccIsDriver) {
+    t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
+    t.vehiclePlate = document.getElementById('txEditPlaka').value.trim();
+  }
   upsertTxDueReminder(t, currentAccId);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
@@ -1529,16 +1684,20 @@ function upsertTxDueReminder(tx, accountId) {
 document.getElementById('addTxBtn').addEventListener('click', () => {
   const date = document.getElementById('txDate').value;
   const desc = document.getElementById('txDesc').value.trim();
+  const irsaliyeNo = currentAccIsDriver ? document.getElementById('txIrsNo').value.trim() : '';
+  const vehiclePlate = currentAccIsDriver ? document.getElementById('txPlaka').value.trim() : '';
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txCredit').value) || 0;
   const dueDate = document.getElementById('txDueDate').value || null;
   if (!date || (!debit && !credit)) return;
   if (!data.transactions[currentAccId]) data.transactions[currentAccId] = [];
-  const tx = { id: 'tx_' + Date.now(), date, desc, debit, credit, dueDate, dueReminderId: null };
+  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, debit, credit, dueDate, dueReminderId: null };
   data.transactions[currentAccId].push(tx);
   upsertTxDueReminder(tx, currentAccId);
   save();
   document.getElementById('txDesc').value = '';
+  document.getElementById('txIrsNo').value = '';
+  document.getElementById('txPlaka').value = '';
   document.getElementById('txDebit').value = '';
   document.getElementById('txCredit').value = '';
   document.getElementById('txDueDate').value = '';
@@ -2338,25 +2497,39 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
 
 // ---- Seferler ----
 function upsertTripTx(trip) {
-  if (trip.linkedTxId) {
-    Object.keys(data.transactions).forEach(accId => {
-      data.transactions[accId] = data.transactions[accId].filter(t => t.id !== trip.linkedTxId);
-    });
-  }
   const driver = data.drivers.find(d => d.id === trip.driverId);
   if (driver && driver.accountId && trip.price !== null && trip.price !== undefined) {
     const veh = trip.vehicleId ? data.vehicles.find(v => v.id === trip.vehicleId) : null;
-    const txId = trip.linkedTxId || ('tx_' + Date.now());
     if (!data.transactions[driver.accountId]) data.transactions[driver.accountId] = [];
-    data.transactions[driver.accountId].push({
-      id: txId,
-      date: trip.date,
-      desc: (trip.irsaliyeNo ? 'İrs. No: ' + trip.irsaliyeNo + ' — ' : '') + trip.desc + (veh ? ' (' + veh.name + ')' : ''),
-      debit: 0,
-      credit: trip.price
+    let tx = trip.linkedTxId ? data.transactions[driver.accountId].find(t => t.id === trip.linkedTxId) : null;
+    // Şoför değiştiyse: eski hesaptaki hareketi bul, taşı (diğer tüm elle girilmiş alanları koru)
+    if (trip.linkedTxId && !tx) {
+      Object.keys(data.transactions).forEach(accId => {
+        const found = (data.transactions[accId] || []).find(t => t.id === trip.linkedTxId);
+        if (found) {
+          tx = found;
+          data.transactions[accId] = data.transactions[accId].filter(t => t.id !== trip.linkedTxId);
+        }
+      });
+      if (tx) data.transactions[driver.accountId].push(tx);
+    }
+    if (!tx) {
+      tx = { id: trip.linkedTxId || ('tx_' + Date.now()) };
+      data.transactions[driver.accountId].push(tx);
+    }
+    // Sadece sefere bağlı alanları güncelle; renk, son ödeme günü gibi elle girilmiş diğer
+    // her şey dokunulmadan kalır.
+    tx.date = trip.date;
+    tx.desc = trip.desc;
+    tx.irsaliyeNo = trip.irsaliyeNo || '';
+    tx.vehiclePlate = veh ? veh.name : '';
+    tx.debit = 0;
+    tx.credit = trip.price;
+    trip.linkedTxId = tx.id;
+  } else if (trip.linkedTxId) {
+    Object.keys(data.transactions).forEach(accId => {
+      data.transactions[accId] = data.transactions[accId].filter(t => t.id !== trip.linkedTxId);
     });
-    trip.linkedTxId = txId;
-  } else {
     trip.linkedTxId = null;
   }
 }
