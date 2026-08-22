@@ -877,14 +877,23 @@ function migrateTripTxVehiclePlate() {
 function migrateTripDefsLowercase() {
   let changed = false;
   data.tripDefs.forEach(td => {
-    const lower = td.name.toLocaleLowerCase('tr-TR');
-    if (td.name !== lower) { td.name = lower; changed = true; }
     if (!td.category) { td.category = 'tir'; changed = true; }
   });
   data.drivers.forEach(d => {
     if (!d.category) { d.category = 'tir'; changed = true; }
   });
   if (changed) save();
+}
+
+function migrateTripDefsUppercase() {
+  if (data.migratedTripDefsUppercaseDone) return;
+  data.tripDefs.forEach(td => { td.name = (td.name || '').toLocaleUpperCase('tr-TR'); });
+  data.trips.forEach(trip => {
+    trip.desc = (trip.desc || '').toLocaleUpperCase('tr-TR');
+    upsertTripTx(trip);
+  });
+  data.migratedTripDefsUppercaseDone = true;
+  save();
 }
 
 function migrateTripTxDescriptions() {
@@ -945,7 +954,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
-  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx];
+  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase];
   migrations.forEach(fn => {
     try { fn(); } catch (e) { console.error('Düzeltme (migration) hatası: ' + fn.name, e); }
   });
@@ -2477,7 +2486,7 @@ document.getElementById('tripDefModalCancel').addEventListener('click', () => {
 });
 
 document.getElementById('tripDefModalSave').addEventListener('click', () => {
-  const name = document.getElementById('tripDefName').value.trim().toLocaleLowerCase('tr-TR');
+  const name = document.getElementById('tripDefName').value.trim().toLocaleUpperCase('tr-TR');
   if (!name) return;
   const price = parseFloat(document.getElementById('tripDefPrice').value) || 0;
   const category = document.getElementById('tripDefCategory').value;
