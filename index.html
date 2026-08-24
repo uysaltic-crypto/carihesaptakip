@@ -368,11 +368,11 @@
       </div>
       <input type="text" id="tripIrsaliyeNo" placeholder="İrsaliye no" />
       <input type="date" id="tripDate" />
+      <input type="text" id="tripVehicle" list="tripVehicleDatalist" placeholder="Araç ara ve seçin..." autocomplete="off" /><datalist id="tripVehicleDatalist"></datalist>
       <div>
         <input type="text" id="tripDefInput" list="tripDefDatalist" placeholder="Sefer ara ve seçin..." autocomplete="off" />
         <datalist id="tripDefDatalist"></datalist>
       </div>
-      <input type="text" id="tripVehicle" list="tripVehicleDatalist" placeholder="Araç ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="tripVehicleDatalist"></datalist>
       <input type="number" id="tripPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
@@ -500,6 +500,12 @@
     <h3 id="vehModalTitle">Yeni araç</h3>
     <div class="field-group">
       <input id="vehName" placeholder="Araç adı / plaka" />
+      <label style="font-size:12px; color:#777;">Araç tipi (sefer tanımı listesini filtrelemek için kullanılır)</label>
+      <select id="vehCategory">
+        <option value="tir">Tır</option>
+        <option value="kirkayak">Kırkayak</option>
+        <option value="balikesir">Balıkesir</option>
+      </select>
       <input type="number" id="vehBaseKm" placeholder="Ana km (araç sisteme eklenirken kilometresi)" min="0" step="1" />
       <label style="font-size:12px; color:#777;">Son km ve yakıt yüzdesi bilgisi, Yakıt Girişi ekranından otomatik gelir.</label>
       <label style="font-size:12px; color:#777;">Muayene tarihi</label>
@@ -881,6 +887,9 @@ function migrateTripDefsLowercase() {
   });
   data.drivers.forEach(d => {
     if (!d.category) { d.category = 'tir'; changed = true; }
+  });
+  data.vehicles.forEach(v => {
+    if (!v.category) { v.category = 'tir'; changed = true; }
   });
   if (changed) save();
 }
@@ -2293,6 +2302,13 @@ document.getElementById('tripIrsaliyeNo').addEventListener('keydown', (e) => {
 document.getElementById('tripDate').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
+    focusAndSelect('tripVehicle');
+  }
+});
+
+document.getElementById('tripVehicle').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
     focusAndSelect('tripDefInput');
   }
 });
@@ -2300,14 +2316,7 @@ document.getElementById('tripDate').addEventListener('keydown', (e) => {
 document.getElementById('tripDefInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    document.getElementById('tripVehicle').focus();
-  }
-});
-
-document.getElementById('tripVehicle').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    focusAndSelect('tripPrice');
+    document.getElementById('tripPrice').focus();
   }
 });
 
@@ -2551,6 +2560,7 @@ function populateTripDriverSelect() {
 
 let selectedTripDefId = null;
 let selectedTripDriverId = null;
+let selectedTripVehicleId = null;
 let activeSeferPageId = null;
 let editingSeferPageId = null;
 
@@ -2640,9 +2650,9 @@ document.getElementById('seferPageDelete').addEventListener('click', () => {
 
 function populateTripDefSelect() {
   const dl = document.getElementById('tripDefDatalist');
-  const driver = selectedTripDriverId ? data.drivers.find(d => d.id === selectedTripDriverId) : null;
+  const vehicle = selectedTripVehicleId ? data.vehicles.find(v => v.id === selectedTripVehicleId) : null;
   let filtered = data.tripDefs;
-  if (driver) filtered = filtered.filter(td => td.category === driver.category);
+  if (vehicle) filtered = filtered.filter(td => td.category === (vehicle.category || 'tir'));
   filtered = filtered.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
   dl.innerHTML = filtered.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
 }
@@ -2666,6 +2676,12 @@ document.getElementById('tripDriverInput').addEventListener('input', () => {
   const val = document.getElementById('tripDriverInput').value;
   const d = data.drivers.find(x => x.name === val);
   selectedTripDriverId = d ? d.id : null;
+});
+
+document.getElementById('tripVehicle').addEventListener('input', () => {
+  const val = document.getElementById('tripVehicle').value;
+  const v = data.vehicles.find(x => x.name === val);
+  selectedTripVehicleId = v ? v.id : null;
   populateTripDefSelect();
 });
 
@@ -2732,6 +2748,19 @@ function renderTrips() {
 
 let editingTripId = null;
 
+function populateTripEditDefSelect() {
+  const vehicleId = resolveSearchableId('tripEditVehicle', data.vehicles);
+  const vehicle = vehicleId ? data.vehicles.find(v => v.id === vehicleId) : null;
+  let filtered = data.tripDefs;
+  if (vehicle) filtered = filtered.filter(td => td.category === (vehicle.category || 'tir'));
+  filtered = filtered.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
+  document.getElementById('tripEditDefDatalist').innerHTML = filtered.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
+}
+
+document.getElementById('tripEditVehicle').addEventListener('input', () => {
+  populateTripEditDefSelect();
+});
+
 function openTripEdit(id) {
   editingTripId = id;
   const t = data.trips.find(x => x.id === id);
@@ -2743,7 +2772,7 @@ function openTripEdit(id) {
   fillSearchableDatalist('tripEditVehicleDatalist', data.vehicles);
   setSearchableValue('tripEditVehicle', data.vehicles, t.vehicleId);
   document.getElementById('tripEditPrice').value = t.price || '';
-  document.getElementById('tripEditDefDatalist').innerHTML = data.tripDefs.map(td => `<option value="${escapeHtml(td.name)}"></option>`).join('');
+  populateTripEditDefSelect();
   document.getElementById('tripEditModalOverlay').style.display = 'flex';
 }
 
@@ -2784,7 +2813,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const vehicleId = resolveSearchableId('tripVehicle', data.vehicles);
   const priceVal = document.getElementById('tripPrice').value;
   const price = priceVal === '' ? null : parseFloat(priceVal);
-  if (!driverId || !tripDefId || !date) return;
+  if (!driverId || !tripDefId || !date || !vehicleId) return;
   const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, pageId: activeSeferPageId, linkedTxId: null };
   upsertTripTx(trip);
   data.trips.push(trip);
@@ -2796,6 +2825,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   document.getElementById('tripVehicle').value = '';
   selectedTripDefId = null;
   selectedTripDriverId = null;
+  selectedTripVehicleId = null;
   renderTrips();
   renderList();
   document.getElementById('tripDriverInput').focus();
@@ -3346,7 +3376,7 @@ function renderVehicles() {
   list.innerHTML = data.vehicles.map(v => `
     <div class="veh-card">
       <div class="veh-head">
-        <p class="name">${escapeHtml(v.name)}</p>
+        <p class="name">${escapeHtml(v.name)} <span style="font-size:11px; font-weight:500; color:#888; background:#f2f2f2; border-radius:6px; padding:2px 8px; margin-left:6px;">${v.category === 'kirkayak' ? 'Kırkayak' : (v.category === 'balikesir' ? 'Balıkesir' : 'Tır')}</span></p>
         <div class="veh-actions">
           <button class="editVehBtn" data-id="${v.id}">Düzenle</button>
           <button class="delVehBtn" data-id="${v.id}">Sil</button>
@@ -3389,6 +3419,7 @@ function openVehEdit(id) {
   const v = data.vehicles.find(x => x.id === id);
   document.getElementById('vehModalTitle').textContent = 'Aracı düzenle';
   document.getElementById('vehName').value = v.name;
+  document.getElementById('vehCategory').value = v.category || 'tir';
   document.getElementById('vehBaseKm').value = v.baseKm || '';
   document.getElementById('vehMuayene').value = v.muayeneTarihi || '';
   document.getElementById('vehTrafikTarih').value = v.trafikTarihi || '';
@@ -3405,6 +3436,7 @@ document.getElementById('newVehBtn').addEventListener('click', () => {
   editingVehId = null;
   document.getElementById('vehModalTitle').textContent = 'Yeni araç';
   document.getElementById('vehName').value = '';
+  document.getElementById('vehCategory').value = 'tir';
   document.getElementById('vehBaseKm').value = '';
   document.getElementById('vehMuayene').value = '';
   document.getElementById('vehTrafikTarih').value = '';
@@ -3427,6 +3459,7 @@ document.getElementById('vehModalSave').addEventListener('click', () => {
   const veh = {
     id: editingVehId || 'veh_' + Date.now(),
     name,
+    category: document.getElementById('vehCategory').value,
     baseKm: parseFloat(document.getElementById('vehBaseKm').value) || null,
     muayeneTarihi: document.getElementById('vehMuayene').value || null,
     trafikTarihi: document.getElementById('vehTrafikTarih').value || null,
