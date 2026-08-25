@@ -393,8 +393,7 @@
 
   <div id="sefertanimlariView" style="display:none;">
     <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
-      <div id="tripDefPageTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
-      <button id="newSeferPageBtn2" style="font-size:12px; padding:6px 10px;">+ Yeni sayfa</button>
+      <div id="tripDefCategoryTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
     </div>
     <div class="toolbar">
       <button id="newTripDefBtn" class="primary-btn">+ Yeni sefer tanımı</button>
@@ -2426,36 +2425,46 @@ load();
 // ---- Sefer Tanımları ----
 let editingTripDefId = null;
 
+let activeTripDefCategory = 'tir';
+const TRIP_DEF_CATEGORIES = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', label: 'Kırkayak' }, { key: 'balikesir', label: 'Balıkesir' }];
+
+function renderTripDefCategoryTabs() {
+  const box = document.getElementById('tripDefCategoryTabs');
+  box.innerHTML = TRIP_DEF_CATEGORIES.map(cat => `
+    <button class="tripDefCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeTripDefCategory ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+      ${cat.label}
+    </button>
+  `).join('');
+  box.querySelectorAll('.tripDefCatTabBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeTripDefCategory = btn.dataset.key;
+      renderTripDefs();
+    });
+  });
+}
+
 function renderTripDefs() {
-  renderSeferPageTabs();
+  renderTripDefCategoryTabs();
   const list = document.getElementById('tripDefList');
-  const pageDefs = data.tripDefs.filter(td => (td.pageId || null) === activeSeferPageId);
-  if (pageDefs.length === 0) {
-    list.innerHTML = `<div class="empty">Bu sayfada henüz sefer tanımı yok.</div>`;
+  const items = data.tripDefs.filter(td => (td.category || 'tir') === activeTripDefCategory).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
+  if (items.length === 0) {
+    list.innerHTML = `<div class="empty">Bu kategoride henüz sefer tanımı yok.</div>`;
     return;
   }
-  const categories = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', label: 'Kırkayak' }, { key: 'balikesir', label: 'Balıkesir' }];
-  list.innerHTML = categories.map(cat => {
-    const items = pageDefs.filter(td => (td.category || 'tir') === cat.key).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
-    if (items.length === 0) return '';
-    return `
-      <p style="font-weight:600; font-size:14px; margin:14px 0 6px; color:#555;">${cat.label}</p>
-      ${items.map(td => `
-        <div class="acc-row" style="cursor:default;">
-          <div>
-            <p class="name">${escapeHtml(td.name)}</p>
-          </div>
-          <div style="display:flex; align-items:center; gap:14px;">
-            <span class="bal">${fmt(td.price||0)}</span>
-            <div class="veh-actions">
-              <button class="editTripDefBtn" data-id="${td.id}">Düzenle</button>
-              <button class="delTripDefBtn" data-id="${td.id}">Sil</button>
-            </div>
-          </div>
+  list.innerHTML = items.map(td => `
+    <div class="acc-row" style="cursor:default;">
+      <div>
+        <p class="name">${escapeHtml(td.name)}</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <span class="bal">${fmt(td.price||0)}</span>
+        <div class="veh-actions">
+          <button class="editTripDefBtn" data-id="${td.id}">Düzenle</button>
+          <button class="delTripDefBtn" data-id="${td.id}">Sil</button>
         </div>
-      `).join('')}
-    `;
-  }).join('');
+      </div>
+    </div>
+  `).join('');
   list.querySelectorAll('.editTripDefBtn').forEach(btn => {
     btn.addEventListener('click', () => openTripDefEdit(btn.dataset.id));
   });
@@ -2486,7 +2495,7 @@ document.getElementById('newTripDefBtn').addEventListener('click', () => {
   document.getElementById('tripDefModalTitle').textContent = 'Yeni sefer tanımı';
   document.getElementById('tripDefName').value = '';
   document.getElementById('tripDefPrice').value = '';
-  document.getElementById('tripDefCategory').value = 'tir';
+  document.getElementById('tripDefCategory').value = activeTripDefCategory;
   document.getElementById('tripDefModalOverlay').style.display = 'flex';
 });
 
@@ -2500,7 +2509,7 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
   const price = parseFloat(document.getElementById('tripDefPrice').value) || 0;
   const category = document.getElementById('tripDefCategory').value;
   const existing = editingTripDefId ? data.tripDefs.find(x => x.id === editingTripDefId) : null;
-  const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price, category, pageId: existing ? existing.pageId : activeSeferPageId };
+  const td = { id: editingTripDefId || 'tdef_' + Date.now(), name, price, category, pageId: existing ? existing.pageId : null };
   if (editingTripDefId) {
     const idx = data.tripDefs.findIndex(x => x.id === editingTripDefId);
     data.tripDefs[idx] = td;
@@ -2509,6 +2518,7 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
   }
   save();
   document.getElementById('tripDefModalOverlay').style.display = 'none';
+  activeTripDefCategory = category;
   renderTripDefs();
   renderTrips();
 });
@@ -2566,10 +2576,8 @@ let editingSeferPageId = null;
 
 function renderSeferPageTabs() {
   const pages = [{ id: null, name: data.genelSeferPageName || 'Genel' }].concat(data.seferSayfalari);
-  const boxIds = ['seferPageTabs', 'tripDefPageTabs'];
-  boxIds.forEach(boxId => {
-    const box = document.getElementById(boxId);
-    if (!box) return;
+  const box = document.getElementById('seferPageTabs');
+  if (box) {
     box.innerHTML = pages.map(p => `
       <button class="seferPageTabBtn" data-id="${p.id === null ? '__GENEL__' : p.id}" style="font-size:12px; padding:6px 10px; ${p.id === activeSeferPageId ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
         ${escapeHtml(p.name)}
@@ -2579,16 +2587,11 @@ function renderSeferPageTabs() {
       btn.addEventListener('click', () => {
         activeSeferPageId = btn.dataset.id === '__GENEL__' ? null : btn.dataset.id;
         renderTrips();
-        renderTripDefs();
       });
       btn.addEventListener('dblclick', () => openSeferPageEdit(btn.dataset.id));
     });
-  });
+  }
 }
-
-document.getElementById('newSeferPageBtn2').addEventListener('click', () => {
-  document.getElementById('newSeferPageBtn').click();
-});
 
 document.getElementById('newSeferPageBtn').addEventListener('click', () => {
   editingSeferPageId = '__NEW__';
