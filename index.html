@@ -2109,8 +2109,9 @@ async function gdriveFindFile() {
   return null;
 }
 
-document.getElementById('gdriveBackupBtn').addEventListener('click', async () => {
+document.getElementById('gdriveBackupBtn').addEventListener('click', () => {
   if (!gdriveAccessToken) return;
+  showConfirm('Mevcut verileriniz buluttaki yedeğin üzerine yazılacak. Devam edilsin mi?', async () => {
   gdriveSetStatus('Yedekleniyor...');
   try {
     const existing = await gdriveFindFile();
@@ -2134,6 +2135,7 @@ document.getElementById('gdriveBackupBtn').addEventListener('click', async () =>
     console.error('Google Drive yedekleme hatası', e);
     gdriveSetStatus('Yedekleme başarısız oldu, lütfen tekrar deneyin.');
   }
+  });
 });
 
 document.getElementById('gdriveRestoreBtn').addEventListener('click', async () => {
