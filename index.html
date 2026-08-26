@@ -2666,7 +2666,12 @@ function populateTripVehicleSelect() {
 
 document.getElementById('tripDefInput').addEventListener('input', () => {
   const val = document.getElementById('tripDefInput').value;
-  const td = data.tripDefs.find(x => x.name === val);
+  const vehicle = selectedTripVehicleId ? data.vehicles.find(v => v.id === selectedTripVehicleId) : null;
+  let candidates = data.tripDefs.filter(x => x.name === val);
+  if (vehicle && candidates.length > 1) {
+    candidates = candidates.filter(x => x.category === (vehicle.category || 'tir'));
+  }
+  const td = candidates[0];
   if (td) {
     selectedTripDefId = td.id;
     document.getElementById('tripPrice').value = td.price;
@@ -2785,7 +2790,13 @@ document.getElementById('tripEditCancel').addEventListener('click', () => {
 
 document.getElementById('tripEditDefInput').addEventListener('input', () => {
   const val = document.getElementById('tripEditDefInput').value;
-  const td = data.tripDefs.find(x => x.name === val);
+  const vehicleId = resolveSearchableId('tripEditVehicle', data.vehicles);
+  const vehicle = vehicleId ? data.vehicles.find(v => v.id === vehicleId) : null;
+  let candidates = data.tripDefs.filter(x => x.name === val);
+  if (vehicle && candidates.length > 1) {
+    candidates = candidates.filter(x => x.category === (vehicle.category || 'tir'));
+  }
+  const td = candidates[0];
   if (td) document.getElementById('tripEditPrice').value = td.price;
 });
 
