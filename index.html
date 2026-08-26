@@ -376,7 +376,7 @@
       <input type="number" id="tripPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
-    <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer geçmişi</p>
+    <p id="tripHistoryTitle" style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer geçmişi</p>
     <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
       <select id="tripSort">
         <option value="date_desc">Tarih (yeni → eski)</option>
@@ -2577,7 +2577,7 @@ let activeSeferPageId = null;
 let editingSeferPageId = null;
 
 function renderSeferPageTabs() {
-  const pages = [{ id: null, name: data.genelSeferPageName || 'Genel' }].concat(data.seferSayfalari);
+  const pages = [{ id: '__ALL__', name: 'Tüm Seferler' }, { id: null, name: data.genelSeferPageName || 'Genel' }].concat(data.seferSayfalari);
   const box = document.getElementById('seferPageTabs');
   if (box) {
     box.innerHTML = pages.map(p => `
@@ -2590,7 +2590,9 @@ function renderSeferPageTabs() {
         activeSeferPageId = btn.dataset.id === '__GENEL__' ? null : btn.dataset.id;
         renderTrips();
       });
-      btn.addEventListener('dblclick', () => openSeferPageEdit(btn.dataset.id));
+      if (btn.dataset.id !== '__ALL__') {
+        btn.addEventListener('dblclick', () => openSeferPageEdit(btn.dataset.id));
+      }
     });
   }
 }
@@ -2700,6 +2702,8 @@ function renderTrips() {
   populateTripDefSelect();
   populateTripVehicleSelect();
   renderSeferPageTabs();
+  const titleEl = document.getElementById('tripHistoryTitle');
+  if (titleEl) titleEl.textContent = activeSeferPageId === '__ALL__' ? 'Tüm Seferler' : 'Sefer geçmişi';
   const list = document.getElementById('tripList');
   const q = (document.getElementById('tripIrsaliyeSearch').value || '').toLowerCase().trim();
   const sortBy = document.getElementById('tripSort').value;
@@ -2712,7 +2716,7 @@ function renderTrips() {
     price_asc: (a,b) => (a.price||0) - (b.price||0),
     no_asc: (a,b) => (a.irsaliyeNo||'').localeCompare(b.irsaliyeNo||'', 'tr', { numeric: true }),
   };
-  let trips = data.trips.filter(t => (t.pageId || null) === activeSeferPageId).slice().sort(tripSorters[sortBy] || tripSorters.date_desc);
+  let trips = (activeSeferPageId === '__ALL__' ? data.trips.slice() : data.trips.filter(t => (t.pageId || null) === activeSeferPageId)).sort(tripSorters[sortBy] || tripSorters.date_desc);
   if (q) trips = trips.filter(t => {
     const drv = data.drivers.find(d => d.id === t.driverId);
     const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
@@ -2830,7 +2834,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const priceVal = document.getElementById('tripPrice').value;
   const price = priceVal === '' ? null : parseFloat(priceVal);
   if (!driverId || !tripDefId || !date || !vehicleId) return;
-  const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, pageId: activeSeferPageId, linkedTxId: null };
+  const trip = { id: 'trip_' + Date.now(), irsaliyeNo, driverId, vehicleId, date, desc: tripDef.name, price, pageId: activeSeferPageId === '__ALL__' ? null : activeSeferPageId, linkedTxId: null };
   upsertTripTx(trip);
   data.trips.push(trip);
   save();
