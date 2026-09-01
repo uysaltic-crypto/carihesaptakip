@@ -221,6 +221,7 @@
     <button class="navBtn" data-view="seferler">Sefer Ekle</button>
     <button class="navBtn" data-view="sefertanimlari">Sefer Tanımları</button>
     <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
+    <button class="navBtn" data-view="fiyatkontrol">Fiyat Kontrolü<span class="badge" id="fkBadge" style="display:none;"></span></button>
   </div>
 
   <div id="alertBanner" style="display:none;"></div>
@@ -397,6 +398,7 @@
     </div>
     <div class="toolbar">
       <button id="newTripDefBtn" class="primary-btn">+ Yeni sefer tanımı</button>
+      <button id="priceControlBtn">💲 Fiyat kontrolü</button>
     </div>
     <div class="list-wrap" id="tripDefList"></div>
   </div>
@@ -427,6 +429,27 @@
       Teslim alınanları göster
     </label>
     <div class="list-wrap" id="irsList"></div>
+  </div>
+
+  <div id="fiyatkontrolView" style="display:none;">
+    <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
+      <div id="fkCategoryTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    </div>
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, "Sefer Ekle" bölümünden girilen her seferin fiyatının; ilgili grubun (Tır / Kırkayak / Balıkesir) güncel sefer tanımı fiyatıyla ve şoför carisine yazılan tutarla uyumlu olup olmadığını gösterir.</p>
+    <div class="summary" id="fkSummaryCards"></div>
+    <div class="toolbar">
+      <input id="fkSearch" placeholder="Şoför, araç, irsaliye no veya sefer adıyla ara..." style="flex:1;" />
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; white-space:nowrap; padding:0 4px;">
+        <input type="checkbox" id="fkOnlyMismatch" />
+        Sadece uyumsuzları göster
+      </label>
+    </div>
+    <div id="fkTableScroll" style="overflow-x:auto;">
+      <div id="fkListHeader" style="display:grid; grid-template-columns: 90px 140px 140px 90px 1fr 110px 110px 110px 160px; gap:8px; padding:0 12px 6px; font-size:11px; color:#999; font-weight:600; min-width:max-content;">
+        <span>Tarih</span><span>Şoför</span><span>Araç</span><span>İrs.No</span><span>Sefer adı</span><span style="text-align:right;">Tanım fiyatı</span><span style="text-align:right;">Sefere yazılan</span><span style="text-align:right;">Cariye yazılan</span><span>Durum</span>
+      </div>
+      <div class="list-wrap" id="fkList" style="padding:0 12px; min-width:max-content;"></div>
+    </div>
   </div>
 </div>
 
@@ -801,6 +824,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="priceControlModalOverlay">
+  <div class="modal-box" style="width:760px; max-width:95vw; max-height:85vh; overflow-y:auto;">
+    <h3>Fiyat kontrolü — Sefer tanımı ile cariye yazılan tutar karşılaştırması</h3>
+    <div id="priceControlCategoryTabs" style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>
+    <p id="priceControlSummary" style="font-size:13px; color:#555; margin:0 0 12px;"></p>
+    <div id="priceControlList" style="overflow-x:auto;"></div>
+    <div class="actions">
+      <button id="priceControlModalClose">Kapat</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORAGE_KEY = 'cari-hesap-data-v1';
 let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' };
@@ -974,6 +1009,7 @@ function load() {
     updateAlertBanner();
     updateRemBadge();
     updateEmptyDataBanner();
+    renderFiyatKontrol();
   } catch (e) {
     console.error('Ekran render hatası', e);
     alert('Program açılırken beklenmeyen bir hata oluştu, bazı ekranlar boş görünebilir. Bu genelde geçici bir veri sorunudur — lütfen "F12" ile tarayıcı konsolunu açıp buradaki hatayı bana iletin: ' + e.message);
@@ -1032,6 +1068,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('seferlerView').style.display = activeView === 'seferler' ? 'block' : 'none';
     document.getElementById('sefertanimlariView').style.display = activeView === 'sefertanimlari' ? 'block' : 'none';
     document.getElementById('irsaliyeView').style.display = activeView === 'irsaliye' ? 'block' : 'none';
+    document.getElementById('fiyatkontrolView').style.display = activeView === 'fiyatkontrol' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
     if (activeView === 'yakit') renderFuelLogs();
@@ -1039,6 +1076,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     if (activeView === 'seferler') renderTrips();
     if (activeView === 'sefertanimlari') renderTripDefs();
     if (activeView === 'irsaliye') renderIrsaliyeler();
+    if (activeView === 'fiyatkontrol') renderFiyatKontrol();
   });
 });
 
@@ -2525,6 +2563,135 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
   renderTrips();
 });
 
+// ---- Fiyat Kontrolü ----
+let activePriceControlCategory = 'all';
+const PRICE_CONTROL_CATEGORIES = [
+  { key: 'all', label: 'Tümü' },
+  { key: 'tir', label: 'Tır' },
+  { key: 'kirkayak', label: 'Kırkayak' },
+  { key: 'balikesir', label: 'Balıkesir' }
+];
+
+function categoryLabel(cat) {
+  return cat === 'kirkayak' ? 'Kırkayak' : (cat === 'balikesir' ? 'Balıkesir' : 'Tır');
+}
+
+// Bir seferin, aracının kategorisine göre HANGİ sefer tanımına karşılık gelmesi gerektiğini bulur.
+// Böylece "cariye yazılan tutar" ile "güncel sefer tanımındaki fiyat" karşılaştırılabilir.
+function computeExpectedTripDef(trip) {
+  const veh = trip.vehicleId ? data.vehicles.find(v => v.id === trip.vehicleId) : null;
+  if (!veh) return null;
+  const category = veh.category || 'tir';
+  return data.tripDefs.find(td => td.name === trip.desc && (td.category || 'tir') === category) || null;
+}
+
+function renderPriceControlCategoryTabs() {
+  const box = document.getElementById('priceControlCategoryTabs');
+  box.innerHTML = PRICE_CONTROL_CATEGORIES.map(c => `
+    <button class="priceControlCatBtn" data-key="${c.key}" style="font-size:12px; padding:6px 10px; ${c.key === activePriceControlCategory ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">${c.label}</button>
+  `).join('');
+  box.querySelectorAll('.priceControlCatBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activePriceControlCategory = btn.dataset.key;
+      renderPriceControl();
+    });
+  });
+}
+
+function renderPriceControl() {
+  renderPriceControlCategoryTabs();
+
+  let trips = data.trips.slice();
+  if (activePriceControlCategory !== 'all') {
+    trips = trips.filter(t => {
+      const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
+      return veh && (veh.category || 'tir') === activePriceControlCategory;
+    });
+  }
+
+  const rows = trips.map(t => {
+    const driver = data.drivers.find(d => d.id === t.driverId);
+    const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
+    const tanim = computeExpectedTripDef(t);
+    const expected = tanim ? tanim.price : null;
+    const actual = Number(t.price || 0);
+    const diff = (expected !== null) ? (actual - expected) : null;
+    const mismatch = (expected === null) || Math.abs(diff) > 0.009;
+    return { trip: t, driver, veh, tanim, expected, actual, diff, mismatch };
+  }).filter(r => r.mismatch)
+    .sort((a,b) => b.trip.date.localeCompare(a.trip.date));
+
+  const totalScanned = trips.length;
+  const summary = document.getElementById('priceControlSummary');
+  if (totalScanned === 0) {
+    summary.textContent = 'Bu kapsamda kayıtlı sefer bulunmuyor.';
+  } else if (rows.length === 0) {
+    summary.textContent = `${totalScanned} sefer tarandı — tamamının cariye yazılan tutarı, güncel sefer tanımı fiyatıyla eşleşiyor. ✅`;
+  } else {
+    summary.textContent = `${totalScanned} sefer tarandı, ${rows.length} tanesinde cariye yazılan tutar güncel sefer tanımı fiyatıyla uyuşmuyor.`;
+  }
+
+  const list = document.getElementById('priceControlList');
+  if (rows.length === 0) {
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = `
+    <table class="fuel-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Tarih</th>
+          <th style="text-align:left;">Şoför</th>
+          <th style="text-align:left;">Araç / Kategori</th>
+          <th style="text-align:left;">Sefer adı</th>
+          <th>Cariye yazılan</th>
+          <th>Güncel tanım fiyatı</th>
+          <th>Fark</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td style="text-align:left;">${fmtDate(r.trip.date)}</td>
+            <td style="text-align:left;">${r.driver ? escapeHtml(r.driver.name) : 'Silinmiş şoför'}</td>
+            <td style="text-align:left;">${r.veh ? escapeHtml(r.veh.name) + ' · ' + categoryLabel(r.veh.category || 'tir') : 'Araç seçilmemiş'}</td>
+            <td style="text-align:left;">${escapeHtml(r.trip.desc || '')}</td>
+            <td>${fmt(r.actual)}</td>
+            <td>${r.expected !== null ? fmt(r.expected) : (r.veh ? 'Bu kategoride tanım yok' : '—')}</td>
+            <td style="font-weight:700; color:${r.diff === null ? '#999' : (r.diff > 0 ? '#b3261e' : (r.diff < 0 ? '#1a7d3a' : '#1a1a1a'))};">${r.diff !== null ? (r.diff > 0 ? '+' : '') + fmt(r.diff) : '—'}</td>
+            <td>${r.expected !== null ? `<button class="fixPriceBtn" data-id="${r.trip.id}" style="font-size:12px; padding:4px 8px;">Tanıma göre düzelt</button>` : ''}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  list.querySelectorAll('.fixPriceBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const trip = data.trips.find(t => t.id === btn.dataset.id);
+      if (!trip) return;
+      const tanim = computeExpectedTripDef(trip);
+      if (!tanim) return;
+      trip.price = tanim.price;
+      upsertTripTx(trip);
+      save();
+      renderPriceControl();
+      renderTrips();
+      renderList();
+    });
+  });
+}
+
+document.getElementById('priceControlBtn').addEventListener('click', () => {
+  activePriceControlCategory = 'all';
+  renderPriceControl();
+  document.getElementById('priceControlModalOverlay').style.display = 'flex';
+});
+
+document.getElementById('priceControlModalClose').addEventListener('click', () => {
+  document.getElementById('priceControlModalOverlay').style.display = 'none';
+});
+
 // ---- Seferler ----
 function upsertTripTx(trip) {
   const driver = data.drivers.find(d => d.id === trip.driverId);
@@ -3506,6 +3673,128 @@ document.getElementById('vehModalSave').addEventListener('click', () => {
   renderVehicles();
   renderReminders();
 });
+
+// ---- Fiyat Kontrolü (sefer tanımı fiyatı vs. sefere yazılan fiyat vs. cariye yazılan tutar) ----
+let activeFkCategory = 'hepsi';
+const FK_CATEGORIES = [
+  { key: 'hepsi', label: 'Tümü' },
+  { key: 'tir', label: 'Tır' },
+  { key: 'kirkayak', label: 'Kırkayak' },
+  { key: 'balikesir', label: 'Balıkesir' }
+];
+
+function renderFkCategoryTabs() {
+  const box = document.getElementById('fkCategoryTabs');
+  box.innerHTML = FK_CATEGORIES.map(cat => `
+    <button class="fkCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeFkCategory ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+      ${cat.label}
+    </button>
+  `).join('');
+  box.querySelectorAll('.fkCatTabBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeFkCategory = btn.dataset.key;
+      renderFiyatKontrol();
+    });
+  });
+}
+
+// Bir seferin hangi gruba (tır/kırkayak/balıkesir) ait sayılacağını belirler:
+// önce seferdeki aracın grubuna, o yoksa şoförün grubuna bakar.
+function tripCategoryOf(trip) {
+  const veh = trip.vehicleId ? data.vehicles.find(v => v.id === trip.vehicleId) : null;
+  if (veh && veh.category) return veh.category;
+  const drv = data.drivers.find(d => d.id === trip.driverId);
+  if (drv && drv.category) return drv.category;
+  return 'tir';
+}
+
+// Tek bir seferi değerlendirir: sefer tanımının GÜNCEL fiyatı, seferin kendisine
+// o an yazılmış olan fiyat ve şoför carisine gerçekten işlenmiş tutar karşılaştırılır.
+function fkEvaluateTrip(trip) {
+  const category = tripCategoryOf(trip);
+  const driver = data.drivers.find(d => d.id === trip.driverId);
+  const vehicle = trip.vehicleId ? data.vehicles.find(v => v.id === trip.vehicleId) : null;
+  const tripDef = data.tripDefs.find(td => td.name === trip.desc && td.category === category) ||
+                  data.tripDefs.find(td => td.name === trip.desc) || null;
+  const definedPrice = tripDef ? Number(tripDef.price || 0) : null;
+  const tripPrice = (trip.price === null || trip.price === undefined) ? null : Number(trip.price);
+  let cariAmount = null;
+  if (driver && driver.accountId && trip.linkedTxId) {
+    const tx = (data.transactions[driver.accountId] || []).find(t => t.id === trip.linkedTxId);
+    if (tx) cariAmount = Number(tx.credit || 0);
+  }
+  let status = 'ok';
+  let statusLabel = 'Uyumlu';
+  if (!tripDef) {
+    status = 'nodef';
+    statusLabel = 'Tanım bulunamadı';
+  } else if (definedPrice !== null && tripPrice !== null && Math.abs(definedPrice - tripPrice) > 0.001) {
+    status = 'defmismatch';
+    statusLabel = 'Tanımdan farklı yazılmış';
+  } else if (driver && driver.accountId && (cariAmount === null || Math.abs((cariAmount || 0) - (tripPrice || 0)) > 0.001)) {
+    status = 'carimismatch';
+    statusLabel = 'Cariye yanlış işlenmiş';
+  }
+  return { trip, category, driver, vehicle, tripDef, definedPrice, tripPrice, cariAmount, status, statusLabel };
+}
+
+function renderFiyatKontrol() {
+  renderFkCategoryTabs();
+  const q = (document.getElementById('fkSearch').value || '').toLowerCase().trim();
+  const onlyMismatch = document.getElementById('fkOnlyMismatch').checked;
+
+  const evaluated = data.trips.map(t => fkEvaluateTrip(t));
+  const scoped = evaluated.filter(e => activeFkCategory === 'hepsi' || e.category === activeFkCategory);
+
+  let filtered = scoped.slice();
+  if (onlyMismatch) filtered = filtered.filter(e => e.status !== 'ok');
+  if (q) {
+    filtered = filtered.filter(e =>
+      (e.trip.irsaliyeNo || '').toLowerCase().includes(q) ||
+      (e.driver && e.driver.name.toLowerCase().includes(q)) ||
+      (e.vehicle && e.vehicle.name.toLowerCase().includes(q)) ||
+      (e.trip.desc || '').toLowerCase().includes(q)
+    );
+  }
+  filtered.sort((a, b) => b.trip.date.localeCompare(a.trip.date) || b.trip.id.localeCompare(a.trip.id));
+
+  const mismatchCount = scoped.filter(e => e.status !== 'ok').length;
+  document.getElementById('fkSummaryCards').innerHTML = `
+    <div class="card"><p class="label">Toplam sefer</p><p class="value">${scoped.length}</p></div>
+    <div class="card"><p class="label">Uyumsuz kayıt</p><p class="value" style="${mismatchCount > 0 ? 'color:#b3261e;' : ''}">${mismatchCount}</p></div>
+    <div class="card"><p class="label">Tanımı bulunamayan</p><p class="value">${scoped.filter(e => e.status === 'nodef').length}</p></div>
+  `;
+
+  const fkBadge = document.getElementById('fkBadge');
+  const totalMismatch = evaluated.filter(e => e.status !== 'ok').length;
+  if (totalMismatch > 0) { fkBadge.style.display = 'flex'; fkBadge.textContent = totalMismatch; }
+  else fkBadge.style.display = 'none';
+
+  const list = document.getElementById('fkList');
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty">${onlyMismatch ? 'Uyumsuz kayıt bulunamadı.' : 'Kayıt bulunamadı.'}</div>`;
+    return;
+  }
+  const statusColors = { ok: '#1a7d3a', nodef: '#8a5a00', defmismatch: '#b3261e', carimismatch: '#b3261e' };
+  const rowGrid = '90px 140px 140px 90px 1fr 110px 110px 110px 160px';
+  list.innerHTML = filtered.map(e => {
+    const t = e.trip;
+    return `<div class="tx-row" style="grid-template-columns:${rowGrid};">
+      <span class="tx-col">${fmtDate(t.date)}</span>
+      <span class="tx-col">${e.driver ? escapeHtml(e.driver.name) : '—'}</span>
+      <span class="tx-col">${e.vehicle ? escapeHtml(e.vehicle.name) : '—'}</span>
+      <span class="tx-col">${escapeHtml(t.irsaliyeNo || '')}</span>
+      <span class="tx-col">${escapeHtml(t.desc || '')}</span>
+      <span class="tx-col amt">${e.definedPrice !== null ? fmt(e.definedPrice) : '—'}</span>
+      <span class="tx-col amt">${e.tripPrice !== null ? fmt(e.tripPrice) : '—'}</span>
+      <span class="tx-col amt">${e.cariAmount !== null ? fmt(e.cariAmount) : '—'}</span>
+      <span class="tx-col" style="color:${statusColors[e.status]}; font-weight:600;">${e.statusLabel}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('fkSearch').addEventListener('input', renderFiyatKontrol);
+document.getElementById('fkOnlyMismatch').addEventListener('change', renderFiyatKontrol);
 
 </script>
 </body>
