@@ -839,6 +839,13 @@
 <script>
 const STORAGE_KEY = 'cari-hesap-data-v1';
 let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' };
+let activeFkCategory = 'hepsi';
+const FK_CATEGORIES = [
+  { key: 'hepsi', label: 'Tümü' },
+  { key: 'tir', label: 'Tır' },
+  { key: 'kirkayak', label: 'Kırkayak' },
+  { key: 'balikesir', label: 'Balıkesir' }
+];
 let currentAccId = null;
 let editingAccId = null;
 let activeTab = 'hepsi';
@@ -3675,14 +3682,6 @@ document.getElementById('vehModalSave').addEventListener('click', () => {
 });
 
 // ---- Fiyat Kontrolü (sefer tanımı fiyatı vs. sefere yazılan fiyat vs. cariye yazılan tutar) ----
-let activeFkCategory = 'hepsi';
-const FK_CATEGORIES = [
-  { key: 'hepsi', label: 'Tümü' },
-  { key: 'tir', label: 'Tır' },
-  { key: 'kirkayak', label: 'Kırkayak' },
-  { key: 'balikesir', label: 'Balıkesir' }
-];
-
 function renderFkCategoryTabs() {
   const box = document.getElementById('fkCategoryTabs');
   box.innerHTML = FK_CATEGORIES.map(cat => `
