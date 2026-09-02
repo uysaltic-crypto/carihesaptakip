@@ -407,13 +407,13 @@
 
   <div id="irsaliyeView" style="display:none;">
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">İrsaliye koçanı ver</p>
-    <p style="font-size:12px; color:#777; margin:0 0 8px;">Araç seçerseniz, bu koçanın sayfa aralığı o araca bağlanır ve "İrsaliye Kontrolü" ekranında mükerrer/eksik no taraması bu aralığa göre yapılır.</p>
-    <div class="rem-form" style="grid-template-columns: 130px 130px 1fr 1fr 90px 80px;">
+    <p style="font-size:12px; color:#777; margin:0 0 8px;">Başlangıç ve bitiş no'sunu bu koçanın üzerinde yazan gerçek irsaliye numaralarına göre siz girin. Araç seçerseniz koçan o araca bağlanır. "İrsaliye Kontrolü" ekranında eksik/atlanan no taraması SADECE burada girdiğiniz (teslim edilen) koçan aralıklarında yapılır; bu aralıktaki bir numara hangi şoförün/aracın seferine işlenmiş olursa olsun işlenmiş sayılır.</p>
+    <div class="rem-form" style="grid-template-columns: 125px 100px 100px 1fr 1fr 80px;">
       <input type="date" id="irsDate" />
-      <input type="text" id="irsNo" placeholder="İrsaliye no / koçan no" />
+      <input type="text" id="irsNo" placeholder="Başlangıç no" />
+      <input type="text" id="irsEndNo" placeholder="Bitiş no" />
       <input type="text" id="irsPerson" placeholder="Teslim alan kişi" />
       <input type="text" id="irsVehicle" list="irsVehicleDatalist" placeholder="Araç (opsiyonel)..." autocomplete="off" /><datalist id="irsVehicleDatalist"></datalist>
-      <input type="number" id="irsPageCount" placeholder="Sayfa sayısı" value="50" min="1" />
       <button id="addIrsBtn" class="primary-btn">+ Ekle</button>
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
@@ -437,7 +437,7 @@
   </div>
 
   <div id="irsaliyeKontrolView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">İrsaliye koçanı araçta kalır; şoförler araç değiştirdiğinde o araçtaki koçanı kullanır ve her koçan (örn. 50 sayfa) yeniden 01'den başlar. "İrsaliye Takip" ekranından bir koçanı araç seçerek kaydederseniz, kontrol o koçanın gerçek sayfa aralığına ve geçerlilik tarihine göre yapılır (en doğru sonuç). Bir araç için koçan kaydı girilmemişse, numara azalıp yeniden küçük bir değere döndüğü noktalar yeni koçanın başlangıcı sayılarak otomatik olarak bölünür. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekrandaki mükerrer/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilerek teslim edilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir ve eksik listesine yazılmaz. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
     <div class="summary" id="irsKontrolSummaryCards"></div>
 
     <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında mükerrer kullanılan irsaliye no'ları</p>
@@ -474,10 +474,10 @@
     <h3>İrsaliye kaydını düzenle</h3>
     <div class="field-group">
       <input type="date" id="irsEditDate" />
-      <input type="text" id="irsEditNo" placeholder="İrsaliye no / koçan no" />
+      <input type="text" id="irsEditNo" placeholder="Başlangıç no" />
+      <input type="text" id="irsEditEndNo" placeholder="Bitiş no" />
       <input type="text" id="irsEditPerson" placeholder="Teslim alan kişi" />
       <input type="text" id="irsEditVehicle" list="irsEditVehicleDatalist" placeholder="Araç (opsiyonel)..." autocomplete="off" /><datalist id="irsEditVehicleDatalist"></datalist>
-      <input type="number" id="irsEditPageCount" placeholder="Sayfa sayısı" value="50" min="1" />
     </div>
     <div class="actions">
       <button id="irsEditCancel">Vazgeç</button>
@@ -2239,8 +2239,8 @@ let editingIrsId = null;
 const DEFAULT_IRS_PAGE_COUNT = 50;
 
 function irsRangeLabel(i) {
-  const pc = i.pageCount || DEFAULT_IRS_PAGE_COUNT;
-  return `1-${pc}`;
+  const end = (i.endNo && String(i.endNo).trim() !== '') ? i.endNo : i.no;
+  return String(end).trim() === String(i.no).trim() ? `${i.no}` : `${i.no} – ${end}`;
 }
 
 function renderIrsaliyeler() {
@@ -2278,8 +2278,8 @@ function renderIrsaliyeler() {
         <input type="checkbox" class="irsReturnCheck" data-id="${i.id}" ${i.returned ? 'checked' : ''} />
         <div>
           <span class="rem-date">${fmtDate(i.date)}</span>
-          <p class="rem-desc ${i.returned ? 'done-text' : ''}"><b>İrs. No: ${escapeHtml(i.no)}</b> — ${escapeHtml(i.person)}
-            <span class="rem-acc">${veh ? escapeHtml(veh.name) + ' · sayfa ' + irsRangeLabel(i) + ' · ' : ''}${i.returned ? 'Teslim alındı' + (i.returnDate ? ' (' + fmtDate(i.returnDate) + ')' : '') : 'Bekliyor'}</span>
+          <p class="rem-desc ${i.returned ? 'done-text' : ''}"><b>İrs. No: ${escapeHtml(irsRangeLabel(i))}</b> — ${escapeHtml(i.person)}
+            <span class="rem-acc">${veh ? escapeHtml(veh.name) + ' · ' : ''}${i.returned ? 'Teslim alındı' + (i.returnDate ? ' (' + fmtDate(i.returnDate) + ')' : '') : 'Bekliyor'}</span>
           </p>
         </div>
       </div>
@@ -2329,17 +2329,16 @@ document.getElementById('irsSort').addEventListener('change', () => {
 document.getElementById('addIrsBtn').addEventListener('click', () => {
   const date = document.getElementById('irsDate').value;
   const no = document.getElementById('irsNo').value.trim();
+  const endNo = document.getElementById('irsEndNo').value.trim();
   const person = document.getElementById('irsPerson').value.trim();
   const vehicleId = resolveSearchableId('irsVehicle', data.vehicles);
-  const pageCountVal = document.getElementById('irsPageCount').value;
-  const pageCount = pageCountVal === '' ? DEFAULT_IRS_PAGE_COUNT : (parseInt(pageCountVal, 10) || DEFAULT_IRS_PAGE_COUNT);
   if (!date || !no || !person) return;
-  data.irsaliyeler.push({ id: 'irs_' + Date.now(), date, no, person, vehicleId, pageCount, returned: false, returnDate: null });
+  data.irsaliyeler.push({ id: 'irs_' + Date.now(), date, no, endNo, person, vehicleId, returned: false, returnDate: null });
   save();
   document.getElementById('irsNo').value = '';
+  document.getElementById('irsEndNo').value = '';
   document.getElementById('irsPerson').value = '';
   document.getElementById('irsVehicle').value = '';
-  document.getElementById('irsPageCount').value = '50';
   renderIrsaliyeler();
   renderIrsaliyeKontrol();
 });
@@ -2349,10 +2348,10 @@ function openIrsEdit(id) {
   const i = data.irsaliyeler.find(x => x.id === id);
   document.getElementById('irsEditDate').value = i.date;
   document.getElementById('irsEditNo').value = i.no;
+  document.getElementById('irsEditEndNo').value = i.endNo || '';
   document.getElementById('irsEditPerson').value = i.person;
   fillSearchableDatalist('irsEditVehicleDatalist', data.vehicles);
   setSearchableValue('irsEditVehicle', data.vehicles, i.vehicleId || null);
-  document.getElementById('irsEditPageCount').value = i.pageCount || DEFAULT_IRS_PAGE_COUNT;
   document.getElementById('irsEditModalOverlay').style.display = 'flex';
 }
 
@@ -2363,13 +2362,12 @@ document.getElementById('irsEditCancel').addEventListener('click', () => {
 document.getElementById('irsEditSave').addEventListener('click', () => {
   const date = document.getElementById('irsEditDate').value;
   const no = document.getElementById('irsEditNo').value.trim();
+  const endNo = document.getElementById('irsEditEndNo').value.trim();
   const person = document.getElementById('irsEditPerson').value.trim();
   const vehicleId = resolveSearchableId('irsEditVehicle', data.vehicles);
-  const pageCountVal = document.getElementById('irsEditPageCount').value;
-  const pageCount = pageCountVal === '' ? DEFAULT_IRS_PAGE_COUNT : (parseInt(pageCountVal, 10) || DEFAULT_IRS_PAGE_COUNT);
   if (!date || !no || !person) return;
   const i = data.irsaliyeler.find(x => x.id === editingIrsId);
-  i.date = date; i.no = no; i.person = person; i.vehicleId = vehicleId; i.pageCount = pageCount;
+  i.date = date; i.no = no; i.endNo = endNo; i.person = person; i.vehicleId = vehicleId;
   save();
   document.getElementById('irsEditModalOverlay').style.display = 'none';
   renderIrsaliyeler();
@@ -2443,110 +2441,74 @@ function formatMissingRanges(nums) {
 // tarih sınırlarına ve bildirilen sayfa sayısına göre yapılır — bu en doğru sonucu verir.
 // Elle kayıt yoksa, numara azalıp yeniden 01'e döndüğü noktalar yeni bir koçanın başladığı
 // varsayılarak otomatik olarak bölünür.
-function autoSplitSegments(trips) {
-  if (trips.length === 0) return [];
-  const segments = [];
-  let current = [];
-  let prevNum = null;
-  trips.forEach(t => {
-    const num = parseIrsNoNumeric(t.irsaliyeNo);
-    if (num !== null && prevNum !== null && num < prevNum) {
-      segments.push(current);
-      current = [];
-    }
-    current.push(t);
-    if (num !== null) prevNum = num;
-  });
-  if (current.length > 0) segments.push(current);
-  return segments.map((segTrips, idx) => ({
-    label: segments.length > 1
-      ? `Otomatik algılanan koçan #${idx + 1} (${fmtDate(segTrips[0].date)} – ${fmtDate(segTrips[segTrips.length - 1].date)})`
-      : `Otomatik algılanan seri (${fmtDate(segTrips[0].date)} – ${fmtDate(segTrips[segTrips.length - 1].date)})`,
-    trips: segTrips,
-    declaredStart: null,
-    declaredEnd: null
-  }));
+// Bir koçan kaydının başlangıç/bitiş no aralığını döner. Başlangıç no sayısal değilse
+// (harf/karışık formatta girildiyse) o koçan aralık taramasına dahil edilemez.
+// endNo boşsa (tek no girildiyse) aralık tek sayıdan ibaret sayılır. Eski kayıtlarda
+// (bitiş no alanı henüz yokken girilmiş) "pageCount" varsa geriye dönük uyumluluk için kullanılır.
+function bookletRangeOf(bk) {
+  const start = parseIrsNoNumeric(bk.no);
+  if (start === null) return null;
+  let end = parseIrsNoNumeric(bk.endNo);
+  if (end === null && bk.pageCount) {
+    end = start + (parseInt(bk.pageCount, 10) || DEFAULT_IRS_PAGE_COUNT) - 1;
+  }
+  if (end === null || end < start) end = start;
+  return { start, end };
 }
 
+// İrsaliye Kontrolü ekranı SADECE "İrsaliye Takip" ekranından teslim edilerek başlangıç-bitiş
+// no'su girilmiş koçanların aralığını tarar (koçanı kaydedilmemiş numaralar taranmaz).
+// Bir koçan aralığındaki bir numaranın "işlenmiş" sayılması için o numarayla girilmiş HERHANGİ
+// bir sefer yeterlidir — sefer hangi şoföre veya araca kayıtlı olursa olsun (koçan başka bir
+// araca bağlı olsa bile) o numara işlenmiş kabul edilir ve eksik listesine yazılmaz.
 function computeIrsKontrol() {
   const tripsWithNo = data.trips.filter(t => String(t.irsaliyeNo || '').trim() !== '');
+  const numericTrips = tripsWithNo
+    .map(t => ({ trip: t, num: parseIrsNoNumeric(t.irsaliyeNo) }))
+    .filter(x => x.num !== null);
 
-  const byVehicle = {};
-  tripsWithNo.forEach(t => {
-    const vKey = t.vehicleId || '__none__';
-    (byVehicle[vKey] = byVehicle[vKey] || []).push(t);
+  const booklets = data.irsaliyeler
+    .map(bk => ({ bk, range: bookletRangeOf(bk) }))
+    .filter(x => x.range !== null)
+    .sort((a, b) => a.bk.date.localeCompare(b.bk.date) || (a.range.start - b.range.start));
+
+  const bookletSegments = booklets.map(({ bk, range }) => {
+    const inRange = numericTrips.filter(x => x.num >= range.start && x.num <= range.end);
+
+    const groups = {};
+    inRange.forEach(x => (groups[x.num] = groups[x.num] || []).push(x.trip));
+    const duplicateGroups = Object.keys(groups)
+      .filter(k => groups[k].length > 1)
+      .sort((a, b) => Number(a) - Number(b))
+      .map(k => groups[k]);
+
+    const capped = (range.end - range.start + 1) > IRS_GAP_MAX_RANGE;
+    const limit = capped ? range.start + IRS_GAP_MAX_RANGE - 1 : range.end;
+    const used = new Set(inRange.map(x => x.num));
+    const missing = [];
+    for (let n = range.start; n <= limit; n++) if (!used.has(n)) missing.push(n);
+
+    const vehicle = bk.vehicleId ? data.vehicles.find(v => v.id === bk.vehicleId) : null;
+    return {
+      vehicleId: bk.vehicleId || null,
+      vehicleName: vehicle ? vehicle.name : 'Araç atanmamış',
+      label: `Koçan: ${irsRangeLabel(bk)}${bk.person ? ' — ' + bk.person : ''} (${fmtDate(bk.date)} teslim)`,
+      duplicateGroups,
+      gapInfo: { hasRange: true, min: range.start, max: range.end, missing, capped }
+    };
   });
 
-  const vehicleGroups = Object.keys(byVehicle).map(vKey => {
-    const trips = byVehicle[vKey].slice().sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-    const vehicle = vKey !== '__none__' ? data.vehicles.find(v => v.id === vKey) : null;
-    const booklets = vKey !== '__none__'
-      ? data.irsaliyeler.filter(i => i.vehicleId === vKey).slice().sort((a, b) => a.date.localeCompare(b.date))
-      : [];
-
-    let rawSegments;
-    if (booklets.length > 0) {
-      rawSegments = booklets.map((bk, idx) => {
-        const nextDate = idx + 1 < booklets.length ? booklets[idx + 1].date : null;
-        const segTrips = trips.filter(t => t.date >= bk.date && (nextDate === null || t.date < nextDate));
-        return {
-          label: `Koçan: ${bk.no}${bk.person ? ' — ' + bk.person : ''} (${fmtDate(bk.date)} tarihinden itibaren)`,
-          trips: segTrips,
-          declaredStart: 1,
-          declaredEnd: bk.pageCount || DEFAULT_IRS_PAGE_COUNT
-        };
-      });
-      const beforeFirst = trips.filter(t => t.date < booklets[0].date);
-      if (beforeFirst.length > 0) rawSegments = autoSplitSegments(beforeFirst).concat(rawSegments);
-    } else {
-      rawSegments = autoSplitSegments(trips);
-    }
-
-    const evaluatedSegments = rawSegments.map(seg => {
-      const groups = {};
-      seg.trips.forEach(t => {
-        const key = irsKeyOf(t.irsaliyeNo);
-        (groups[key] = groups[key] || []).push(t);
-      });
-      const duplicateGroups = Object.values(groups)
-        .filter(g => g.length > 1)
-        .sort((a, b) => a[0].irsaliyeNo.localeCompare(b[0].irsaliyeNo, 'tr', { numeric: true }));
-
-      const nums = Array.from(new Set(
-        seg.trips.map(t => parseIrsNoNumeric(t.irsaliyeNo)).filter(n => n !== null)
-      )).sort((a, b) => a - b);
-
-      let gapInfo = { hasRange: false, min: null, max: null, missing: [], capped: false };
-      if (seg.declaredEnd) {
-        // Sayfa sayısı bilinen (elle kayıtlı) koçan: tam aralık (1..sayfa sayısı) beklenir.
-        const min = seg.declaredStart, max = seg.declaredEnd;
-        const capped = (max - min + 1) > IRS_GAP_MAX_RANGE;
-        const limit = capped ? min + IRS_GAP_MAX_RANGE - 1 : max;
-        const used = new Set(nums);
-        const missing = [];
-        for (let n = min; n <= limit; n++) if (!used.has(n)) missing.push(n);
-        gapInfo = { hasRange: true, min, max, missing, capped };
-      } else if (nums.length >= 2) {
-        const min = nums[0], max = nums[nums.length - 1];
-        const capped = (max - min + 1) > IRS_GAP_MAX_RANGE;
-        const limit = capped ? min + IRS_GAP_MAX_RANGE - 1 : max;
-        const used = new Set(nums);
-        const missing = [];
-        for (let n = min; n <= limit; n++) if (!used.has(n)) missing.push(n);
-        gapInfo = { hasRange: true, min, max, missing, capped };
-      }
-
-      return { label: seg.label, trips: seg.trips, duplicateGroups, gapInfo };
-    }).filter(seg => seg.trips.length > 0);
-
-    return {
-      vehicleId: vKey === '__none__' ? null : vKey,
-      vehicleName: vehicle ? vehicle.name : 'Araç atanmamış',
-      segments: evaluatedSegments
-    };
-  }).sort((a, b) => {
-    if (a.vehicleId === null) return 1;
-    if (b.vehicleId === null) return -1;
+  const byVehicleName = {};
+  bookletSegments.forEach(seg => {
+    (byVehicleName[seg.vehicleName] = byVehicleName[seg.vehicleName] || []).push(seg);
+  });
+  const vehicleGroups = Object.keys(byVehicleName).map(name => ({
+    vehicleId: name === 'Araç atanmamış' ? null : name,
+    vehicleName: name,
+    segments: byVehicleName[name]
+  })).sort((a, b) => {
+    if (a.vehicleName === 'Araç atanmamış') return 1;
+    if (b.vehicleName === 'Araç atanmamış') return -1;
     return a.vehicleName.localeCompare(b.vehicleName, 'tr');
   });
 
@@ -2637,7 +2599,7 @@ function renderIrsaliyeKontrol() {
       }
     });
   });
-  gapList.innerHTML = gapRows.length === 0 ? `<div class="empty">Kontrol için, bir aracın en az bir koçan kaydı olması ya da seferlerinde en az iki sayısal irsaliye no girilmiş olması gerekir.</div>` : gapRows.join('');
+  gapList.innerHTML = gapRows.length === 0 ? `<div class="empty">Kontrol için, "İrsaliye Takip" ekranından başlangıç ve bitiş no'su girilmiş en az bir koçan kaydı gerekir.</div>` : gapRows.join('');
 }
 
 function focusAndSelect(id) {
