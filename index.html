@@ -221,6 +221,7 @@
     <button class="navBtn" data-view="seferler">Sefer Ekle</button>
     <button class="navBtn" data-view="sefertanimlari">Sefer Tanımları</button>
     <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
+    <button class="navBtn" data-view="irsaliyekontrol">İrsaliye Kontrolü<span class="badge" id="irsKontrolBadge" style="display:none;"></span></button>
     <button class="navBtn" data-view="fiyatkontrol">Fiyat Kontrolü<span class="badge" id="fkBadge" style="display:none;"></span></button>
   </div>
 
@@ -429,6 +430,26 @@
       Teslim alınanları göster
     </label>
     <div class="list-wrap" id="irsList"></div>
+  </div>
+
+  <div id="irsaliyeKontrolView" style="display:none;">
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, "Sefer Ekle" bölümüne girilen irsaliye no'larını üç açıdan kontrol eder: aynı no'nun birden fazla seferde kullanılıp kullanılmadığı, sefere yazılan no'nun verilen bir koçana ait olup olmadığı ve koçan aralığında atlanan/eksik no bulunup bulunmadığı. Koçan no alanına tek bir numara ya da "1250-1300" gibi bir aralık girilebilir; aralık girilen koçanlarda eksik no kontrolü yapılabilir.</p>
+    <div class="summary" id="irsKontrolSummaryCards"></div>
+
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Mükerrer kullanılan irsaliye no'ları</p>
+    <div class="list-wrap" id="irsDupList"></div>
+
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Koçanda kayıtlı olmayan sefer irsaliye no'ları</p>
+    <div class="list-wrap" id="irsUnregList"></div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin:18px 0 8px; gap:8px; flex-wrap:wrap;">
+      <p style="font-weight:600; font-size:15px; margin:0;">Koçan bazında eksik / atlanan no kontrolü</p>
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px;">
+        <input type="checkbox" id="irsGapOnlyMissing" />
+        Sadece eksik olanları göster
+      </label>
+    </div>
+    <div class="list-wrap" id="irsGapList"></div>
   </div>
 
   <div id="fiyatkontrolView" style="display:none;">
@@ -1016,6 +1037,7 @@ function load() {
     updateAlertBanner();
     updateRemBadge();
     updateEmptyDataBanner();
+    renderIrsaliyeKontrol();
     renderFiyatKontrol();
   } catch (e) {
     console.error('Ekran render hatası', e);
@@ -1032,6 +1054,7 @@ function save() {
     alert('Kayıt başarısız oldu: tarayıcı hafıza alanı (localStorage) dolu görünüyor. Bunun en yaygın sebebi yüklenen görsellerin (poliçe, ruhsat, ehliyet vb.) toplam boyutunun sınırı aşmasıdır. Az önce yaptığınız değişiklik kaydedilmedi. Lütfen daha küçük/az sayıda görsel kullanmayı deneyin veya bazı eski görselleri kaldırın.');
   }
   updateEmptyDataBanner();
+  updateIrsKontrolBadge();
   return ok;
 }
 
@@ -1075,6 +1098,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('seferlerView').style.display = activeView === 'seferler' ? 'block' : 'none';
     document.getElementById('sefertanimlariView').style.display = activeView === 'sefertanimlari' ? 'block' : 'none';
     document.getElementById('irsaliyeView').style.display = activeView === 'irsaliye' ? 'block' : 'none';
+    document.getElementById('irsaliyeKontrolView').style.display = activeView === 'irsaliyekontrol' ? 'block' : 'none';
     document.getElementById('fiyatkontrolView').style.display = activeView === 'fiyatkontrol' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
@@ -1083,6 +1107,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     if (activeView === 'seferler') renderTrips();
     if (activeView === 'sefertanimlari') renderTripDefs();
     if (activeView === 'irsaliye') renderIrsaliyeler();
+    if (activeView === 'irsaliyekontrol') renderIrsaliyeKontrol();
     if (activeView === 'fiyatkontrol') renderFiyatKontrol();
   });
 });
@@ -2324,6 +2349,188 @@ document.getElementById('irsEditSave').addEventListener('click', () => {
   document.getElementById('irsEditModalOverlay').style.display = 'none';
   renderIrsaliyeler();
 });
+
+// ---- İrsaliye Kontrolü ----
+// Koçan no alanı tek bir numara ("1250") ya da bir aralık ("1250-1300") olabilir.
+// Aralık girilirse, başlangıç ile bitiş arasındaki her numaranın seferlerde kullanılıp
+// kullanılmadığı kontrol edilebilir.
+function parseIrsRange(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  let m = s.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+  if (m) {
+    let start = parseInt(m[1], 10), end = parseInt(m[2], 10);
+    if (isNaN(start) || isNaN(end)) return null;
+    if (end < start) { const tmp = start; start = end; end = tmp; }
+    return { start, end, digits: m[1].length };
+  }
+  m = s.match(/^(\d+)$/);
+  if (m) {
+    const num = parseInt(m[1], 10);
+    return { start: num, end: num, digits: m[1].length };
+  }
+  return null;
+}
+
+function parseIrsNoNumeric(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  return /^\d+$/.test(s) ? parseInt(s, 10) : null;
+}
+
+// Mükerrer kontrolünde aynı numarayı ("0100" ile "100" gibi) aynı kabul etmek için anahtar üretir.
+function irsKeyOf(str) {
+  const num = parseIrsNoNumeric(str);
+  return num !== null ? ('n:' + num) : ('s:' + String(str).trim().toLowerCase());
+}
+
+// Bir seferin irsaliye no'sunun, verilen bir koçana (tek no veya aralık) ait olup olmadığını kontrol eder.
+function tripMatchesIrs(tripNoStr, irs) {
+  const tripStr = String(tripNoStr || '').trim();
+  const irsStr = String(irs.no || '').trim();
+  if (!tripStr || !irsStr) return false;
+  if (tripStr.toLowerCase() === irsStr.toLowerCase()) return true;
+  const range = parseIrsRange(irsStr);
+  const tripNum = parseIrsNoNumeric(tripStr);
+  if (range && tripNum !== null) return tripNum >= range.start && tripNum <= range.end;
+  return false;
+}
+
+const IRS_GAP_MAX_RANGE = 5000; // performans için tek koçanda kontrol edilecek azami numara sayısı
+
+function computeIrsKontrol() {
+  const tripsWithNo = data.trips.filter(t => String(t.irsaliyeNo || '').trim() !== '');
+
+  // 1) Mükerrer kullanılan no'lar
+  const groups = {};
+  tripsWithNo.forEach(t => {
+    const key = irsKeyOf(t.irsaliyeNo);
+    (groups[key] = groups[key] || []).push(t);
+  });
+  const duplicateGroups = Object.values(groups)
+    .filter(g => g.length > 1)
+    .sort((a, b) => a[0].irsaliyeNo.localeCompare(b[0].irsaliyeNo, 'tr', { numeric: true }));
+
+  // 2) Hiçbir koçanla eşleşmeyen sefer no'ları
+  const unregisteredTrips = tripsWithNo.filter(t => !data.irsaliyeler.some(irs => tripMatchesIrs(t.irsaliyeNo, irs)))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  // 3) Koçan bazında eksik / atlanan no'lar (sadece aralık olarak girilmiş koçanlarda)
+  const usedNumbers = new Set();
+  tripsWithNo.forEach(t => {
+    const n = parseIrsNoNumeric(t.irsaliyeNo);
+    if (n !== null) usedNumbers.add(n);
+  });
+  const gapResults = data.irsaliyeler.map(irs => {
+    const range = parseIrsRange(irs.no);
+    if (!range || range.end === range.start) return null; // tek no'lu koçanlarda "eksik" kavramı yok
+    const size = range.end - range.start + 1;
+    const capped = size > IRS_GAP_MAX_RANGE;
+    const limit = Math.min(range.end, range.start + IRS_GAP_MAX_RANGE - 1);
+    const missing = [];
+    for (let n = range.start; n <= limit; n++) {
+      if (!usedNumbers.has(n)) missing.push(String(n).padStart(range.digits, '0'));
+    }
+    return { irs, range, size, capped, missing };
+  }).filter(Boolean).sort((a, b) => b.irs.date.localeCompare(a.irs.date));
+
+  return { tripsWithNo, duplicateGroups, unregisteredTrips, gapResults };
+}
+
+function updateIrsKontrolBadge() {
+  const { duplicateGroups, unregisteredTrips, gapResults } = computeIrsKontrol();
+  const dupExtra = duplicateGroups.reduce((sum, g) => sum + (g.length - 1), 0);
+  const gapKoçanCount = gapResults.filter(g => g.missing.length > 0).length;
+  const total = dupExtra + unregisteredTrips.length + gapKoçanCount;
+  const badge = document.getElementById('irsKontrolBadge');
+  if (total > 0) { badge.style.display = 'flex'; badge.textContent = total; }
+  else badge.style.display = 'none';
+  return total;
+}
+
+function driverVehicleLabelOf(t) {
+  const drv = data.drivers.find(d => d.id === t.driverId);
+  const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
+  return `${drv ? escapeHtml(drv.name) : 'Silinmiş şoför'}${veh ? ' — ' + escapeHtml(veh.name) : ''}`;
+}
+
+function renderIrsaliyeKontrol() {
+  const { duplicateGroups, unregisteredTrips, gapResults } = computeIrsKontrol();
+  updateIrsKontrolBadge();
+
+  const dupExtra = duplicateGroups.reduce((sum, g) => sum + (g.length - 1), 0);
+  const gapKoçanlar = gapResults.filter(g => g.missing.length > 0);
+  document.getElementById('irsKontrolSummaryCards').innerHTML = `
+    <div class="card"><p class="label">Mükerrer kayıt</p><p class="value" style="${dupExtra > 0 ? 'color:#b3261e;' : ''}">${dupExtra}</p></div>
+    <div class="card"><p class="label">Koçanda kayıtlı olmayan</p><p class="value" style="${unregisteredTrips.length > 0 ? 'color:#b3261e;' : ''}">${unregisteredTrips.length}</p></div>
+    <div class="card"><p class="label">Eksik no'lu koçan</p><p class="value" style="${gapKoçanlar.length > 0 ? 'color:#8a5a00;' : ''}">${gapKoçanlar.length}</p></div>
+  `;
+
+  // Mükerrer liste
+  const dupList = document.getElementById('irsDupList');
+  if (duplicateGroups.length === 0) {
+    dupList.innerHTML = `<div class="empty">Mükerrer kullanılan irsaliye no'su bulunamadı.</div>`;
+  } else {
+    dupList.innerHTML = duplicateGroups.map(g => `
+      <div class="rem-row">
+        <div class="rem-left">
+          <div>
+            <p class="rem-desc"><b>İrs. No: ${escapeHtml(g[0].irsaliyeNo)}</b> — ${g.length} seferde kullanılmış
+              <span class="rem-acc">${g.map(t => `${fmtDate(t.date)} · ${driverVehicleLabelOf(t)}`).join(' &nbsp;|&nbsp; ')}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Koçanda kayıtlı olmayanlar
+  const unregList = document.getElementById('irsUnregList');
+  if (unregisteredTrips.length === 0) {
+    unregList.innerHTML = `<div class="empty">Tüm sefer irsaliye no'ları bir koçanla eşleşiyor.</div>`;
+  } else {
+    unregList.innerHTML = unregisteredTrips.map(t => `
+      <div class="rem-row">
+        <div class="rem-left">
+          <div>
+            <p class="rem-desc"><b>İrs. No: ${escapeHtml(t.irsaliyeNo)}</b> — ${fmtDate(t.date)}
+              <span class="rem-acc">${driverVehicleLabelOf(t)} — ${escapeHtml(t.desc || '')}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Koçan bazında eksik no kontrolü
+  const onlyMissing = document.getElementById('irsGapOnlyMissing').checked;
+  const gapList = document.getElementById('irsGapList');
+  const gapShown = onlyMissing ? gapResults.filter(g => g.missing.length > 0) : gapResults;
+  if (gapResults.length === 0) {
+    gapList.innerHTML = `<div class="empty">Aralık olarak girilmiş koçan bulunamadı. (Eksik no kontrolü için koçan no alanına "1250-1300" gibi bir aralık girin.)</div>`;
+  } else if (gapShown.length === 0) {
+    gapList.innerHTML = `<div class="empty">Eksik no'lu koçan bulunamadı.</div>`;
+  } else {
+    gapList.innerHTML = gapShown.map(g => {
+      const ok = g.missing.length === 0;
+      const previewCount = 15;
+      const preview = g.missing.slice(0, previewCount).join(', ');
+      const more = g.missing.length > previewCount ? ` ve ${g.missing.length - previewCount} tane daha` : '';
+      return `
+      <div class="rem-row">
+        <div class="rem-left">
+          <div>
+            <p class="rem-desc"><b>Koçan: ${escapeHtml(g.irs.no)}</b> — ${escapeHtml(g.irs.person)} (${fmtDate(g.irs.date)})
+              <span class="rem-acc" style="${ok ? '' : 'color:#b3261e;'}">${ok ? 'Aralıktaki tüm no\'lar sefere işlenmiş.' : `${g.missing.length} no eksik: ${escapeHtml(preview)}${escapeHtml(more)}`}${g.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
+            </p>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+document.getElementById('irsGapOnlyMissing').addEventListener('change', renderIrsaliyeKontrol);
 
 function focusAndSelect(id) {
   const el = document.getElementById(id);
