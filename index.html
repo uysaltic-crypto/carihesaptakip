@@ -437,13 +437,16 @@
   </div>
 
   <div id="irsaliyeKontrolView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekrandaki mükerrer/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilerek teslim edilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir ve eksik listesine yazılmaz. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekrandaki mükerrer/atlanan/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilerek teslim edilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir. Hiç işlenmiş numarası olmayan koçanlar bu taramaya hiç dahil edilmez. İşlenmiş numaraları olan bir koçanda, kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar <b>"atlanan"</b>, bu aralığın dışında (başında veya sonunda) kalıp henüz işlenmemiş no'lar ise <b>"eksik"</b> olarak ayrı ayrı gösterilir. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
     <div class="summary" id="irsKontrolSummaryCards"></div>
 
     <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında mükerrer kullanılan irsaliye no'ları</p>
     <div class="list-wrap" id="irsDupList"></div>
 
-    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında eksik / atlanan no kontrolü</p>
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında atlanan no kontrolü <span style="font-weight:400; color:#777; font-size:12px;">(kullanılan no'lar arasında kalıp işlenmemiş — gerçek anlamda atlanmış olabilir)</span></p>
+    <div class="list-wrap" id="irsSkipList"></div>
+
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında eksik no kontrolü <span style="font-weight:400; color:#777; font-size:12px;">(kullanılan no'lardan önce/sonra kalan, henüz işlenmemiş no'lar)</span></p>
     <div class="list-wrap" id="irsGapList"></div>
   </div>
 
@@ -2486,12 +2489,24 @@ function computeIrsKontrol() {
     const limit = capped ? range.start + IRS_GAP_MAX_RANGE - 1 : range.end;
     const used = new Set(inRange.map(x => x.num));
 
-    // Koçanda hiç işlenmiş no yoksa (henüz hiç kullanılmamışsa) bunu "eksik" saymıyoruz —
-    // eksik/atlanan taraması sadece en az bir numarası işlenmiş koçanlarda yapılır.
+    // Koçanda hiç işlenmiş no yoksa (henüz hiç kullanılmamışsa) bunu "eksik/atlanan" saymıyoruz —
+    // bu tarama sadece en az bir numarası işlenmiş koçanlarda yapılır.
     const hasAnyProcessed = used.size > 0;
-    const missing = [];
+    // "Atlanan": kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar — bunlar
+    // gerçekten atlanmış/unutulmuş sayılır (aradaki sıradan biri eksik).
+    // "Eksik": kullanılan en küçük no'dan önce veya en büyük no'dan sonra kalan, henüz hiç
+    // işlenmemiş no'lar — bunlar henüz sıraya gelmemiş / kullanılmayı bekleyen no'lar olabilir.
+    const skipped = [];
+    const notYetUsed = [];
     if (hasAnyProcessed) {
-      for (let n = range.start; n <= limit; n++) if (!used.has(n)) missing.push(n);
+      const usedNums = Array.from(used);
+      const minUsed = Math.min(...usedNums);
+      const maxUsed = Math.max(...usedNums);
+      for (let n = range.start; n <= limit; n++) {
+        if (used.has(n)) continue;
+        if (n > minUsed && n < maxUsed) skipped.push(n);
+        else notYetUsed.push(n);
+      }
     }
 
     const vehicle = bk.vehicleId ? data.vehicles.find(v => v.id === bk.vehicleId) : null;
@@ -2500,7 +2515,7 @@ function computeIrsKontrol() {
       vehicleName: vehicle ? vehicle.name : 'Araç atanmamış',
       label: `Koçan: ${irsRangeLabel(bk)}${bk.person ? ' — ' + bk.person : ''} (${fmtDate(bk.date)} teslim)`,
       duplicateGroups,
-      gapInfo: { hasRange: hasAnyProcessed, min: range.start, max: range.end, missing, capped }
+      gapInfo: { hasRange: hasAnyProcessed, min: range.start, max: range.end, skipped, notYetUsed, capped }
     };
   });
 
@@ -2525,7 +2540,7 @@ function updateIrsKontrolBadge() {
   const { vehicleGroups } = computeIrsKontrol();
   const total = vehicleGroups.reduce((sum, vg) => sum + vg.segments.reduce((s, seg) => {
     const dupExtra = seg.duplicateGroups.reduce((x, g) => x + (g.length - 1), 0);
-    return s + dupExtra + seg.gapInfo.missing.length;
+    return s + dupExtra + seg.gapInfo.skipped.length + seg.gapInfo.notYetUsed.length;
   }, 0), 0);
   const badge = document.getElementById('irsKontrolBadge');
   if (total > 0) { badge.style.display = 'flex'; badge.textContent = total; }
@@ -2537,15 +2552,17 @@ function renderIrsaliyeKontrol() {
   const { vehicleGroups } = computeIrsKontrol();
   updateIrsKontrolBadge();
 
-  let totalDupExtra = 0, totalMissing = 0, segCount = 0;
+  let totalDupExtra = 0, totalSkipped = 0, totalNotYetUsed = 0, segCount = 0;
   vehicleGroups.forEach(vg => vg.segments.forEach(seg => {
     totalDupExtra += seg.duplicateGroups.reduce((s, g) => s + (g.length - 1), 0);
-    totalMissing += seg.gapInfo.missing.length;
+    totalSkipped += seg.gapInfo.skipped.length;
+    totalNotYetUsed += seg.gapInfo.notYetUsed.length;
     segCount++;
   }));
   document.getElementById('irsKontrolSummaryCards').innerHTML = `
     <div class="card"><p class="label">Mükerrer kayıt</p><p class="value" style="${totalDupExtra > 0 ? 'color:#b3261e;' : ''}">${totalDupExtra}</p></div>
-    <div class="card"><p class="label">Eksik / atlanan no</p><p class="value" style="${totalMissing > 0 ? 'color:#8a5a00;' : ''}">${totalMissing}</p></div>
+    <div class="card"><p class="label">Atlanan no</p><p class="value" style="${totalSkipped > 0 ? 'color:#b3261e;' : ''}">${totalSkipped}</p></div>
+    <div class="card"><p class="label">Eksik no</p><p class="value" style="${totalNotYetUsed > 0 ? 'color:#8a5a00;' : ''}">${totalNotYetUsed}</p></div>
     <div class="card"><p class="label">Kontrol edilen koçan/aralık</p><p class="value">${segCount}</p></div>
   `;
 
@@ -2577,35 +2594,63 @@ function renderIrsaliyeKontrol() {
   });
   dupList.innerHTML = dupRows.length === 0 ? `<div class="empty">Mükerrer kullanılan irsaliye no'su bulunamadı.</div>` : dupRows.join('');
 
-  // Eksik / atlanan no kontrolü — araç, sonra koçan/aralık bazında gruplanmış
+  // Atlanan no kontrolü — kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar
+  // (araç, sonra koçan/aralık bazında gruplanmış)
+  const skipList = document.getElementById('irsSkipList');
+  const skipRows = [];
+  vehicleGroups.forEach(vg => {
+    const segsWithRange = vg.segments.filter(seg => seg.gapInfo.hasRange);
+    if (segsWithRange.length === 0) return;
+    const rowsForVeh = [];
+    segsWithRange.forEach(seg => {
+      if (seg.gapInfo.skipped.length === 0) return;
+      rowsForVeh.push(segHeader(seg.label));
+      rowsForVeh.push(`
+        <div class="rem-row">
+          <div class="rem-left">
+            <div>
+              <p class="rem-desc">${seg.gapInfo.min} – ${seg.gapInfo.max} aralığında <b>${seg.gapInfo.skipped.length}</b> no atlanmış
+                <span class="rem-acc" style="color:#b3261e;">${escapeHtml(formatMissingRanges(seg.gapInfo.skipped))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
+              </p>
+            </div>
+          </div>
+        </div>`);
+    });
+    if (rowsForVeh.length > 0) {
+      skipRows.push(vehHeader(vg.vehicleName));
+      skipRows.push(...rowsForVeh);
+    }
+  });
+  skipList.innerHTML = skipRows.length === 0 ? `<div class="empty">Atlanmış (kullanılan no'lar arasında kalıp işlenmemiş) irsaliye no'su bulunamadı.</div>` : skipRows.join('');
+
+  // Eksik no kontrolü — kullanılan en küçük no'dan önce veya en büyük no'dan sonra kalan,
+  // henüz hiç işlenmemiş no'lar (henüz sırası gelmemiş olabilir)
   const gapList = document.getElementById('irsGapList');
   const gapRows = [];
   vehicleGroups.forEach(vg => {
     const segsWithRange = vg.segments.filter(seg => seg.gapInfo.hasRange);
     if (segsWithRange.length === 0) return;
-    gapRows.push(vehHeader(vg.vehicleName));
+    const rowsForVeh = [];
     segsWithRange.forEach(seg => {
-      gapRows.push(segHeader(seg.label));
-      if (seg.gapInfo.missing.length === 0) {
-        gapRows.push(`
-          <div class="rem-row">
-            <div class="rem-left"><div><p class="rem-desc">${seg.gapInfo.min} – ${seg.gapInfo.max} aralığındaki tüm no'lar sefere işlenmiş, eksik yok.</p></div></div>
-          </div>`);
-      } else {
-        gapRows.push(`
-          <div class="rem-row">
-            <div class="rem-left">
-              <div>
-                <p class="rem-desc">${seg.gapInfo.min} – ${seg.gapInfo.max} aralığında <b>${seg.gapInfo.missing.length}</b> no eksik / işlenmemiş
-                  <span class="rem-acc" style="color:#b3261e;">${escapeHtml(formatMissingRanges(seg.gapInfo.missing))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
-                </p>
-              </div>
+      if (seg.gapInfo.notYetUsed.length === 0) return;
+      rowsForVeh.push(segHeader(seg.label));
+      rowsForVeh.push(`
+        <div class="rem-row">
+          <div class="rem-left">
+            <div>
+              <p class="rem-desc">${seg.gapInfo.min} – ${seg.gapInfo.max} aralığında <b>${seg.gapInfo.notYetUsed.length}</b> no eksik / henüz işlenmemiş
+                <span class="rem-acc" style="color:#8a5a00;">${escapeHtml(formatMissingRanges(seg.gapInfo.notYetUsed))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
+              </p>
             </div>
-          </div>`);
-      }
+          </div>
+        </div>`);
     });
+    if (rowsForVeh.length > 0) {
+      gapRows.push(vehHeader(vg.vehicleName));
+      gapRows.push(...rowsForVeh);
+    }
   });
-  gapList.innerHTML = gapRows.length === 0 ? `<div class="empty">Kontrol için, "İrsaliye Takip" ekranından başlangıç ve bitiş no'su girilmiş en az bir koçan kaydı gerekir.</div>` : gapRows.join('');
+  gapList.innerHTML = gapRows.length === 0 ? `<div class="empty">Kontrol için, "İrsaliye Takip" ekranından başlangıç ve bitiş no'su girilmiş en az bir koçan kaydı gerekir, veya eksik no bulunamadı.</div>` : gapRows.join('');
 }
 
 function focusAndSelect(id) {
