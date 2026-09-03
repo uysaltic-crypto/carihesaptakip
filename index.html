@@ -2485,8 +2485,14 @@ function computeIrsKontrol() {
     const capped = (range.end - range.start + 1) > IRS_GAP_MAX_RANGE;
     const limit = capped ? range.start + IRS_GAP_MAX_RANGE - 1 : range.end;
     const used = new Set(inRange.map(x => x.num));
+
+    // Koçanda hiç işlenmiş no yoksa (henüz hiç kullanılmamışsa) bunu "eksik" saymıyoruz —
+    // eksik/atlanan taraması sadece en az bir numarası işlenmiş koçanlarda yapılır.
+    const hasAnyProcessed = used.size > 0;
     const missing = [];
-    for (let n = range.start; n <= limit; n++) if (!used.has(n)) missing.push(n);
+    if (hasAnyProcessed) {
+      for (let n = range.start; n <= limit; n++) if (!used.has(n)) missing.push(n);
+    }
 
     const vehicle = bk.vehicleId ? data.vehicles.find(v => v.id === bk.vehicleId) : null;
     return {
@@ -2494,7 +2500,7 @@ function computeIrsKontrol() {
       vehicleName: vehicle ? vehicle.name : 'Araç atanmamış',
       label: `Koçan: ${irsRangeLabel(bk)}${bk.person ? ' — ' + bk.person : ''} (${fmtDate(bk.date)} teslim)`,
       duplicateGroups,
-      gapInfo: { hasRange: true, min: range.start, max: range.end, missing, capped }
+      gapInfo: { hasRange: hasAnyProcessed, min: range.start, max: range.end, missing, capped }
     };
   });
 
