@@ -223,6 +223,7 @@
     <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
     <button class="navBtn" data-view="irsaliyekontrol">İrsaliye Kontrolü<span class="badge" id="irsKontrolBadge" style="display:none;"></span></button>
     <button class="navBtn" data-view="fiyatkontrol">Fiyat Kontrolü<span class="badge" id="fkBadge" style="display:none;"></span></button>
+    <button class="navBtn" data-view="hareketkontrol">Hareket Kontrolü<span class="badge" id="hkBadge" style="display:none;"></span></button>
   </div>
 
   <div id="alertBanner" style="display:none;"></div>
@@ -469,6 +470,15 @@
       </div>
       <div class="list-wrap" id="fkList" style="padding:0 12px; min-width:max-content;"></div>
     </div>
+  </div>
+
+  <div id="hareketkontrolView" style="display:none;">
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, aynı cari içinde tarih, açıklama, borç ve alacak tutarı birebir aynı olan hareketleri (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. Kasıtlı olarak tekrarlanan (ör. aynı sefer için gerçekten iki kez fatura kesilmiş) hareketler de bu listede görünebilir — silmeden önce kontrol edin.</p>
+    <div class="summary" id="hkSummaryCards"></div>
+    <div class="toolbar">
+      <input id="hkSearch" placeholder="Cari adıyla ara..." style="flex:1;" />
+    </div>
+    <div class="list-wrap" id="hkList"></div>
   </div>
 </div>
 
@@ -1040,6 +1050,7 @@ function load() {
     updateEmptyDataBanner();
     renderIrsaliyeKontrol();
     renderFiyatKontrol();
+    updateHareketKontrolBadge();
   } catch (e) {
     console.error('Ekran render hatası', e);
     alert('Program açılırken beklenmeyen bir hata oluştu, bazı ekranlar boş görünebilir. Bu genelde geçici bir veri sorunudur — lütfen "F12" ile tarayıcı konsolunu açıp buradaki hatayı bana iletin: ' + e.message);
@@ -1056,6 +1067,7 @@ function save() {
   }
   updateEmptyDataBanner();
   updateIrsKontrolBadge();
+  updateHareketKontrolBadge();
   return ok;
 }
 
@@ -1101,6 +1113,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('irsaliyeView').style.display = activeView === 'irsaliye' ? 'block' : 'none';
     document.getElementById('irsaliyeKontrolView').style.display = activeView === 'irsaliyekontrol' ? 'block' : 'none';
     document.getElementById('fiyatkontrolView').style.display = activeView === 'fiyatkontrol' ? 'block' : 'none';
+    document.getElementById('hareketkontrolView').style.display = activeView === 'hareketkontrol' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
     if (activeView === 'yakit') renderFuelLogs();
@@ -1110,6 +1123,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     if (activeView === 'irsaliye') renderIrsaliyeler();
     if (activeView === 'irsaliyekontrol') renderIrsaliyeKontrol();
     if (activeView === 'fiyatkontrol') renderFiyatKontrol();
+    if (activeView === 'hareketkontrol') renderHareketKontrol();
   });
 });
 
@@ -4168,6 +4182,108 @@ function renderFiyatKontrol() {
 
 document.getElementById('fkSearch').addEventListener('input', renderFiyatKontrol);
 document.getElementById('fkOnlyMismatch').addEventListener('change', renderFiyatKontrol);
+
+// ---- Hareket Kontrolü (mükerrer/tekrar eden cari hareketleri) ----
+// Aynı cari içinde tarih + açıklama + borç + alacak tutarı birebir aynı olan hareketleri gruplar.
+function computeHareketKontrol() {
+  const results = [];
+  data.accounts.forEach(acc => {
+    const txs = data.transactions[acc.id] || [];
+    const groups = {};
+    txs.forEach(t => {
+      const debit = Number(t.debit) || 0;
+      const credit = Number(t.credit) || 0;
+      if (debit === 0 && credit === 0) return;
+      const descKey = (t.desc || '').trim().toLocaleLowerCase('tr-TR');
+      const key = [t.date, descKey, debit.toFixed(2), credit.toFixed(2)].join('|');
+      (groups[key] = groups[key] || []).push(t);
+    });
+    const dupGroups = Object.values(groups)
+      .filter(g => g.length > 1)
+      .sort((a, b) => b[0].date.localeCompare(a[0].date));
+    if (dupGroups.length > 0) {
+      results.push({ accountId: acc.id, accountName: acc.name, groups: dupGroups });
+    }
+  });
+  results.sort((a, b) => a.accountName.localeCompare(b.accountName, 'tr'));
+  return results;
+}
+
+function updateHareketKontrolBadge() {
+  const results = computeHareketKontrol();
+  const total = results.reduce((s, r) => s + r.groups.reduce((x, g) => x + (g.length - 1), 0), 0);
+  const badge = document.getElementById('hkBadge');
+  if (badge) {
+    if (total > 0) { badge.style.display = 'flex'; badge.textContent = total; }
+    else badge.style.display = 'none';
+  }
+  return total;
+}
+
+function renderHareketKontrol() {
+  const results = computeHareketKontrol();
+  updateHareketKontrolBadge();
+  const q = (document.getElementById('hkSearch').value || '').toLowerCase().trim();
+  const filtered = q ? results.filter(r => r.accountName.toLowerCase().includes(q)) : results;
+
+  const totalExtra = results.reduce((s, r) => s + r.groups.reduce((x, g) => x + (g.length - 1), 0), 0);
+  const totalGroups = results.reduce((s, r) => s + r.groups.length, 0);
+  document.getElementById('hkSummaryCards').innerHTML = `
+    <div class="card"><p class="label">Şüpheli mükerrer hareket</p><p class="value" style="${totalExtra > 0 ? 'color:#b3261e;' : ''}">${totalExtra}</p></div>
+    <div class="card"><p class="label">Mükerrer grup sayısı</p><p class="value">${totalGroups}</p></div>
+    <div class="card"><p class="label">Etkilenen cari sayısı</p><p class="value">${results.length}</p></div>
+  `;
+
+  const list = document.getElementById('hkList');
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty">${q ? 'Eşleşen cari bulunamadı.' : 'Tekrar eden hareket bulunamadı. 👍'}</div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(r => {
+    const header = `<div class="acc-row hkAccHeader" style="cursor:pointer;" data-goto="${r.accountId}">
+      <div><p class="name">${escapeHtml(r.accountName)}</p><p class="type">${r.groups.length} mükerrer grup</p></div>
+    </div>`;
+    const groupRows = r.groups.map(g => {
+      const t0 = g[0];
+      const amtLabel = t0.debit ? `${fmt(t0.debit)} (Borç)` : `${fmt(t0.credit)} (Alacak)`;
+      const occurrenceBtns = g.map((t, idx) => `<button class="hkDelBtn" data-acc="${r.accountId}" data-tx="${t.id}" style="font-size:11px; padding:3px 8px;">${idx === 0 ? '1.' : (idx + 1) + '.'} kaydı sil</button>`).join('');
+      return `<div class="rem-row">
+        <div class="rem-left">
+          <div>
+            <span class="rem-date">${fmtDate(t0.date)}</span>
+            <p class="rem-desc"><b>${g.length} kez tekrarlanmış</b> — ${escapeHtml(t0.desc || '(açıklama yok)')}
+              <span class="rem-acc">${amtLabel}</span>
+            </p>
+          </div>
+        </div>
+        <div class="rem-actions" style="flex-wrap:wrap; justify-content:flex-end; gap:4px;">${occurrenceBtns}</div>
+      </div>`;
+    }).join('');
+    return header + groupRows;
+  }).join('');
+
+  list.querySelectorAll('.hkAccHeader').forEach(el => {
+    el.addEventListener('click', () => {
+      document.querySelector('.navBtn[data-view="cariler"]').click();
+      openDetail(el.dataset.goto);
+    });
+  });
+  list.querySelectorAll('.hkDelBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showConfirm('Bu hareketi silmek istediğinize emin misiniz?', () => {
+        const accId = btn.dataset.acc;
+        data.transactions[accId] = (data.transactions[accId] || []).filter(t => t.id !== btn.dataset.tx);
+        save();
+        renderHareketKontrol();
+        if (currentAccId === accId) openDetail(accId);
+        renderList();
+      });
+    });
+  });
+}
+
+document.getElementById('hkSearch').addEventListener('input', renderHareketKontrol);
 
 </script>
 </body>
