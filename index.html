@@ -473,10 +473,10 @@
   </div>
 
   <div id="hareketkontrolView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, aynı cari içinde tarih, açıklama, borç ve alacak tutarı birebir aynı olan hareketleri (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. Kasıtlı olarak tekrarlanan (ör. aynı sefer için gerçekten iki kez fatura kesilmiş) hareketler de bu listede görünebilir — silmeden önce kontrol edin.</p>
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir.</p>
     <div class="summary" id="hkSummaryCards"></div>
     <div class="toolbar">
-      <input id="hkSearch" placeholder="Cari adıyla ara..." style="flex:1;" />
+      <input id="hkSearch" placeholder="Cari adı veya irsaliye no ile ara..." style="flex:1;" />
     </div>
     <div class="list-wrap" id="hkList"></div>
   </div>
@@ -4184,18 +4184,17 @@ document.getElementById('fkSearch').addEventListener('input', renderFiyatKontrol
 document.getElementById('fkOnlyMismatch').addEventListener('change', renderFiyatKontrol);
 
 // ---- Hareket Kontrolü (mükerrer/tekrar eden cari hareketleri) ----
-// Aynı cari içinde tarih + açıklama + borç + alacak tutarı birebir aynı olan hareketleri gruplar.
+// Aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları gruplar.
+// İrsaliye no'su olmayan hareketler (irsNo alanı boş olanlar) bu taramaya dahil edilmez.
 function computeHareketKontrol() {
   const results = [];
   data.accounts.forEach(acc => {
     const txs = data.transactions[acc.id] || [];
     const groups = {};
     txs.forEach(t => {
-      const debit = Number(t.debit) || 0;
-      const credit = Number(t.credit) || 0;
-      if (debit === 0 && credit === 0) return;
-      const descKey = (t.desc || '').trim().toLocaleLowerCase('tr-TR');
-      const key = [t.date, descKey, debit.toFixed(2), credit.toFixed(2)].join('|');
+      const no = String(t.irsaliyeNo || '').trim();
+      if (!no) return;
+      const key = irsKeyOf(no);
       (groups[key] = groups[key] || []).push(t);
     });
     const dupGroups = Object.values(groups)
@@ -4224,7 +4223,11 @@ function renderHareketKontrol() {
   const results = computeHareketKontrol();
   updateHareketKontrolBadge();
   const q = (document.getElementById('hkSearch').value || '').toLowerCase().trim();
-  const filtered = q ? results.filter(r => r.accountName.toLowerCase().includes(q)) : results;
+  const filtered = q
+    ? results
+        .map(r => ({ ...r, groups: r.groups.filter(g => r.accountName.toLowerCase().includes(q) || String(g[0].irsaliyeNo || '').toLowerCase().includes(q)) }))
+        .filter(r => r.groups.length > 0)
+    : results;
 
   const totalExtra = results.reduce((s, r) => s + r.groups.reduce((x, g) => x + (g.length - 1), 0), 0);
   const totalGroups = results.reduce((s, r) => s + r.groups.length, 0);
@@ -4236,27 +4239,28 @@ function renderHareketKontrol() {
 
   const list = document.getElementById('hkList');
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty">${q ? 'Eşleşen cari bulunamadı.' : 'Tekrar eden hareket bulunamadı. 👍'}</div>`;
+    list.innerHTML = `<div class="empty">${q ? 'Eşleşen kayıt bulunamadı.' : 'Aynı irsaliye no ile tekrar eden hareket bulunamadı. 👍'}</div>`;
     return;
   }
   list.innerHTML = filtered.map(r => {
     const header = `<div class="acc-row hkAccHeader" style="cursor:pointer;" data-goto="${r.accountId}">
-      <div><p class="name">${escapeHtml(r.accountName)}</p><p class="type">${r.groups.length} mükerrer grup</p></div>
+      <div><p class="name">${escapeHtml(r.accountName)}</p><p class="type">${r.groups.length} mükerrer irsaliye no grubu</p></div>
     </div>`;
     const groupRows = r.groups.map(g => {
-      const t0 = g[0];
-      const amtLabel = t0.debit ? `${fmt(t0.debit)} (Borç)` : `${fmt(t0.credit)} (Alacak)`;
-      const occurrenceBtns = g.map((t, idx) => `<button class="hkDelBtn" data-acc="${r.accountId}" data-tx="${t.id}" style="font-size:11px; padding:3px 8px;">${idx === 0 ? '1.' : (idx + 1) + '.'} kaydı sil</button>`).join('');
-      return `<div class="rem-row">
-        <div class="rem-left">
-          <div>
-            <span class="rem-date">${fmtDate(t0.date)}</span>
-            <p class="rem-desc"><b>${g.length} kez tekrarlanmış</b> — ${escapeHtml(t0.desc || '(açıklama yok)')}
-              <span class="rem-acc">${amtLabel}</span>
-            </p>
+      const occurrences = g.map((t, idx) => {
+        const amtLabel = t.debit ? `${fmt(t.debit)} (Borç)` : `${fmt(t.credit || 0)} (Alacak)`;
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; ${idx > 0 ? 'border-top:1px dashed #eee;' : ''}">
+          <span style="font-size:12.5px; color:#555;">${fmtDate(t.date)} · ${escapeHtml(t.desc || '(açıklama yok)')}${t.vehiclePlate ? ' (' + escapeHtml(t.vehiclePlate) + ')' : ''} · ${amtLabel}</span>
+          <button class="hkDelBtn" data-acc="${r.accountId}" data-tx="${t.id}" style="font-size:11px; padding:3px 8px; flex-shrink:0;">Sil</button>
+        </div>`;
+      }).join('');
+      return `<div class="rem-row" style="align-items:flex-start;">
+        <div class="rem-left" style="width:100%;">
+          <div style="width:100%;">
+            <p class="rem-desc"><b>İrs. No: ${escapeHtml(g[0].irsaliyeNo)}</b> — ${g.length} hareket kaydında kullanılmış</p>
+            <div style="margin-top:4px;">${occurrences}</div>
           </div>
         </div>
-        <div class="rem-actions" style="flex-wrap:wrap; justify-content:flex-end; gap:4px;">${occurrenceBtns}</div>
       </div>`;
     }).join('');
     return header + groupRows;
