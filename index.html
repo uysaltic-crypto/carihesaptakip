@@ -1501,6 +1501,7 @@ function updateTxLayout(isDriver) {
 function openDetail(id) {
   currentAccId = id;
   collapsedMonths = new Set();
+  collapseMonthsOnNextRender = true;
   const acc = data.accounts.find(a => a.id === id);
   document.getElementById('detName').textContent = acc.name;
   document.getElementById('detSub').textContent = (acc.type === 'musteri' ? 'Müşteri' : (acc.type === 'tedarikci' ? 'Tedarikçi' : (acc.type === 'sofor' ? 'Şoför' : 'Ortak'))) + (acc.phone ? ' · ' + acc.phone : '') + (acc.taxNo ? ' · VN: ' + acc.taxNo : '') + (acc.banka ? ' · ' + acc.banka : '') + (acc.iban ? ' · IBAN: ' + acc.iban : '');
@@ -1513,6 +1514,7 @@ function openDetail(id) {
 
 let lastTxDisplayOrder = [];
 let collapsedMonths = new Set();
+let collapseMonthsOnNextRender = false;
 
 function renderTx() {
   const list = data.transactions[currentAccId] || [];
@@ -1558,6 +1560,11 @@ function renderTx() {
       groups.push({ monthKey, items: [t] });
     }
   });
+
+  if (collapseMonthsOnNextRender) {
+    groups.forEach(g => collapsedMonths.add(g.monthKey));
+    collapseMonthsOnNextRender = false;
+  }
 
   const html = groups.map(g => {
     const totalDebit = g.items.reduce((s, t) => s + (Number(t.debit) || 0), 0);
