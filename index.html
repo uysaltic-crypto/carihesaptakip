@@ -2731,12 +2731,36 @@ function focusAndSelect(id) {
   if (el.select) el.select();
 }
 
-document.getElementById('tripDriverInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
+// ---- Arama çubuklarında Enter desteği ----
+// Kullanıcı arama kutusuna yazarken Enter'a bastığında, yazılana en iyi uyan sonucu
+// (tam eşleşme yoksa "ile başlayan", o da yoksa "içeren" ilk sonucu) otomatik olarak kabul eder.
+function matchSearchable(items, val) {
+  const v = (val || '').trim();
+  if (!v) return null;
+  const exact = items.find(it => it.name === v);
+  if (exact) return exact;
+  const lower = v.toLocaleLowerCase('tr-TR');
+  let match = items.find(it => it.name.toLocaleLowerCase('tr-TR').startsWith(lower));
+  if (!match) match = items.find(it => it.name.toLocaleLowerCase('tr-TR').includes(lower));
+  return match || null;
+}
+
+function bindSearchableEnter(inputId, itemsGetter, onAccept) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
     e.preventDefault();
-    focusAndSelect('tripIrsaliyeNo');
-  }
-});
+    const match = matchSearchable(itemsGetter(), el.value);
+    if (match) {
+      el.value = match.name;
+      el.dispatchEvent(new Event('input'));
+    }
+    if (onAccept) onAccept(match);
+  });
+}
+
+bindSearchableEnter('tripDriverInput', () => data.drivers, () => focusAndSelect('tripIrsaliyeNo'));
 
 document.getElementById('tripIrsaliyeNo').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -2752,25 +2776,35 @@ document.getElementById('tripDate').addEventListener('keydown', (e) => {
   }
 });
 
-document.getElementById('tripVehicle').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    focusAndSelect('tripDefInput');
-  }
-});
+bindSearchableEnter('tripVehicle', () => data.vehicles, () => focusAndSelect('tripDefInput'));
 
-document.getElementById('tripDefInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    document.getElementById('tripPrice').focus();
-  }
-});
+bindSearchableEnter('tripDefInput', () => {
+  const vehicle = selectedTripVehicleId ? data.vehicles.find(v => v.id === selectedTripVehicleId) : null;
+  return vehicle ? data.tripDefs.filter(td => td.category === (vehicle.category || 'tir')) : data.tripDefs;
+}, () => document.getElementById('tripPrice').focus());
 
 document.getElementById('tripPrice').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
     document.getElementById('addTripBtn').click();
   }
+});
+
+// Diğer tüm arama çubukları — bu formlarda önceden bir Enter zinciri yoktu, sadece
+// yazılan metni ilk uygun sonuca tamamlar.
+bindSearchableEnter('remAcc', () => data.accounts);
+bindSearchableEnter('remEditAcc', () => data.accounts);
+bindSearchableEnter('fuelLogVeh', () => data.vehicles);
+bindSearchableEnter('fuelLogFilterVeh', () => data.vehicles);
+bindSearchableEnter('fuelLogEditVeh', () => data.vehicles);
+bindSearchableEnter('irsVehicle', () => data.vehicles);
+bindSearchableEnter('irsEditVehicle', () => data.vehicles);
+bindSearchableEnter('tripEditDriver', () => data.drivers);
+bindSearchableEnter('tripEditVehicle', () => data.vehicles);
+bindSearchableEnter('tripEditDefInput', () => {
+  const vehicleId = resolveSearchableId('tripEditVehicle', data.vehicles);
+  const vehicle = vehicleId ? data.vehicles.find(v => v.id === vehicleId) : null;
+  return vehicle ? data.tripDefs.filter(td => td.category === (vehicle.category || 'tir')) : data.tripDefs;
 });
 
 // ---- Şoför Sefer Raporu (Excel) ----
