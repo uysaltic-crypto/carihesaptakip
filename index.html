@@ -383,6 +383,7 @@
     <p id="tripHistoryTitle" style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer geçmişi</p>
     <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
       <select id="tripSort">
+        <option value="added_desc" selected>Eklenme sırası (son eklenen en üstte)</option>
         <option value="date_desc">Tarih (yeni → eski)</option>
         <option value="date_asc">Tarih (eski → yeni)</option>
         <option value="driver_asc">Şoför (A-Z)</option>
@@ -3283,6 +3284,7 @@ function renderTrips() {
   const sortBy = document.getElementById('tripSort').value;
   const driverName = (t) => { const d = data.drivers.find(x => x.id === t.driverId); return d ? d.name : ''; };
   const tripSorters = {
+    added_desc: (a,b) => b.id.localeCompare(a.id),
     date_desc: (a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
     date_asc: (a,b) => a.date.localeCompare(b.date) || b.id.localeCompare(a.id),
     driver_asc: (a,b) => driverName(a).localeCompare(driverName(b), 'tr'),
@@ -3290,7 +3292,7 @@ function renderTrips() {
     price_asc: (a,b) => (a.price||0) - (b.price||0),
     no_asc: (a,b) => (a.irsaliyeNo||'').localeCompare(b.irsaliyeNo||'', 'tr', { numeric: true }),
   };
-  let trips = (activeSeferPageId === '__ALL__' ? data.trips.slice() : data.trips.filter(t => (t.pageId || null) === activeSeferPageId)).sort(tripSorters[sortBy] || tripSorters.date_desc);
+  let trips = (activeSeferPageId === '__ALL__' ? data.trips.slice() : data.trips.filter(t => (t.pageId || null) === activeSeferPageId)).sort(tripSorters[sortBy] || tripSorters.added_desc);
   if (q) trips = trips.filter(t => {
     const drv = data.drivers.find(d => d.id === t.driverId);
     const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
