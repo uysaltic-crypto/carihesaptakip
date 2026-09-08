@@ -1986,9 +1986,16 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
   const titleParts = ["1 km'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)"];
   if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
 
+  // Seçilen araçların kendi ortalamalarının ortalaması — raporun en altına genel ortalama olarak eklenir.
+  const overallAvg = summaryRows.length
+    ? summaryRows.reduce((s, r) => s + (r.avg || 0), 0) / summaryRows.length
+    : null;
+
   const rows = [
     [titleParts.join(' ')],
     ...summaryRows.map(r => [r.name, ...r.values]),
+    [],
+    ['Genel Ortalama (araçların 1 km ortalamalarının ortalaması)', overallAvg !== null ? Number(overallAvg.toFixed(3)) : ''],
   ];
 
   const wb = XLSX.utils.book_new();
