@@ -93,7 +93,7 @@
   .primary-btn { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
   .primary-btn:hover { background: #333; }
 
-  .rem-form { display: grid; grid-template-columns: 120px 1fr 100px 120px 90px 110px 80px; gap: 8px; margin-bottom: 16px; }
+  .rem-form { display: grid; grid-template-columns: 120px 1fr 100px 120px 90px 110px 130px 80px; gap: 8px; margin-bottom: 16px; }
   .rem-row {
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px 14px; border-bottom: 1px solid #eee; background: #fff; gap: 10px;
@@ -306,6 +306,7 @@
         <option value="monthly">Her ay</option>
         <option value="yearly">Her yıl</option>
       </select>
+      <input type="number" id="remRecurCount" placeholder="Tekrar adedi (boş=sınırsız)" min="1" step="1" />
       <button id="addRemBtn" class="primary-btn">+ Ekle</button>
     </div>
     <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:8px;">
@@ -541,6 +542,7 @@
         <option value="monthly">Her ay</option>
         <option value="yearly">Her yıl</option>
       </select>
+      <input type="number" id="remEditRecurCount" placeholder="Tekrar adedi (boş=sınırsız)" min="1" step="1" />
     </div>
     <div class="actions">
       <button id="remEditCancel">Vazgeç</button>
@@ -1223,7 +1225,7 @@ function renderReminders() {
         ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : '🚗'}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
         <div>
           <span class="rem-date" style="${dueSoon ? 'color:#b3261e; font-weight:700;' : ''}">${fmtDate(r.date)}</span>
-          <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#b3261e;' : ''}">${escapeHtml(r.desc)}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#b3261e;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
+          <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#b3261e;' : ''}">${escapeHtml(r.desc)}${(r.recurrence && r.recurrence !== 'none' && r.recurCount !== null && r.recurCount !== undefined) ? ` <span style="font-weight:400; color:#999; font-size:11.5px;">(kalan tekrar: ${r.recurCount})</span>` : ''}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#b3261e;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
         </div>
       </div>
       <div class="rem-actions">
@@ -1247,8 +1249,11 @@ function nextRecurDate(dateStr, recurrence) {
       r.done = chk.checked;
       if (r.done && r.recurrence && r.recurrence !== 'none') {
         const nextDate = nextRecurDate(r.date, r.recurrence);
-        if (nextDate) {
-          const nextRem = { id: 'rem_' + Date.now(), date: nextDate, desc: r.desc, amount: r.amount, accountId: r.accountId, type: r.type, recurrence: r.recurrence, done: false, linkedTxId: null };
+        const hasLimit = r.recurCount !== null && r.recurCount !== undefined;
+        const remainingAfterThis = hasLimit ? r.recurCount - 1 : null;
+        const shouldCreateNext = nextDate && (!hasLimit || remainingAfterThis > 0);
+        if (shouldCreateNext) {
+          const nextRem = { id: 'rem_' + Date.now(), date: nextDate, desc: r.desc, amount: r.amount, accountId: r.accountId, type: r.type, recurrence: r.recurrence, recurCount: hasLimit ? remainingAfterThis : null, done: false, linkedTxId: null };
           upsertReminderTx(nextRem);
           data.reminders.push(nextRem);
         }
@@ -1298,6 +1303,7 @@ function openRemEdit(id) {
   setSearchableValue('remEditAcc', data.accounts, r.accountId);
   document.getElementById('remEditType').value = r.type || 'borc';
   document.getElementById('remEditRecur').value = r.recurrence || 'none';
+  document.getElementById('remEditRecurCount').value = (r.recurCount === null || r.recurCount === undefined) ? '' : r.recurCount;
   document.getElementById('remModalOverlay').style.display = 'flex';
 }
 
@@ -1312,9 +1318,11 @@ document.getElementById('remEditSave').addEventListener('click', () => {
   const accountId = resolveSearchableId('remEditAcc', data.accounts);
   const type = document.getElementById('remEditType').value;
   const recurrence = document.getElementById('remEditRecur').value;
+  const recurCountVal = document.getElementById('remEditRecurCount').value;
+  const recurCount = recurCountVal === '' ? null : Math.max(1, parseInt(recurCountVal, 10) || 1);
   if (!date || !desc) return;
   const r = data.reminders.find(x => x.id === editingRemId);
-  r.date = date; r.desc = desc; r.amount = amount; r.accountId = accountId; r.type = type; r.recurrence = recurrence;
+  r.date = date; r.desc = desc; r.amount = amount; r.accountId = accountId; r.type = type; r.recurrence = recurrence; r.recurCount = recurCount;
   upsertReminderTx(r);
   save();
   document.getElementById('remModalOverlay').style.display = 'none';
@@ -1352,13 +1360,16 @@ document.getElementById('addRemBtn').addEventListener('click', () => {
   const accountId = resolveSearchableId('remAcc', data.accounts);
   const type = document.getElementById('remType').value;
   const recurrence = document.getElementById('remRecur').value;
+  const recurCountVal = document.getElementById('remRecurCount').value;
+  const recurCount = recurCountVal === '' ? null : Math.max(1, parseInt(recurCountVal, 10) || 1);
   if (!date || !desc) return;
-  const rem = { id: 'rem_' + Date.now(), date, desc, amount, accountId, type, recurrence, done: false, linkedTxId: null };
+  const rem = { id: 'rem_' + Date.now(), date, desc, amount, accountId, type, recurrence, recurCount, done: false, linkedTxId: null };
   upsertReminderTx(rem);
   data.reminders.push(rem);
   save();
   document.getElementById('remDesc').value = '';
   document.getElementById('remAmount').value = '';
+  document.getElementById('remRecurCount').value = '';
   renderReminders();
   renderList();
 });
