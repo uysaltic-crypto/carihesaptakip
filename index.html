@@ -1986,15 +1986,22 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
   const titleParts = ["1 km'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)"];
   if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
 
+  // Tüm araçların "Alış Adedi" sütunu aynı hizada bitsin diye, en uzun değer listesine göre
+  // her satır boş hücrelerle doldurulup en sona alış adedi eklenir.
+  const maxValuesLen = summaryRows.reduce((m, r) => Math.max(m, r.values.length), 0);
+
   const rows = [
     [titleParts.join(' ')],
-    ['', 'Ortalama'],
-    ...summaryRows.map(r => [r.name, r.avg !== null ? Number(r.avg.toFixed(3)) : '', ...r.values]),
+    ['', 'Ortalama', ...Array(maxValuesLen).fill(''), 'Alış Adedi'],
+    ...summaryRows.map(r => {
+      const padding = Array(maxValuesLen - r.values.length).fill('');
+      return [r.name, r.avg !== null ? Number(r.avg.toFixed(3)) : '', ...r.values, ...padding, r.values.length];
+    }),
   ];
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  const maxCols = summaryRows.reduce((m, r) => Math.max(m, r.values.length + 2), 2);
+  const maxCols = maxValuesLen + 3;
   ws['!cols'] = Array.from({ length: maxCols }, () => ({ wch: 12 }));
   XLSX.utils.book_append_sheet(wb, ws, 'Yakıt Karşılaştırma');
   XLSX.writeFile(wb, 'yakit-karsilastirma-' + todayStr() + '.xlsx');
