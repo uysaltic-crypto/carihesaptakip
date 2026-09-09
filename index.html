@@ -224,6 +224,7 @@
     <button class="navBtn" data-view="irsaliyekontrol">İrsaliye Kontrolü<span class="badge" id="irsKontrolBadge" style="display:none;"></span></button>
     <button class="navBtn" data-view="fiyatkontrol">Fiyat Kontrolü<span class="badge" id="fkBadge" style="display:none;"></span></button>
     <button class="navBtn" data-view="hareketkontrol">Hareket Kontrolü<span class="badge" id="hkBadge" style="display:none;"></span></button>
+    <button class="navBtn" data-view="vergitakibi">Vergi Takibi (KDV)</button>
   </div>
 
   <div id="alertBanner" style="display:none;"></div>
@@ -482,6 +483,33 @@
     </div>
     <div class="list-wrap" id="hkList"></div>
   </div>
+
+  <div id="vergitakibiView" style="display:none;">
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Tutarları <b>KDV hariç (matrah)</b> olarak girin; KDV tutarı ve KDV dahil toplam otomatik hesaplanır. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
+    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 1fr 150px 90px 90px 80px;">
+      <input type="date" id="taxDate" />
+      <select id="taxType">
+        <option value="satis">Satış Faturası</option>
+        <option value="alis">Alış Faturası</option>
+        <option value="masraf">Masraf</option>
+      </select>
+      <input type="text" id="taxDesc" placeholder="Açıklama (ör. Yemek masrafı, A Ticaret satış faturası)" />
+      <input type="number" id="taxAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
+      <select id="taxRate">
+        <option value="20">%20</option>
+        <option value="10">%10</option>
+        <option value="1">%1</option>
+        <option value="0">%0</option>
+        <option value="custom">Diğer...</option>
+      </select>
+      <input type="number" id="taxRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
+      <button id="addTaxEntryBtn" class="primary-btn">+ Ekle</button>
+    </div>
+    <div class="toolbar" style="justify-content:flex-end;">
+      <button id="taxExcelBtn">📊 Excel raporu al</button>
+    </div>
+    <div class="list-wrap" id="taxList"></div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="irsEditModalOverlay">
@@ -644,6 +672,34 @@
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
       <button id="txEditSave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taxEditModalOverlay">
+  <div class="modal-box">
+    <h3>KDV kaydını düzenle</h3>
+    <div class="field-group">
+      <input type="date" id="taxEditDate" />
+      <select id="taxEditType">
+        <option value="satis">Satış Faturası</option>
+        <option value="alis">Alış Faturası</option>
+        <option value="masraf">Masraf</option>
+      </select>
+      <input type="text" id="taxEditDesc" placeholder="Açıklama" />
+      <input type="number" id="taxEditAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
+      <select id="taxEditRate">
+        <option value="20">%20</option>
+        <option value="10">%10</option>
+        <option value="1">%1</option>
+        <option value="0">%0</option>
+        <option value="custom">Diğer...</option>
+      </select>
+      <input type="number" id="taxEditRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
+    </div>
+    <div class="actions">
+      <button id="taxEditCancel">Vazgeç</button>
+      <button id="taxEditSave" class="primary-btn">Kaydet</button>
     </div>
   </div>
 </div>
@@ -873,7 +929,7 @@
 
 <script>
 const STORAGE_KEY = 'cari-hesap-data-v1';
-let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' };
+let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] };
 let activeFkCategory = 'hepsi';
 const FK_CATEGORIES = [
   { key: 'hepsi', label: 'Tümü' },
@@ -1043,7 +1099,7 @@ function updateEmptyDataBanner() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, JSON.parse(raw));
+    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
   const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase];
   migrations.forEach(fn => {
@@ -1123,6 +1179,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('irsaliyeKontrolView').style.display = activeView === 'irsaliyekontrol' ? 'block' : 'none';
     document.getElementById('fiyatkontrolView').style.display = activeView === 'fiyatkontrol' ? 'block' : 'none';
     document.getElementById('hareketkontrolView').style.display = activeView === 'hareketkontrol' ? 'block' : 'none';
+    document.getElementById('vergitakibiView').style.display = activeView === 'vergitakibi' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
     if (activeView === 'yakit') renderFuelLogs();
@@ -1133,6 +1190,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     if (activeView === 'irsaliyekontrol') renderIrsaliyeKontrol();
     if (activeView === 'fiyatkontrol') renderFiyatKontrol();
     if (activeView === 'hareketkontrol') renderHareketKontrol();
+    if (activeView === 'vergitakibi') renderVergiTakibi();
   });
 });
 
@@ -1899,7 +1957,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
   reader.onload = () => {
     try {
       const imported = JSON.parse(reader.result);
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
       save();
       updateTabStyles();
       renderList();
@@ -2312,7 +2370,7 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const imported = await res.json();
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel' }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
       save();
       updateTabStyles();
       renderList();
@@ -4400,6 +4458,230 @@ function renderHareketKontrol() {
 }
 
 document.getElementById('hkSearch').addEventListener('input', renderHareketKontrol);
+
+// ---- Vergi Takibi (KDV) ----
+const TAX_TYPE_LABELS = { satis: 'Satış Faturası', alis: 'Alış Faturası', masraf: 'Masraf' };
+let editingTaxEntryId = null;
+let collapsedTaxMonths = new Set();
+
+function getTaxRateValue(selectId, customId) {
+  const sel = document.getElementById(selectId).value;
+  if (sel === 'custom') return parseFloat(document.getElementById(customId).value) || 0;
+  return parseFloat(sel);
+}
+
+function setTaxRateValue(selectId, customId, rate) {
+  const presets = ['20', '10', '1', '0'];
+  const rateStr = String(rate);
+  const sel = document.getElementById(selectId);
+  const customInput = document.getElementById(customId);
+  if (presets.includes(rateStr)) {
+    sel.value = rateStr;
+    customInput.style.display = 'none';
+    customInput.value = '';
+  } else {
+    sel.value = 'custom';
+    customInput.style.display = '';
+    customInput.value = rate;
+  }
+}
+
+document.getElementById('taxRate').addEventListener('change', () => {
+  document.getElementById('taxRateCustom').style.display = document.getElementById('taxRate').value === 'custom' ? '' : 'none';
+});
+document.getElementById('taxEditRate').addEventListener('change', () => {
+  document.getElementById('taxEditRateCustom').style.display = document.getElementById('taxEditRate').value === 'custom' ? '' : 'none';
+});
+
+// Her ay için: satış/alış/masraf toplamları (KDV hariç), hesaplanan KDV (satış), indirilecek KDV
+// (alış+masraf), KDV farkı (+ödenecek / -devreden), kâr-zarar (vergiye tabi matrah adayı) ve
+// KDV oranına göre dağılım hesaplanır.
+function computeTaxMonthlyGroups() {
+  const entries = (data.taxEntries || []).slice();
+  const groups = [];
+  entries.forEach(e => {
+    const monthKey = e.date.slice(0, 7);
+    let g = groups.find(x => x.monthKey === monthKey);
+    if (!g) { g = { monthKey, items: [] }; groups.push(g); }
+    g.items.push(e);
+  });
+  groups.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  groups.forEach(g => {
+    g.items.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    let totalSatis = 0, totalAlis = 0, totalMasraf = 0, kdvSatis = 0, kdvIndirilecek = 0;
+    const rateBreakdown = {};
+    g.items.forEach(e => {
+      const vatAmount = e.amount * (e.vatRate / 100);
+      if (e.type === 'satis') { totalSatis += e.amount; kdvSatis += vatAmount; }
+      else if (e.type === 'alis') { totalAlis += e.amount; kdvIndirilecek += vatAmount; }
+      else { totalMasraf += e.amount; kdvIndirilecek += vatAmount; }
+      const rk = String(e.vatRate);
+      if (!rateBreakdown[rk]) rateBreakdown[rk] = { satis: 0, alis: 0, masraf: 0, satisKdv: 0, alisKdv: 0, masrafKdv: 0 };
+      rateBreakdown[rk][e.type] += e.amount;
+      rateBreakdown[rk][e.type + 'Kdv'] += vatAmount;
+    });
+    g.totalSatis = totalSatis;
+    g.totalAlis = totalAlis;
+    g.totalMasraf = totalMasraf;
+    g.kdvSatis = kdvSatis;
+    g.kdvIndirilecek = kdvIndirilecek;
+    g.kdvFark = kdvSatis - kdvIndirilecek;
+    g.karZarar = totalSatis - totalAlis - totalMasraf;
+    g.rateBreakdown = rateBreakdown;
+  });
+  return groups;
+}
+
+function renderVergiTakibi() {
+  const groups = computeTaxMonthlyGroups();
+  const list = document.getElementById('taxList');
+  if (groups.length === 0) {
+    list.innerHTML = `<div class="empty">Henüz kayıt yok. Yukarıdaki formdan alış/satış faturası veya masraf ekleyin.</div>`;
+    return;
+  }
+  list.innerHTML = groups.map(g => {
+    const isCollapsed = collapsedTaxMonths.has(g.monthKey);
+    const farkLabel = g.kdvFark > 0.005 ? 'Ödenecek KDV' : (g.kdvFark < -0.005 ? 'Devreden KDV' : 'KDV Farkı');
+    const farkColor = g.kdvFark > 0.005 ? '#b3261e' : (g.kdvFark < -0.005 ? '#1a7d3a' : '#555');
+    const karColor = g.karZarar >= 0 ? '#1a7d3a' : '#b3261e';
+    const header = `<div class="taxMonthHeader" data-taxmonth="${g.monthKey}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fafafa; border-bottom:1px solid #eee; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
+      <span style="font-weight:600; font-size:13px;">${isCollapsed ? '▸' : '▾'} ${monthLabelOf(g.monthKey)} <span style="font-weight:400; color:#999; font-size:11.5px;">(${g.items.length} kayıt)</span></span>
+      <span style="display:flex; gap:12px; font-size:12px; font-weight:600; flex-wrap:wrap;">
+        <span>Satış: ${fmt(g.totalSatis)}</span>
+        <span>Alış: ${fmt(g.totalAlis)}</span>
+        <span>Masraf: ${fmt(g.totalMasraf)}</span>
+        <span style="color:${farkColor};">${farkLabel}: ${fmt(Math.abs(g.kdvFark))}</span>
+        <span style="color:${karColor};">Kâr/Zarar: ${fmt(g.karZarar)}</span>
+      </span>
+    </div>`;
+    if (isCollapsed) return header;
+
+    const rateRows = Object.keys(g.rateBreakdown).sort((a, b) => Number(b) - Number(a)).map(rk => {
+      const rb = g.rateBreakdown[rk];
+      return `<div style="display:grid; grid-template-columns: 60px 1fr 1fr 1fr; gap:8px; padding:5px 14px; font-size:12px; border-bottom:1px dashed #eee;">
+        <span style="font-weight:600;">%${rk}</span>
+        <span>Satış: ${fmt(rb.satis)} <span style="color:#999;">(KDV ${fmt(rb.satisKdv)})</span></span>
+        <span>Alış: ${fmt(rb.alis)} <span style="color:#999;">(KDV ${fmt(rb.alisKdv)})</span></span>
+        <span>Masraf: ${fmt(rb.masraf)} <span style="color:#999;">(KDV ${fmt(rb.masrafKdv)})</span></span>
+      </div>`;
+    }).join('');
+    const rateSection = rateRows ? `<div style="background:#fcfcfc;"><div style="padding:6px 14px; font-size:11px; color:#777; font-weight:600;">KDV oranına göre dağılım</div>${rateRows}</div>` : '';
+
+    const entryRows = g.items.map(e => {
+      const vatAmount = e.amount * (e.vatRate / 100);
+      const total = e.amount + vatAmount;
+      const typeColor = e.type === 'satis' ? '#1a7d3a' : (e.type === 'alis' ? '#b3261e' : '#8a5a00');
+      return `<div class="rem-row">
+        <div class="rem-left">
+          <div>
+            <span class="rem-date">${fmtDate(e.date)}</span>
+            <p class="rem-desc"><span style="color:${typeColor}; font-weight:600;">${TAX_TYPE_LABELS[e.type]}</span> — ${escapeHtml(e.desc || '')}
+              <span class="rem-acc">Matrah: ${fmt(e.amount)} · %${e.vatRate} KDV: ${fmt(vatAmount)} · Toplam: ${fmt(total)}</span>
+            </p>
+          </div>
+        </div>
+        <div class="rem-actions">
+          <button class="editTaxEntryBtn" data-id="${e.id}">Düzenle</button>
+          <button class="delTaxEntryBtn" data-id="${e.id}">Sil</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return header + rateSection + entryRows;
+  }).join('');
+
+  list.querySelectorAll('.taxMonthHeader').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.taxmonth;
+      if (collapsedTaxMonths.has(key)) collapsedTaxMonths.delete(key);
+      else collapsedTaxMonths.add(key);
+      renderVergiTakibi();
+    });
+  });
+  list.querySelectorAll('.editTaxEntryBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openTaxEntryEdit(btn.dataset.id); });
+  });
+  list.querySelectorAll('.delTaxEntryBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showConfirm('Bu kaydı silmek istediğinize emin misiniz?', () => {
+        data.taxEntries = data.taxEntries.filter(x => x.id !== btn.dataset.id);
+        save();
+        renderVergiTakibi();
+      });
+    });
+  });
+}
+
+document.getElementById('addTaxEntryBtn').addEventListener('click', () => {
+  const date = document.getElementById('taxDate').value;
+  const type = document.getElementById('taxType').value;
+  const desc = document.getElementById('taxDesc').value.trim();
+  const amount = parseFloat(document.getElementById('taxAmount').value) || 0;
+  const vatRate = getTaxRateValue('taxRate', 'taxRateCustom');
+  if (!date || !amount) return;
+  data.taxEntries.push({ id: 'taxe_' + Date.now(), date, type, desc, amount, vatRate });
+  save();
+  document.getElementById('taxDesc').value = '';
+  document.getElementById('taxAmount').value = '';
+  renderVergiTakibi();
+});
+
+function openTaxEntryEdit(id) {
+  editingTaxEntryId = id;
+  const e = data.taxEntries.find(x => x.id === id);
+  document.getElementById('taxEditDate').value = e.date;
+  document.getElementById('taxEditType').value = e.type;
+  document.getElementById('taxEditDesc').value = e.desc || '';
+  document.getElementById('taxEditAmount').value = e.amount;
+  setTaxRateValue('taxEditRate', 'taxEditRateCustom', e.vatRate);
+  document.getElementById('taxEditModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('taxEditCancel').addEventListener('click', () => {
+  document.getElementById('taxEditModalOverlay').style.display = 'none';
+});
+
+document.getElementById('taxEditSave').addEventListener('click', () => {
+  const date = document.getElementById('taxEditDate').value;
+  const type = document.getElementById('taxEditType').value;
+  const desc = document.getElementById('taxEditDesc').value.trim();
+  const amount = parseFloat(document.getElementById('taxEditAmount').value) || 0;
+  const vatRate = getTaxRateValue('taxEditRate', 'taxEditRateCustom');
+  if (!date || !amount) return;
+  const e = data.taxEntries.find(x => x.id === editingTaxEntryId);
+  e.date = date; e.type = type; e.desc = desc; e.amount = amount; e.vatRate = vatRate;
+  save();
+  document.getElementById('taxEditModalOverlay').style.display = 'none';
+  renderVergiTakibi();
+});
+
+document.getElementById('taxExcelBtn').addEventListener('click', () => {
+  const groups = computeTaxMonthlyGroups();
+  if (groups.length === 0) { alert('Excel raporu için henüz kayıt yok.'); return; }
+
+  const detailRows = [['Ay', 'Tarih', 'Tür', 'Açıklama', 'Tutar (KDV Hariç)', 'KDV Oranı (%)', 'KDV Tutarı', 'Toplam (KDV Dahil)']];
+  groups.slice().sort((a, b) => a.monthKey.localeCompare(b.monthKey)).forEach(g => {
+    g.items.slice().sort((a, b) => a.date.localeCompare(b.date)).forEach(e => {
+      const vatAmount = e.amount * (e.vatRate / 100);
+      detailRows.push([monthLabelOf(g.monthKey), fmtDate(e.date), TAX_TYPE_LABELS[e.type], e.desc || '', e.amount, e.vatRate, Number(vatAmount.toFixed(2)), Number((e.amount + vatAmount).toFixed(2))]);
+    });
+  });
+
+  const summaryRows = [[], ['Ay Bazında Özet'], ['Ay', 'Toplam Satış', 'Toplam Alış', 'Toplam Masraf', 'Hesaplanan KDV (Satış)', 'İndirilecek KDV (Alış+Masraf)', 'Ödenecek(+)/Devreden(-) KDV', 'Kâr/Zarar (Vergi Matrahı)']];
+  groups.slice().sort((a, b) => a.monthKey.localeCompare(b.monthKey)).forEach(g => {
+    summaryRows.push([monthLabelOf(g.monthKey), Number(g.totalSatis.toFixed(2)), Number(g.totalAlis.toFixed(2)), Number(g.totalMasraf.toFixed(2)), Number(g.kdvSatis.toFixed(2)), Number(g.kdvIndirilecek.toFixed(2)), Number(g.kdvFark.toFixed(2)), Number(g.karZarar.toFixed(2))]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsDetail = XLSX.utils.aoa_to_sheet(detailRows);
+  wsDetail['!cols'] = [{ wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsDetail, 'Kayıt Detayı');
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Aylık Özet');
+  XLSX.writeFile(wb, 'kdv-takip-' + todayStr() + '.xlsx');
+});
 
 </script>
 </body>
