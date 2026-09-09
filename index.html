@@ -1698,10 +1698,9 @@ let lastTxDisplayOrder = [];
 let collapsedMonths = new Set();
 let collapseMonthsOnNextRender = false;
 
-function renderTx() {
-  const list = data.transactions[currentAccId] || [];
-  // Sırası olmayan hareketlere (yalnızca onlara) sıra numarası ata; mevcut sıraları BOZMADAN,
-  // en sona (en yeni) eklenmiş gibi yerleştir.
+// Sırası olmayan hareketlere (yalnızca onlara) sıra numarası ata; mevcut sıraları BOZMADAN,
+// en sona (en yeni) eklenmiş gibi yerleştir. Var olan hareketler için idempotenttir.
+function ensureTxOrders(list) {
   const missing = list.filter(t => t.order === undefined || t.order === null);
   if (missing.length > 0) {
     const haveOrder = list.filter(t => t.order !== undefined && t.order !== null);
@@ -1710,8 +1709,35 @@ function renderTx() {
       .slice()
       .sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
       .forEach(t => { maxOrder += 1; t.order = maxOrder; });
-    save();
   }
+}
+
+// Yeni eklenen ya da tarihi değiştirilen bir harekete, listeyi bozmadan tarihine göre doğru
+// sırayı (order değerini) hesaplar — böylece geçmiş bir tarihle sonradan girilen bir hareket,
+// ay gruplamasını bozup listenin en üstüne fırlamaz. excludeId, düzenlenen hareketin kendisini
+// hesaplamanın dışında tutmak için kullanılır.
+function nextOrderForDate(list, date, excludeId) {
+  let loOrder = null, hiOrder = null;
+  list.forEach(t => {
+    if (excludeId && t.id === excludeId) return;
+    if (t.order === undefined || t.order === null) return;
+    if (t.date <= date) {
+      if (loOrder === null || t.order > loOrder) loOrder = t.order;
+    } else {
+      if (hiOrder === null || t.order < hiOrder) hiOrder = t.order;
+    }
+  });
+  if (loOrder === null && hiOrder === null) return 0;
+  if (hiOrder === null) return loOrder + 1;
+  if (loOrder === null) return hiOrder - 1;
+  return (loOrder + hiOrder) / 2;
+}
+
+function renderTx() {
+  const list = data.transactions[currentAccId] || [];
+  const hadMissing = list.some(t => t.order === undefined || t.order === null);
+  ensureTxOrders(list);
+  if (hadMissing) save();
   // Bakiye, eskiden yeniye (order küçükten büyüğe) hesaplanır
   const chronological = list.slice().sort((a,b) => a.order - b.order);
   let running = 0;
@@ -1924,7 +1950,13 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   const color = document.getElementById('txEditColor').value;
   if (!date) return;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === editingTxId);
+  const dateChanged = t.date !== date;
   t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate; t.color = (color === '#1a1a1a') ? null : color;
+  if (dateChanged) {
+    const list = data.transactions[currentAccId] || [];
+    ensureTxOrders(list);
+    t.order = nextOrderForDate(list, date, t.id);
+  }
   if (currentAccIsDriver) {
     t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
     t.vehiclePlate = document.getElementById('txEditPlaka').value.trim();
@@ -2051,7 +2083,10 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const kdvRate = getTaxRateValue('txKdvRate', 'txKdvRateCustom');
   if (!date || (!debit && !credit)) return;
   if (!data.transactions[currentAccId]) data.transactions[currentAccId] = [];
-  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, debit, credit, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null };
+  const list = data.transactions[currentAccId];
+  ensureTxOrders(list);
+  const order = nextOrderForDate(list, date);
+  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, debit, credit, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null, order };
   data.transactions[currentAccId].push(tx);
   upsertTxDueReminder(tx, currentAccId);
   const acc = data.accounts.find(a => a.id === currentAccId);
