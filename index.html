@@ -1713,6 +1713,18 @@ function openDetail(id) {
   renderTx();
 }
 
+// Bir hareket eklendikten/düzenlendikten/silindikten sonra detay panelini yeniler, ancak
+// (openDetail'in aksine) ay gizleme durumunu (collapsedMonths) sıfırlamaz — böylece bir fatura
+// üzerinde işlem yapmak için açtığınız ay, art arda başka düzeltmeler yaparken tekrar gizlenmez.
+function refreshTxDetail(id) {
+  currentAccId = id;
+  const acc = data.accounts.find(a => a.id === id);
+  document.getElementById('detName').textContent = acc.name;
+  document.getElementById('detSub').textContent = (acc.type === 'musteri' ? 'Müşteri' : (acc.type === 'tedarikci' ? 'Tedarikçi' : (acc.type === 'sofor' ? 'Şoför' : 'Ortak'))) + (acc.phone ? ' · ' + acc.phone : '') + (acc.taxNo ? ' · VN: ' + acc.taxNo : '') + (acc.banka ? ' · ' + acc.banka : '') + (acc.iban ? ' · IBAN: ' + acc.iban : '');
+  document.getElementById('detBalance').textContent = fmt(balanceOf(id));
+  renderTx();
+}
+
 let lastTxDisplayOrder = [];
 let collapsedMonths = new Set();
 let collapseMonthsOnNextRender = false;
@@ -1880,7 +1892,7 @@ document.getElementById('txList').addEventListener('click', (e) => {
       if (t && t.taxEntryId) data.taxEntries = data.taxEntries.filter(e => e.id !== t.taxEntryId);
       data.transactions[currentAccId] = data.transactions[currentAccId].filter(t => t.id !== delBtn.dataset.id);
       save();
-      openDetail(currentAccId);
+      refreshTxDetail(currentAccId);
     });
     return;
   }
@@ -1989,7 +2001,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   upsertTaxEntryFromTx(t, acc);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
-  openDetail(currentAccId);
+  refreshTxDetail(currentAccId);
   renderReminders();
 });
 
@@ -2122,7 +2134,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txKdvRate').style.display = 'none';
   document.getElementById('txKdvRateCustom').value = '';
   document.getElementById('txKdvRateCustom').style.display = 'none';
-  openDetail(currentAccId);
+  refreshTxDetail(currentAccId);
   renderReminders();
 });
 
