@@ -279,6 +279,19 @@
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
         <button id="addTxBtn" class="primary-btn">+</button>
       </div>
+      <div id="txKdvRow" style="display:none; align-items:center; gap:10px; margin:-8px 0 14px; font-size:13px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="txKdvTransfer" />
+          Bu tutarı (KDV dahil) Vergi Takibi'ne <b id="txKdvTypeLabel">satış</b> faturası olarak aktar
+        </label>
+        <select id="txKdvRate" style="display:none;">
+          <option value="20">%20</option>
+          <option value="10">%10</option>
+          <option value="1">%1</option>
+          <option value="0">%0</option>
+        </select>
+        <span id="txKdvHint" style="color:#999; font-size:11.5px;"></span>
+      </div>
       <div id="txTableScroll" style="overflow-x:auto;">
         <div id="txListHeader" style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#999; font-weight:600; min-width:max-content;">
           <span>Tarih</span><span>Açıklama</span><span style="text-align:right;">Borç</span><span style="text-align:right;">Alacak</span><span style="text-align:right;">Bakiye</span><span></span><span></span>
@@ -485,7 +498,7 @@
   </div>
 
   <div id="vergitakibiView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Tutarları <b>KDV hariç (matrah)</b> olarak girin; KDV tutarı ve KDV dahil toplam otomatik hesaplanır. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
+    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
     <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 1fr 150px 90px 90px 80px;">
       <input type="date" id="taxDate" />
       <select id="taxType">
@@ -662,6 +675,18 @@
       <input type="text" id="txEditPlaka" placeholder="Plaka" style="display:none;" />
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
+      <div id="txEditKdvRow" style="display:none; flex-direction:column; gap:6px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
+          <input type="checkbox" id="txEditKdvTransfer" />
+          Bu tutarı (KDV dahil) Vergi Takibi'ne <b id="txEditKdvTypeLabel">satış</b> faturası olarak aktar
+        </label>
+        <select id="txEditKdvRate" style="display:none;">
+          <option value="20">%20</option>
+          <option value="10">%10</option>
+          <option value="1">%1</option>
+          <option value="0">%0</option>
+        </select>
+      </div>
       <label style="font-size:12px; color:#777;">Son ödeme günü (opsiyonel)</label>
       <input type="date" id="txEditDueDate" />
       <label style="font-size:12px; color:#777;">Yazı rengi</label>
@@ -1568,6 +1593,67 @@ function updateTxLayout(isDriver) {
   renderTxHeader();
 }
 
+let currentAccType = null;
+
+// Sadece müşteri (borç girilirse) ve tedarikçi (alacak girilirse) carilerinde, hareket eklerken
+// bu tutarı KDV dahil toplam kabul edip Vergi Takibi ekranına otomatik fatura olarak aktarma
+// seçeneği gösterilir.
+function updateTxKdvRow(accType) {
+  currentAccType = accType;
+  const row = document.getElementById('txKdvRow');
+  const showFor = accType === 'musteri' || accType === 'tedarikci';
+  row.style.display = showFor ? 'flex' : 'none';
+  if (!showFor) {
+    document.getElementById('txKdvTransfer').checked = false;
+    document.getElementById('txKdvRate').style.display = 'none';
+    return;
+  }
+  document.getElementById('txKdvTypeLabel').textContent = accType === 'musteri' ? 'satış' : 'alış';
+  document.getElementById('txKdvHint').textContent = accType === 'musteri'
+    ? '(sadece "Borç" alanına girilen tutar için satış faturası oluşturur)'
+    : '(sadece "Alacak" alanına girilen tutar için alış faturası oluşturur)';
+}
+
+document.getElementById('txKdvTransfer').addEventListener('change', () => {
+  document.getElementById('txKdvRate').style.display = document.getElementById('txKdvTransfer').checked ? '' : 'none';
+});
+document.getElementById('txEditKdvTransfer').addEventListener('change', () => {
+  document.getElementById('txEditKdvRate').style.display = document.getElementById('txEditKdvTransfer').checked ? '' : 'none';
+});
+
+// Cari hareketinden (fatura) türetilen vergi kaydını oluşturur/günceller/kaldırır.
+// tx = kaynak hareket, acc = hareketin bağlı olduğu cari. tx.taxEntryId ile bağlantı korunur.
+function upsertTaxEntryFromTx(tx, acc) {
+  const shouldHaveEntry = tx.kdvTransfer && acc && (
+    (acc.type === 'musteri' && Number(tx.debit) > 0) ||
+    (acc.type === 'tedarikci' && Number(tx.credit) > 0)
+  );
+  if (!shouldHaveEntry) {
+    if (tx.taxEntryId) {
+      data.taxEntries = data.taxEntries.filter(e => e.id !== tx.taxEntryId);
+      tx.taxEntryId = null;
+    }
+    return;
+  }
+  const totalIncl = acc.type === 'musteri' ? Number(tx.debit) : Number(tx.credit);
+  const rate = Number(tx.kdvRate) || 0;
+  const amountExcl = rate > 0 ? totalIncl / (1 + rate / 100) : totalIncl;
+  const type = acc.type === 'musteri' ? 'satis' : 'alis';
+  let entry = tx.taxEntryId ? data.taxEntries.find(e => e.id === tx.taxEntryId) : null;
+  if (!entry) {
+    entry = { id: 'taxe_' + Date.now() };
+    data.taxEntries.push(entry);
+    tx.taxEntryId = entry.id;
+  }
+  entry.date = tx.date;
+  entry.type = type;
+  entry.desc = (acc.name ? acc.name + (tx.desc ? ' — ' + tx.desc : '') : (tx.desc || ''));
+  entry.amount = Number(amountExcl.toFixed(2));
+  entry.vatRate = rate;
+  entry.fromTxId = tx.id;
+  entry.fromAccountId = acc.id;
+}
+
 function openDetail(id) {
   currentAccId = id;
   collapsedMonths = new Set();
@@ -1579,6 +1665,9 @@ function openDetail(id) {
   document.getElementById('listView').style.display = 'none';
   document.getElementById('detailView').style.display = 'block';
   updateTxLayout(acc.type === 'sofor');
+  updateTxKdvRow(acc.type);
+  document.getElementById('txKdvTransfer').checked = false;
+  document.getElementById('txKdvRate').style.display = 'none';
   renderTx();
 }
 
@@ -1654,7 +1743,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = escapeHtml(t.desc || '');
+        else if (k === 'desc') val = escapeHtml(t.desc || '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -1719,6 +1808,8 @@ document.getElementById('txList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('.delTxBtn');
   if (delBtn) {
     showConfirm('Bu hareketi silmek istediğinize emin misiniz?', () => {
+      const t = data.transactions[currentAccId].find(x => x.id === delBtn.dataset.id);
+      if (t && t.taxEntryId) data.taxEntries = data.taxEntries.filter(e => e.id !== t.taxEntryId);
       data.transactions[currentAccId] = data.transactions[currentAccId].filter(t => t.id !== delBtn.dataset.id);
       save();
       openDetail(currentAccId);
@@ -1787,6 +1878,12 @@ function openTxEdit(id) {
   document.getElementById('txEditDueDate').value = t.dueDate || '';
   document.getElementById('txEditColor').value = t.color || '#1a1a1a';
   renderTxColorPalette(t.color || '#1a1a1a');
+  const showKdv = currentAccType === 'musteri' || currentAccType === 'tedarikci';
+  document.getElementById('txEditKdvRow').style.display = showKdv ? 'flex' : 'none';
+  document.getElementById('txEditKdvTypeLabel').textContent = currentAccType === 'musteri' ? 'satış' : 'alış';
+  document.getElementById('txEditKdvTransfer').checked = !!t.kdvTransfer;
+  document.getElementById('txEditKdvRate').value = t.kdvRate || 20;
+  document.getElementById('txEditKdvRate').style.display = t.kdvTransfer ? '' : 'none';
   document.getElementById('txModalOverlay').style.display = 'flex';
 }
 
@@ -1808,7 +1905,13 @@ document.getElementById('txEditSave').addEventListener('click', () => {
     t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
     t.vehiclePlate = document.getElementById('txEditPlaka').value.trim();
   }
+  if (currentAccType === 'musteri' || currentAccType === 'tedarikci') {
+    t.kdvTransfer = document.getElementById('txEditKdvTransfer').checked;
+    t.kdvRate = parseFloat(document.getElementById('txEditKdvRate').value) || 0;
+  }
   upsertTxDueReminder(t, currentAccId);
+  const acc = data.accounts.find(a => a.id === currentAccId);
+  upsertTaxEntryFromTx(t, acc);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
   openDetail(currentAccId);
@@ -1872,6 +1975,8 @@ document.getElementById('modalSave').addEventListener('click', () => {
 
 document.getElementById('delAccBtn').addEventListener('click', () => {
   showConfirm('Bu cariyi ve tüm hareketlerini silmek istediğinize emin misiniz?', () => {
+    const linkedTaxIds = (data.transactions[currentAccId] || []).map(t => t.taxEntryId).filter(Boolean);
+    if (linkedTaxIds.length > 0) data.taxEntries = data.taxEntries.filter(e => !linkedTaxIds.includes(e.id));
     data.accounts = data.accounts.filter(a => a.id !== currentAccId);
     delete data.transactions[currentAccId];
     data.reminders = data.reminders.filter(r => r.accountId !== currentAccId);
@@ -1918,11 +2023,15 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txCredit').value) || 0;
   const dueDate = document.getElementById('txDueDate').value || null;
+  const kdvTransfer = document.getElementById('txKdvTransfer').checked;
+  const kdvRate = parseFloat(document.getElementById('txKdvRate').value) || 0;
   if (!date || (!debit && !credit)) return;
   if (!data.transactions[currentAccId]) data.transactions[currentAccId] = [];
-  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, debit, credit, dueDate, dueReminderId: null };
+  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, debit, credit, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null };
   data.transactions[currentAccId].push(tx);
   upsertTxDueReminder(tx, currentAccId);
+  const acc = data.accounts.find(a => a.id === currentAccId);
+  upsertTaxEntryFromTx(tx, acc);
   save();
   document.getElementById('txDesc').value = '';
   document.getElementById('txIrsNo').value = '';
@@ -1930,6 +2039,8 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txDebit').value = '';
   document.getElementById('txCredit').value = '';
   document.getElementById('txDueDate').value = '';
+  document.getElementById('txKdvTransfer').checked = false;
+  document.getElementById('txKdvRate').style.display = 'none';
   openDetail(currentAccId);
   renderReminders();
 });
@@ -4571,6 +4682,10 @@ function renderVergiTakibi() {
       const vatAmount = e.amount * (e.vatRate / 100);
       const total = e.amount + vatAmount;
       const typeColor = e.type === 'satis' ? '#1a7d3a' : (e.type === 'alis' ? '#b3261e' : '#8a5a00');
+      const isLinked = !!e.fromTxId;
+      const actions = isLinked
+        ? `<span style="font-size:11px; color:#999;">🔗 Cariden otomatik</span>`
+        : `<button class="editTaxEntryBtn" data-id="${e.id}">Düzenle</button><button class="delTaxEntryBtn" data-id="${e.id}">Sil</button>`;
       return `<div class="rem-row">
         <div class="rem-left">
           <div>
@@ -4581,8 +4696,7 @@ function renderVergiTakibi() {
           </div>
         </div>
         <div class="rem-actions">
-          <button class="editTaxEntryBtn" data-id="${e.id}">Düzenle</button>
-          <button class="delTaxEntryBtn" data-id="${e.id}">Sil</button>
+          ${actions}
         </div>
       </div>`;
     }).join('');
