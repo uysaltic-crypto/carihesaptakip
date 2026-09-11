@@ -4,162 +4,229 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cari Hesap Takip Programı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --ink: #17212F;
+    --ink-2: #3A4657;
+    --muted: #5B6B82;
+    --muted-2: #8B99AD;
+    --line: #D7DCE5;
+    --line-soft: #E7EAF0;
+    --canvas: #EEF1F6;
+    --surface: #fff;
+    --surface-alt: #F7F9FC;
+    --accent: #E08A1E;
+    --accent-ink: #17212F;
+    --accent-hover: #C97814;
+    --accent-soft: #FDF1DF;
+    --danger: #C43D33;
+    --success: #1D8A5B;
+    --info: #2F6FE0;
+    --r-sm: 9px;
+    --r-md: 13px;
+    --r-lg: 18px;
+    --shadow-1: 0 1px 2px rgba(23,33,47,0.05), 0 1px 1px rgba(23,33,47,0.04);
+    --shadow-2: 0 12px 32px rgba(23,33,47,0.14);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-display: 'Space Grotesk', var(--font-ui);
+  }
   * { box-sizing: border-box; }
+  html { scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
+  ::selection { background: var(--accent-soft); color: var(--ink); }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-    background: #f5f5f4;
-    color: #1a1a1a;
+    font-family: var(--font-ui);
+    background: var(--canvas);
+    color: var(--ink);
     margin: 0;
     padding: 24px;
+    -webkit-font-smoothing: antialiased;
   }
   .container { max-width: 900px; margin: 0 auto; }
-  h1 { font-size: 22px; font-weight: 600; margin: 0 0 20px; }
+  h1 {
+    font-family: var(--font-display); font-size: 24px; font-weight: 700;
+    letter-spacing: -0.01em; margin: 0 0 20px;
+  }
   .main-nav { display: flex; gap: 8px; margin-bottom: 20px; }
   .main-nav button {
-    flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ddd;
-    background: #fff; cursor: pointer; font-size: 14px; font-weight: 500; position: relative;
+    flex: 1; padding: 12px; border-radius: var(--r-sm); border: 1px solid var(--line);
+    background: var(--surface); cursor: pointer; font-size: 14px; font-weight: 500; position: relative;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
   }
-  .main-nav button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .main-nav button:hover { border-color: var(--muted-2); background: var(--surface-alt); }
+  .main-nav button.active { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: var(--shadow-1); }
+  .main-nav button.active:hover { background: var(--ink); }
   .badge {
-    position: absolute; top: -6px; right: -6px; background: #b3261e; color: #fff;
+    position: absolute; top: -6px; right: -6px; background: var(--danger); color: #fff;
     font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px;
     display: flex; align-items: center; justify-content: center; padding: 0 4px;
+    box-shadow: 0 0 0 2px var(--surface);
   }
   .alert-banner {
-    background: #fff4e5; border: 1px solid #f0c98a; border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #8a5a00;
+    background: var(--accent-soft); border: 1px solid #E9C27E; border-radius: var(--r-md);
+    padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #A3660F;
   }
   .alert-banner b { cursor: pointer; text-decoration: underline; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
   .tabs button {
-    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd;
-    background: #fff; cursor: pointer; font-size: 14px;
+    flex: 1; padding: 10px; border-radius: var(--r-sm); border: 1px solid var(--line);
+    background: var(--surface); cursor: pointer; font-size: 14px;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
   }
-  .tabs button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .tabs button:hover { border-color: var(--muted-2); background: var(--surface-alt); }
+  .tabs button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tabs button.active:hover { background: var(--ink); }
   .toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
   input, select, button, textarea {
     font-family: inherit; font-size: 14px; padding: 9px 12px;
-    border: 1px solid #ddd; border-radius: 8px; background: #fff;
+    border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink);
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
   }
   button { cursor: pointer; }
-  button:hover { background: #f0f0f0; }
+  button:hover { background: var(--surface-alt); border-color: var(--muted-2); }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,138,30,0.16);
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #searchInput { flex: 1; }
   .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 20px; }
-  .card { background: #fff; border-radius: 10px; padding: 14px 16px; border: 1px solid #eee; }
-  .card .label { font-size: 12px; color: #777; margin: 0; }
-  .card .value { font-size: 22px; font-weight: 600; margin: 4px 0 0; }
+  .card { background: var(--surface); border-radius: var(--r-md); padding: 14px 16px; border: 1px solid var(--line-soft); box-shadow: var(--shadow-1); }
+  .card .label { font-size: 12px; color: var(--muted); margin: 0; }
+  .card .value {
+    font-family: var(--font-display); font-size: 23px; font-weight: 700; margin: 5px 0 0;
+    letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
+  }
   .acc-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 8px; border-bottom: 1px solid #eee; cursor: pointer; background: #fff;
+    padding: 12px 8px; border-bottom: 1px solid var(--line-soft); cursor: pointer; background: var(--surface);
+    transition: background .12s ease;
   }
-  .acc-row:hover { background: #fafafa; }
+  .acc-row:hover { background: var(--surface-alt); }
   .acc-row .name { font-weight: 500; font-size: 14px; margin: 0; }
-  .acc-row .type { font-size: 12px; color: #777; margin: 2px 0 0; }
-  .acc-row .bal { font-weight: 600; font-size: 14px; }
-  .pos { color: #1a7d3a; }
-  .neg { color: #b3261e; }
-  .list-wrap { background: #fff; border-radius: 10px; border: 1px solid #eee; overflow: hidden; }
+  .acc-row .type { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+  .acc-row .bal { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--success); }
+  .neg { color: var(--danger); }
+  .list-wrap { background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft); box-shadow: var(--shadow-1); overflow: hidden; }
   .tx-col { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .col-resizer { position: absolute; top: 0; right: -5px; bottom: 0; width: 10px; cursor: col-resize; z-index: 2; }
-  .col-resizer:hover, .col-resizer.resizing { background: rgba(43,127,255,0.25); }
+  .col-resizer:hover, .col-resizer.resizing { background: rgba(47,111,224,0.22); }
   @media (max-width: 720px) { .col-resizer { display: none; } }
-  .empty { text-align: center; color: #999; padding: 40px 0; font-size: 14px; }
+  .empty { text-align: center; color: var(--muted-2); padding: 40px 0; font-size: 14px; }
   .detail-card {
-    background: #fff; border-radius: 10px; border: 1px solid #eee; padding: 16px 20px; margin-bottom: 20px;
+    background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft);
+    padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow-1);
   }
   .detail-head { display: flex; justify-content: space-between; align-items: center; }
-  .detail-head .name { font-weight: 600; font-size: 17px; margin: 0; }
-  .detail-head .sub { font-size: 13px; color: #777; margin: 4px 0 0; }
-  .detail-head .bal-label { font-size: 12px; color: #777; margin: 0; text-align: right; }
-  .detail-head .bal-value { font-size: 20px; font-weight: 600; margin: 2px 0 0; text-align: right; }
+  .detail-head .name { font-family: var(--font-display); font-weight: 700; font-size: 18px; margin: 0; }
+  .detail-head .sub { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+  .detail-head .bal-label { font-size: 12px; color: var(--muted); margin: 0; text-align: right; }
+  .detail-head .bal-value {
+    font-family: var(--font-display); font-size: 20px; font-weight: 700; margin: 2px 0 0;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
   .detail-actions { display: flex; gap: 8px; margin-top: 14px; }
   .tx-form { display: grid; grid-template-columns: 1fr 2fr 100px 100px 130px 40px; gap: 8px; margin-bottom: 14px; }
   .tx-row {
     display: grid; grid-template-columns: 90px 1.4fr 90px 90px 90px 90px 100px 36px 36px; gap: 8px;
-    padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; align-items: center;
+    transition: background .12s ease;
   }
-  .tx-row .amt { text-align: right; }
-  .tx-row button { border: none; background: none; color: #b3261e; padding: 0; font-size: 15px; }
-  .back-btn { margin-bottom: 16px; background: none; border: 1px solid #ddd; }
+  .tx-row:hover { background: var(--surface-alt); }
+  .tx-row .amt { text-align: right; font-variant-numeric: tabular-nums; }
+  .tx-row button { border: none; background: none; color: var(--danger); padding: 0; font-size: 15px; }
+  .tx-row button:hover { background: none; opacity: 0.7; }
+  .back-btn { margin-bottom: 16px; background: none; border: 1px solid var(--line); }
   .modal-overlay {
     display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 10;
+    background: rgba(16,23,33,0.48); align-items: center; justify-content: center; z-index: 10;
   }
-  .modal-box { background: #fff; border-radius: 12px; padding: 20px; width: 320px; }
-  .modal-box h3 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+  .modal-box {
+    background: var(--surface); border-radius: var(--r-lg); padding: 20px; width: 320px;
+    box-shadow: var(--shadow-2); animation: modalIn .16s ease-out;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .modal-box h3 { margin: 0 0 12px; font-family: var(--font-display); font-size: 16px; font-weight: 700; }
   .modal-box .field-group { display: flex; flex-direction: column; gap: 8px; }
   .modal-box .actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
-  .primary-btn { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-  .primary-btn:hover { background: #333; }
+  .primary-btn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .primary-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
   .rem-form { display: grid; grid-template-columns: 120px 1fr 100px 120px 90px 110px 130px 80px; gap: 8px; margin-bottom: 16px; }
   .rem-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 14px; border-bottom: 1px solid #eee; background: #fff; gap: 10px;
+    padding: 12px 14px; border-bottom: 1px solid var(--line-soft); background: var(--surface); gap: 10px;
   }
-  .rem-row.overdue { background: #fff4e5; }
+  .rem-row.overdue { background: var(--accent-soft); }
   .rem-row.done { opacity: 0.5; }
   .rem-left { display: flex; align-items: center; gap: 10px; }
-  .rem-date { font-size: 12px; color: #777; min-width: 90px; }
+  .rem-date { font-size: 12px; color: var(--muted); min-width: 90px; }
   .rem-desc { font-size: 14px; }
-  .rem-desc .rem-acc { font-size: 12px; color: #777; display: block; margin-top: 2px; }
+  .rem-desc .rem-acc { font-size: 12px; color: var(--muted); display: block; margin-top: 2px; }
   .rem-actions { display: flex; gap: 6px; }
   .rem-actions button { padding: 5px 10px; font-size: 12px; }
-  .rem-amt { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .rem-amt { font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .done-text { text-decoration: line-through; }
 
   .veh-card {
-    background: #fff; border-radius: 10px; border: 1px solid #eee; padding: 14px 18px; margin-bottom: 12px;
+    background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft);
+    padding: 14px 18px; margin-bottom: 12px; box-shadow: var(--shadow-1);
   }
   .veh-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .veh-head .name { font-weight: 600; font-size: 15px; margin: 0; }
+  .veh-head .name { font-family: var(--font-display); font-weight: 700; font-size: 15px; margin: 0; }
   .veh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 8px; font-size: 13px; }
-  .veh-grid .item .lbl { color: #777; font-size: 11px; margin: 0; }
+  .veh-grid .item .lbl { color: var(--muted); font-size: 11px; margin: 0; }
   .veh-grid .item .val { margin: 2px 0 0; }
   .veh-actions { display: flex; gap: 8px; }
   .veh-actions button { padding: 5px 10px; font-size: 12px; }
   .fuel-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
   .fuel-name { width: 140px; flex-shrink: 0; }
-  .fuel-bar-bg { flex: 1; background: #eee; border-radius: 6px; height: 14px; overflow: hidden; }
-  .fuel-bar-fill { height: 100%; border-radius: 6px; background: #2b7fff; }
-  .fuel-bar-fill.low { background: #b3261e; }
-  .fuel-bar-fill.mid { background: #d99a00; }
-  .fuel-pct { width: 42px; text-align: right; font-weight: 600; }
+  .fuel-bar-bg { flex: 1; background: var(--line-soft); border-radius: 6px; height: 14px; overflow: hidden; }
+  .fuel-bar-fill { height: 100%; border-radius: 6px; background: var(--info); }
+  .fuel-bar-fill.low { background: var(--danger); }
+  .fuel-bar-fill.mid { background: #DB9A16; }
+  .fuel-pct { width: 42px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 
   .perkm-row { display: flex; align-items: center; gap: 3px; margin-bottom: 8px; }
   .perkm-top { display: flex; align-items: center; font-size: 12px; width: 100%; gap: 6px; }
   .perkm-name { font-weight: 500; white-space: nowrap; width: 140px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }
-  .perkm-value { font-weight: 700; white-space: nowrap; color: #1a1a1a; width: 60px; flex-shrink: 0; }
-  .perkm-bar-bg { flex: 1; background: #eef0f2; border-radius: 6px; height: 8px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06); }
+  .perkm-value { font-family: var(--font-display); font-weight: 700; white-space: nowrap; color: var(--ink); width: 60px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .perkm-bar-bg { flex: 1; background: #EAEEF4; border-radius: 6px; height: 8px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06); }
   .perkm-bar-fill {
     height: 100%; border-radius: 6px;
-    background: linear-gradient(90deg, #4f8cff, #7fb0ff);
-    box-shadow: 0 1px 4px rgba(79,140,255,0.4);
+    background: linear-gradient(90deg, #3C6FE0, #7CA0F2);
+    box-shadow: 0 1px 4px rgba(60,111,224,0.35);
     transition: width 0.5s ease;
   }
-  .perkm-bar-fill.perkm-worst { background: linear-gradient(90deg, #e5484d, #ff7b7f); box-shadow: 0 1px 4px rgba(229,72,77,0.4); }
-  .perkm-bar-fill.perkm-best { background: linear-gradient(90deg, #1a9d5c, #4fd694); box-shadow: 0 1px 4px rgba(26,157,92,0.4); }
+  .perkm-bar-fill.perkm-worst { background: linear-gradient(90deg, #D9483F, #E8837B); box-shadow: 0 1px 4px rgba(217,72,63,0.35); }
+  .perkm-bar-fill.perkm-best { background: linear-gradient(90deg, #1D8A5B, #4FCE9A); box-shadow: 0 1px 4px rgba(29,138,91,0.35); }
   .driver-card {
-    background: #fff; border-radius: 10px; border: 1px solid #eee; padding: 14px 18px; margin-bottom: 12px;
+    background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft);
+    padding: 14px 18px; margin-bottom: 12px; box-shadow: var(--shadow-1);
     display: flex; justify-content: space-between; align-items: center;
   }
-  .driver-card .name { font-weight: 600; font-size: 15px; margin: 0; }
-  .driver-card .sub { font-size: 13px; color: #777; margin: 4px 0 0; }
+  .driver-card .name { font-family: var(--font-display); font-weight: 700; font-size: 15px; margin: 0; }
+  .driver-card .sub { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
   .fuel-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .fuel-table th, .fuel-table td { padding: 10px 14px; text-align: right; border-bottom: 1px solid #eee; white-space: nowrap; }
-  .fuel-table th:first-child, .fuel-table td:first-child { text-align: left; }
-  .fuel-table th { color: #777; font-weight: 500; font-size: 12px; background: #fafafa; }
-  .fuel-table tr.best td.unit-price { color: #1a7d3a; font-weight: 700; }
-  .fuel-table tr.worst td.unit-price { color: #b3261e; font-weight: 700; }
-  .fuel-table tfoot td { font-weight: 600; background: #fafafa; }
+  .fuel-table th, .fuel-table td { padding: 10px 14px; text-align: right; border-bottom: 1px solid var(--line-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .fuel-table th:first-child, .fuel-table td:first-child { text-align: left; font-variant-numeric: normal; }
+  .fuel-table th { color: var(--muted); font-weight: 500; font-size: 12px; background: var(--surface-alt); }
+  .fuel-table tr.best td.unit-price { color: var(--success); font-weight: 700; }
+  .fuel-table tr.worst td.unit-price { color: var(--danger); font-weight: 700; }
+  .fuel-table tfoot td { font-weight: 600; background: var(--surface-alt); }
   /* ---- Mobil uyum ---- */
   @media (max-width: 720px) {
     body { padding: 12px; }
     .container > div[style*="justify-content:space-between"] {
       flex-direction: column; align-items: stretch !important; gap: 10px;
     }
-    h1 { font-size: 18px; text-align: center; }
+    h1 { font-size: 19px; text-align: center; }
     .main-nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; padding-bottom: 4px; }
     .main-nav button { flex: 0 0 auto; white-space: nowrap; padding: 10px 14px; font-size: 13px; }
     .tabs { flex-wrap: wrap; }
@@ -194,6 +261,10 @@
     .veh-actions, .driver-card > div:last-child { width: 100%; justify-content: flex-end; margin-top: 6px; }
     .perkm-name { width: 90px; }
     .fuel-name { width: 90px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .modal-box { animation: none; }
+    .perkm-bar-fill { transition: none; }
   }
 </style>
 </head>
@@ -286,17 +357,16 @@
         </label>
         <select id="txKdvRate" style="display:none;">
           <option value="20">%20</option>
-          <option value="16">%16</option>
           <option value="10">%10</option>
           <option value="1">%1</option>
           <option value="0">%0</option>
           <option value="custom">Diğer...</option>
         </select>
         <input type="number" id="txKdvRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
-        <span id="txKdvHint" style="color:#999; font-size:11.5px;"></span>
+        <span id="txKdvHint" style="color:#8B99AD; font-size:11.5px;"></span>
       </div>
       <div id="txTableScroll" style="overflow-x:auto;">
-        <div id="txListHeader" style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#999; font-weight:600; min-width:max-content;">
+        <div id="txListHeader" style="display:grid; grid-template-columns: 1fr 2fr 100px 100px 110px 36px 36px; gap:8px; padding:0 12px; font-size:11px; color:#8B99AD; font-weight:600; min-width:max-content;">
           <span>Tarih</span><span>Açıklama</span><span style="text-align:right;">Borç</span><span style="text-align:right;">Alacak</span><span style="text-align:right;">Bakiye</span><span></span><span></span>
         </div>
         <div class="list-wrap" id="txList" style="padding:0 12px; min-width:max-content;"></div>
@@ -397,7 +467,7 @@
       <input type="number" id="tripPrice" placeholder="Hakediş tutarı (TL)" min="0" step="0.01" />
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
-    <p id="tripIrsWarning" style="display:none; color:#b3261e; font-size:12.5px; margin:-6px 0 12px;"></p>
+    <p id="tripIrsWarning" style="display:none; color:#C43D33; font-size:12.5px; margin:-6px 0 12px;"></p>
     <p id="tripHistoryTitle" style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer geçmişi</p>
     <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
       <select id="tripSort">
@@ -427,7 +497,7 @@
 
   <div id="irsaliyeView" style="display:none;">
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">İrsaliye koçanı ver</p>
-    <p style="font-size:12px; color:#777; margin:0 0 8px;">Başlangıç ve bitiş no'sunu bu koçanın üzerinde yazan gerçek irsaliye numaralarına göre siz girin. Araç seçerseniz koçan o araca bağlanır. "İrsaliye Kontrolü" ekranında eksik/atlanan no taraması SADECE burada girdiğiniz (teslim edilen) koçan aralıklarında yapılır; bu aralıktaki bir numara hangi şoförün/aracın seferine işlenmiş olursa olsun işlenmiş sayılır.</p>
+    <p style="font-size:12px; color:#5B6B82; margin:0 0 8px;">Başlangıç ve bitiş no'sunu bu koçanın üzerinde yazan gerçek irsaliye numaralarına göre siz girin. Araç seçerseniz koçan o araca bağlanır. "İrsaliye Kontrolü" ekranında eksik/atlanan no taraması SADECE burada girdiğiniz (teslim edilen) koçan aralıklarında yapılır; bu aralıktaki bir numara hangi şoförün/aracın seferine işlenmiş olursa olsun işlenmiş sayılır.</p>
     <div class="rem-form" style="grid-template-columns: 125px 100px 100px 1fr 1fr 80px;">
       <input type="date" id="irsDate" />
       <input type="text" id="irsNo" placeholder="Başlangıç no" />
@@ -457,16 +527,16 @@
   </div>
 
   <div id="irsaliyeKontrolView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekrandaki mükerrer/atlanan/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilerek teslim edilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir. Hiç işlenmiş numarası olmayan koçanlar bu taramaya hiç dahil edilmez. İşlenmiş numaraları olan bir koçanda, kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar <b>"atlanan"</b>, bu aralığın dışında (başında veya sonunda) kalıp henüz işlenmemiş no'lar ise <b>"eksik"</b> olarak ayrı ayrı gösterilir. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekrandaki mükerrer/atlanan/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilerek teslim edilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir. Hiç işlenmiş numarası olmayan koçanlar bu taramaya hiç dahil edilmez. İşlenmiş numaraları olan bir koçanda, kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar <b>"atlanan"</b>, bu aralığın dışında (başında veya sonunda) kalıp henüz işlenmemiş no'lar ise <b>"eksik"</b> olarak ayrı ayrı gösterilir. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
     <div class="summary" id="irsKontrolSummaryCards"></div>
 
     <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında mükerrer kullanılan irsaliye no'ları</p>
     <div class="list-wrap" id="irsDupList"></div>
 
-    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında atlanan no kontrolü <span style="font-weight:400; color:#777; font-size:12px;">(kullanılan no'lar arasında kalıp işlenmemiş — gerçek anlamda atlanmış olabilir)</span></p>
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında atlanan no kontrolü <span style="font-weight:400; color:#5B6B82; font-size:12px;">(kullanılan no'lar arasında kalıp işlenmemiş — gerçek anlamda atlanmış olabilir)</span></p>
     <div class="list-wrap" id="irsSkipList"></div>
 
-    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında eksik no kontrolü <span style="font-weight:400; color:#777; font-size:12px;">(kullanılan no'lardan önce/sonra kalan, henüz işlenmemiş no'lar)</span></p>
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında eksik no kontrolü <span style="font-weight:400; color:#5B6B82; font-size:12px;">(kullanılan no'lardan önce/sonra kalan, henüz işlenmemiş no'lar)</span></p>
     <div class="list-wrap" id="irsGapList"></div>
   </div>
 
@@ -474,7 +544,7 @@
     <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
       <div id="fkCategoryTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
     </div>
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, "Sefer Ekle" bölümünden girilen her seferin fiyatının; ilgili grubun (Tır / Kırkayak / Balıkesir) güncel sefer tanımı fiyatıyla ve şoför carisine yazılan tutarla uyumlu olup olmadığını gösterir.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, "Sefer Ekle" bölümünden girilen her seferin fiyatının; ilgili grubun (Tır / Kırkayak / Balıkesir) güncel sefer tanımı fiyatıyla ve şoför carisine yazılan tutarla uyumlu olup olmadığını gösterir.</p>
     <div class="summary" id="fkSummaryCards"></div>
     <div class="toolbar">
       <input id="fkSearch" placeholder="Şoför, araç, irsaliye no veya sefer adıyla ara..." style="flex:1;" />
@@ -484,7 +554,7 @@
       </label>
     </div>
     <div id="fkTableScroll" style="overflow-x:auto;">
-      <div id="fkListHeader" style="display:grid; grid-template-columns: 90px 140px 140px 90px 1fr 110px 110px 110px 160px; gap:8px; padding:0 12px 6px; font-size:11px; color:#999; font-weight:600; min-width:max-content;">
+      <div id="fkListHeader" style="display:grid; grid-template-columns: 90px 140px 140px 90px 1fr 110px 110px 110px 160px; gap:8px; padding:0 12px 6px; font-size:11px; color:#8B99AD; font-weight:600; min-width:max-content;">
         <span>Tarih</span><span>Şoför</span><span>Araç</span><span>İrs.No</span><span>Sefer adı</span><span style="text-align:right;">Tanım fiyatı</span><span style="text-align:right;">Sefere yazılan</span><span style="text-align:right;">Cariye yazılan</span><span>Durum</span>
       </div>
       <div class="list-wrap" id="fkList" style="padding:0 12px; min-width:max-content;"></div>
@@ -492,7 +562,7 @@
   </div>
 
   <div id="hareketkontrolView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir.</p>
     <div class="summary" id="hkSummaryCards"></div>
     <div class="toolbar">
       <input id="hkSearch" placeholder="Cari adı veya irsaliye no ile ara..." style="flex:1;" />
@@ -501,7 +571,7 @@
   </div>
 
   <div id="vergitakibiView" style="display:none;">
-    <p style="font-size:13px; color:#777; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
     <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 1fr 150px 90px 90px 80px;">
       <input type="date" id="taxDate" />
       <select id="taxType">
@@ -513,7 +583,6 @@
       <input type="number" id="taxAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
       <select id="taxRate">
         <option value="20">%20</option>
-        <option value="16">%16</option>
         <option value="10">%10</option>
         <option value="1">%1</option>
         <option value="0">%0</option>
@@ -601,47 +670,47 @@
     <h3 id="vehModalTitle">Yeni araç</h3>
     <div class="field-group">
       <input id="vehName" placeholder="Araç adı / plaka" />
-      <label style="font-size:12px; color:#777;">Araç tipi (sefer tanımı listesini filtrelemek için kullanılır)</label>
+      <label style="font-size:12px; color:#5B6B82;">Araç tipi (sefer tanımı listesini filtrelemek için kullanılır)</label>
       <select id="vehCategory">
         <option value="tir">Tır</option>
         <option value="kirkayak">Kırkayak</option>
         <option value="balikesir">Balıkesir</option>
       </select>
       <input type="number" id="vehBaseKm" placeholder="Ana km (araç sisteme eklenirken kilometresi)" min="0" step="1" />
-      <label style="font-size:12px; color:#777;">Son km ve yakıt yüzdesi bilgisi, Yakıt Girişi ekranından otomatik gelir.</label>
-      <label style="font-size:12px; color:#777;">Muayene tarihi</label>
+      <label style="font-size:12px; color:#5B6B82;">Son km ve yakıt yüzdesi bilgisi, Yakıt Girişi ekranından otomatik gelir.</label>
+      <label style="font-size:12px; color:#5B6B82;">Muayene tarihi</label>
       <input type="date" id="vehMuayene" />
-      <label style="font-size:12px; color:#777;">Ruhsat görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Ruhsat görseli</label>
       <input type="file" id="vehRuhsatPolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="vehRuhsatPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="vehRuhsatPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehRuhsatPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
-      <label style="font-size:12px; color:#777;">Trafik sigortası tarihi</label>
+      <label style="font-size:12px; color:#5B6B82;">Trafik sigortası tarihi</label>
       <input type="date" id="vehTrafikTarih" />
       <input id="vehTrafikFirma" placeholder="Trafik sigortasını yapan firma" />
-      <label style="font-size:12px; color:#777;">Trafik sigortası poliçe görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Trafik sigortası poliçe görseli</label>
       <input type="file" id="vehTrafikPolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="vehTrafikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="vehTrafikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehTrafikPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
-      <label style="font-size:12px; color:#777;">Kasko tarihi</label>
+      <label style="font-size:12px; color:#5B6B82;">Kasko tarihi</label>
       <input type="date" id="vehKaskoTarih" />
       <input id="vehKaskoFirma" placeholder="Kaskoyu yapan firma" />
-      <label style="font-size:12px; color:#777;">Kasko poliçe görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Kasko poliçe görseli</label>
       <input type="file" id="vehKaskoPolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="vehKaskoPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="vehKaskoPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehKaskoPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
-      <label style="font-size:12px; color:#777;">Ürün kaskosu tarihi</label>
+      <label style="font-size:12px; color:#5B6B82;">Ürün kaskosu tarihi</label>
       <input type="date" id="vehUrunKaskoTarih" />
       <input id="vehUrunKaskoFirma" placeholder="Ürün kaskosunu yapan firma" />
-      <label style="font-size:12px; color:#777;">Ürün kaskosu poliçe görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Ürün kaskosu poliçe görseli</label>
       <input type="file" id="vehUrunKaskoPolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="vehUrunKaskoPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="vehUrunKaskoPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehUrunKaskoPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
     </div>
@@ -686,7 +755,6 @@
         </label>
         <select id="txEditKdvRate" style="display:none;">
           <option value="20">%20</option>
-          <option value="16">%16</option>
           <option value="10">%10</option>
           <option value="1">%1</option>
           <option value="0">%0</option>
@@ -694,12 +762,12 @@
         </select>
         <input type="number" id="txEditKdvRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
       </div>
-      <label style="font-size:12px; color:#777;">Son ödeme günü (opsiyonel)</label>
+      <label style="font-size:12px; color:#5B6B82;">Son ödeme günü (opsiyonel)</label>
       <input type="date" id="txEditDueDate" />
-      <label style="font-size:12px; color:#777;">Yazı rengi</label>
+      <label style="font-size:12px; color:#5B6B82;">Yazı rengi</label>
       <div id="txEditColorPalette" style="display:grid; grid-template-columns: repeat(6, 1fr); gap:6px;"></div>
       <button type="button" id="txEditColorMore" style="font-size:12px; text-align:left; display:flex; align-items:center; gap:6px;">🖌️ Diğer renkler...</button>
-      <input type="color" id="txEditColor" value="#1a1a1a" style="display:none;" />
+      <input type="color" id="txEditColor" value="#17212F" style="display:none;" />
     </div>
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
@@ -722,7 +790,6 @@
       <input type="number" id="taxEditAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
       <select id="taxEditRate">
         <option value="20">%20</option>
-        <option value="16">%16</option>
         <option value="10">%10</option>
         <option value="1">%1</option>
         <option value="0">%0</option>
@@ -741,16 +808,16 @@
   <div class="modal-box" style="width:460px; max-height:85vh; overflow-y:auto;">
     <h3>☁️ Google Drive Yedekleme</h3>
     <div id="gdriveSetupSection">
-      <p style="font-size:13px; color:#555; margin:10px 0;">
+      <p style="font-size:13px; color:#3A4657; margin:10px 0;">
         Bu özelliği kullanmak için önce kendi Google hesabınızla bir bağlantı (Client ID) oluşturmanız gerekiyor. Aşağıdaki butona basıp adımları izleyin, sonra oluşan Client ID'yi buraya yapıştırın.
       </p>
       <button id="gdriveHelpBtn" style="margin-bottom:10px;">Kurulum adımlarını göster</button>
-      <div id="gdriveHelpText" style="display:none; font-size:12px; color:#555; background:#f5f5f4; border-radius:8px; padding:10px; margin-bottom:10px; line-height:1.6;"></div>
+      <div id="gdriveHelpText" style="display:none; font-size:12px; color:#3A4657; background:#EEF1F6; border-radius:8px; padding:10px; margin-bottom:10px; line-height:1.6;"></div>
       <input type="text" id="gdriveClientId" placeholder="Google Client ID'nizi buraya yapıştırın" style="width:100%; margin-bottom:10px;" />
       <button id="gdriveSaveClientId" class="primary-btn">Kaydet</button>
     </div>
     <div id="gdriveActionSection" style="display:none;">
-      <p id="gdriveStatusText" style="font-size:13px; color:#555; margin:10px 0;"></p>
+      <p id="gdriveStatusText" style="font-size:13px; color:#3A4657; margin:10px 0;"></p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
         <button id="gdriveConnectBtn">Google ile Bağlan</button>
         <button id="gdriveBackupBtn" class="primary-btn" disabled>Buluta Yedekle</button>
@@ -767,7 +834,7 @@
 <div class="modal-overlay" id="storageModalOverlay">
   <div class="modal-box" style="width:520px; max-height:85vh; overflow-y:auto;">
     <h3>Depolama Yönetimi</h3>
-    <p id="storageUsageText" style="font-size:13px; color:#555; margin:8px 0 14px;"></p>
+    <p id="storageUsageText" style="font-size:13px; color:#3A4657; margin:8px 0 14px;"></p>
     <div id="storageImageList"></div>
     <div class="actions">
       <button id="storageModalClose">Kapat</button>
@@ -807,7 +874,7 @@
     </div>
 
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Şoförler</p>
-    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #eee; margin-bottom:6px; font-weight:600;">
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #E7EAF0; margin-bottom:6px; font-weight:600;">
       <input type="checkbox" id="driverExcelSelectAll" checked />
       Tümünü seç
     </label>
@@ -835,7 +902,7 @@
     </div>
 
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Araçlar</p>
-    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #eee; margin-bottom:6px; font-weight:600;">
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #E7EAF0; margin-bottom:6px; font-weight:600;">
       <input type="checkbox" id="excelSelectAll" checked />
       Tümünü seç
     </label>
@@ -855,7 +922,7 @@
       <input type="text" id="seferPageName" placeholder="Sayfa adı (ör. İstanbul Seferleri)" />
     </div>
     <div class="actions">
-      <button id="seferPageDelete" style="display:none; color:#b3261e;">Sayfayı sil</button>
+      <button id="seferPageDelete" style="display:none; color:#C43D33;">Sayfayı sil</button>
       <button id="seferPageCancel">Vazgeç</button>
       <button id="seferPageSave" class="primary-btn">Kaydet</button>
     </div>
@@ -868,7 +935,7 @@
     <div class="field-group">
       <input type="text" id="tripEditDriver" list="tripEditDriverDatalist" placeholder="Şoför ara ve seçin..." autocomplete="off" /><datalist id="tripEditDriverDatalist"></datalist>
       <input type="text" id="tripEditIrsaliyeNo" placeholder="İrsaliye no" />
-      <p id="tripEditIrsWarning" style="display:none; color:#b3261e; font-size:12.5px; margin:-4px 0 0;"></p>
+      <p id="tripEditIrsWarning" style="display:none; color:#C43D33; font-size:12.5px; margin:-4px 0 0;"></p>
       <input type="date" id="tripEditDate" />
       <input type="text" id="tripEditDefInput" list="tripEditDefDatalist" placeholder="Sefer ara ve seçin..." autocomplete="off" />
       <datalist id="tripEditDefDatalist"></datalist>
@@ -887,7 +954,7 @@
     <h3 id="driverModalTitle">Yeni şoför</h3>
     <div class="field-group">
       <input id="driverName" placeholder="Ad soyad" />
-      <label style="font-size:12px; color:#777;">Sefer grubu</label>
+      <label style="font-size:12px; color:#5B6B82;">Sefer grubu</label>
       <select id="driverCategory">
         <option value="tir">Tır</option>
         <option value="kirkayak">Kırkayak</option>
@@ -895,28 +962,28 @@
       </select>
       <input id="driverPhone" placeholder="Telefon (opsiyonel)" />
       <input id="driverLicenseNo" placeholder="Ehliyet no (opsiyonel)" />
-      <label style="font-size:12px; color:#777;">Ehliyet süresi</label>
+      <label style="font-size:12px; color:#5B6B82;">Ehliyet süresi</label>
       <input type="date" id="driverLicenseExpiry" />
-      <label style="font-size:12px; color:#777;">Ehliyet görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Ehliyet görseli</label>
       <input type="file" id="driverLicensePolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="driverLicensePolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="driverLicensePolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="driverLicensePolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
-      <label style="font-size:12px; color:#777;">Sürücü kartı süresi</label>
+      <label style="font-size:12px; color:#5B6B82;">Sürücü kartı süresi</label>
       <input type="date" id="driverCardExpiry" />
-      <label style="font-size:12px; color:#777;">Sürücü kartı görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Sürücü kartı görseli</label>
       <input type="file" id="driverCardPolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="driverCardPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="driverCardPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="driverCardPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
-      <label style="font-size:12px; color:#777;">Psikoteknik süresi</label>
+      <label style="font-size:12px; color:#5B6B82;">Psikoteknik süresi</label>
       <input type="date" id="driverPsikoteknikExpiry" />
-      <label style="font-size:12px; color:#777;">Psikoteknik görseli</label>
+      <label style="font-size:12px; color:#5B6B82;">Psikoteknik görseli</label>
       <input type="file" id="driverPsikoteknikPolicyFile" accept="image/*" />
       <div style="display:flex; align-items:center; gap:8px;">
-        <img id="driverPsikoteknikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #ddd;" />
+        <img id="driverPsikoteknikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="driverPsikoteknikPolicyRemove" style="display:none;">Görseli kaldır</button>
       </div>
       <input type="text" id="driverVeh" list="driverVehDatalist" placeholder="Araç ara ve seçin (opsiyonel)..." autocomplete="off" /><datalist id="driverVehDatalist"></datalist>
@@ -952,7 +1019,7 @@
   <div class="modal-box" style="width:760px; max-width:95vw; max-height:85vh; overflow-y:auto;">
     <h3>Fiyat kontrolü — Sefer tanımı ile cariye yazılan tutar karşılaştırması</h3>
     <div id="priceControlCategoryTabs" style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;"></div>
-    <p id="priceControlSummary" style="font-size:13px; color:#555; margin:0 0 12px;"></p>
+    <p id="priceControlSummary" style="font-size:13px; color:#3A4657; margin:0 0 12px;"></p>
     <div id="priceControlList" style="overflow-x:auto;"></div>
     <div class="actions">
       <button id="priceControlModalClose">Kapat</button>
@@ -1315,8 +1382,8 @@ function renderReminders() {
       <div class="rem-left">
         ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : '🚗'}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
         <div>
-          <span class="rem-date" style="${dueSoon ? 'color:#b3261e; font-weight:700;' : ''}">${fmtDate(r.date)}</span>
-          <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#b3261e;' : ''}">${escapeHtml(r.desc)}${(r.recurrence && r.recurrence !== 'none' && r.recurCount !== null && r.recurCount !== undefined) ? ` <span style="font-weight:400; color:#999; font-size:11.5px;">(kalan tekrar: ${r.recurCount})</span>` : ''}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#b3261e;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
+          <span class="rem-date" style="${dueSoon ? 'color:#C43D33; font-weight:700;' : ''}">${fmtDate(r.date)}</span>
+          <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(r.desc)}${(r.recurrence && r.recurrence !== 'none' && r.recurCount !== null && r.recurCount !== undefined) ? ` <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(kalan tekrar: ${r.recurCount})</span>` : ''}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
         </div>
       </div>
       <div class="rem-actions">
@@ -1623,22 +1690,7 @@ function updateTxKdvRow(accType) {
   document.getElementById('txKdvHint').textContent = accType === 'musteri'
     ? '(sadece "Borç" alanına girilen tutar için satış faturası oluşturur)'
     : '("Alacak" alanı için alış faturası, "Borç" alanı için satış faturası — ör. tedarikçiye kesilen prim faturası — oluşturur)';
-  applyTxKdvDefaultRate();
 }
-
-// Borç alanına tutar girilmişse satış (varsayılan %16), tedarikçi carisinde alacak alanına
-// tutar girilmişse alış (varsayılan %20) faturası kabul edilerek KDV oranı otomatik önerilir.
-function applyTxKdvDefaultRate() {
-  const debit = parseFloat(document.getElementById('txDebit').value) || 0;
-  const credit = parseFloat(document.getElementById('txCredit').value) || 0;
-  let type = null;
-  if ((currentAccType === 'musteri' || currentAccType === 'tedarikci') && debit > 0) type = 'satis';
-  else if (currentAccType === 'tedarikci' && credit > 0) type = 'alis';
-  else if (currentAccType === 'musteri') type = 'satis';
-  if (type) setTaxRateValue('txKdvRate', 'txKdvRateCustom', TAX_DEFAULT_RATES[type]);
-}
-document.getElementById('txDebit').addEventListener('input', applyTxKdvDefaultRate);
-document.getElementById('txCredit').addEventListener('input', applyTxKdvDefaultRate);
 
 document.getElementById('txKdvTransfer').addEventListener('change', () => {
   document.getElementById('txKdvRate').style.display = document.getElementById('txKdvTransfer').checked ? '' : 'none';
@@ -1710,18 +1762,6 @@ function openDetail(id) {
   updateTxKdvRow(acc.type);
   document.getElementById('txKdvTransfer').checked = false;
   document.getElementById('txKdvRate').style.display = 'none';
-  renderTx();
-}
-
-// Bir hareket eklendikten/düzenlendikten/silindikten sonra detay panelini yeniler, ancak
-// (openDetail'in aksine) ay gizleme durumunu (collapsedMonths) sıfırlamaz — böylece bir fatura
-// üzerinde işlem yapmak için açtığınız ay, art arda başka düzeltmeler yaparken tekrar gizlenmez.
-function refreshTxDetail(id) {
-  currentAccId = id;
-  const acc = data.accounts.find(a => a.id === id);
-  document.getElementById('detName').textContent = acc.name;
-  document.getElementById('detSub').textContent = (acc.type === 'musteri' ? 'Müşteri' : (acc.type === 'tedarikci' ? 'Tedarikçi' : (acc.type === 'sofor' ? 'Şoför' : 'Ortak'))) + (acc.phone ? ' · ' + acc.phone : '') + (acc.taxNo ? ' · VN: ' + acc.taxNo : '') + (acc.banka ? ' · ' + acc.banka : '') + (acc.iban ? ' · IBAN: ' + acc.iban : '');
-  document.getElementById('detBalance').textContent = fmt(balanceOf(id));
   renderTx();
 }
 
@@ -1809,11 +1849,11 @@ function renderTx() {
     const totalDebit = g.items.reduce((s, t) => s + (Number(t.debit) || 0), 0);
     const totalCredit = g.items.reduce((s, t) => s + (Number(t.credit) || 0), 0);
     const isCollapsed = collapsedMonths.has(g.monthKey);
-    const header = `<div class="txMonthHeader" data-month="${g.monthKey}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fafafa; border-bottom:1px solid #eee; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
-      <span style="font-weight:600; font-size:13px;">${isCollapsed ? '▸' : '▾'} ${monthLabelOf(g.monthKey)} <span style="font-weight:400; color:#999; font-size:11.5px;">(${g.items.length} hareket)</span></span>
+    const header = `<div class="txMonthHeader" data-month="${g.monthKey}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
+      <span style="font-weight:600; font-size:13px;">${isCollapsed ? '▸' : '▾'} ${monthLabelOf(g.monthKey)} <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(${g.items.length} hareket)</span></span>
       <span style="display:flex; gap:14px; font-size:12.5px; font-weight:600;">
-        <span style="color:#b3261e;">Borç: ${fmt(totalDebit)}</span>
-        <span style="color:#1a7d3a;">Alacak: ${fmt(totalCredit)}</span>
+        <span style="color:#C43D33;">Borç: ${fmt(totalDebit)}</span>
+        <span style="color:#1D8A5B;">Alacak: ${fmt(totalCredit)}</span>
       </span>
     </div>`;
     if (isCollapsed) return header;
@@ -1835,7 +1875,7 @@ function renderTx() {
       return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; grid-template-columns:${rowGrid}; ${colorStyle}">
         ${cells}
         <span></span>
-        <button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#1a1a1a;">✎</button>
+        <button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#17212F;">✎</button>
         <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>
       </div>`;
     }).join('');
@@ -1892,7 +1932,7 @@ document.getElementById('txList').addEventListener('click', (e) => {
       if (t && t.taxEntryId) data.taxEntries = data.taxEntries.filter(e => e.id !== t.taxEntryId);
       data.transactions[currentAccId] = data.transactions[currentAccId].filter(t => t.id !== delBtn.dataset.id);
       save();
-      refreshTxDetail(currentAccId);
+      openDetail(currentAccId);
     });
     return;
   }
@@ -1904,7 +1944,7 @@ let editingTxId = null;
 
 // "Standart Renkler" paleti — Office'teki standart renk sırasına yakın
 const STANDARD_TX_COLORS = [
-  { name: 'Varsayılan', hex: '#1a1a1a' },
+  { name: 'Varsayılan', hex: '#17212F' },
   { name: 'Koyu Kırmızı', hex: '#C00000' },
   { name: 'Kırmızı', hex: '#FF0000' },
   { name: 'Turuncu', hex: '#FFC000' },
@@ -1918,13 +1958,13 @@ const STANDARD_TX_COLORS = [
 ];
 
 function renderTxColorPalette(selectedHex) {
-  const sel = (selectedHex || '#1a1a1a').toLowerCase();
+  const sel = (selectedHex || '#17212F').toLowerCase();
   const box = document.getElementById('txEditColorPalette');
   box.innerHTML = STANDARD_TX_COLORS.map(c => {
     const isSel = c.hex.toLowerCase() === sel;
-    const border = isSel ? '2px solid #2b7fff' : '1px solid #ddd';
-    const swatchBg = c.hex === '#1a1a1a' ? '#fff' : c.hex;
-    const inner = c.hex === '#1a1a1a' ? '<span style="display:block; width:100%; height:100%; background:linear-gradient(135deg, transparent 45%, #b3261e 45%, #b3261e 55%, transparent 55%); border-radius:5px;"></span>' : '';
+    const border = isSel ? '2px solid #2F6FE0' : '1px solid #D7DCE5';
+    const swatchBg = c.hex === '#17212F' ? '#fff' : c.hex;
+    const inner = c.hex === '#17212F' ? '<span style="display:block; width:100%; height:100%; background:linear-gradient(135deg, transparent 45%, #C43D33 45%, #C43D33 55%, transparent 55%); border-radius:5px;"></span>' : '';
     return `<button type="button" class="txColorSwatch" data-hex="${c.hex}" title="${c.name}" style="width:26px; height:26px; border-radius:6px; padding:0; border:${border}; background:${swatchBg}; cursor:pointer;">${inner}</button>`;
   }).join('');
 }
@@ -1956,13 +1996,13 @@ function openTxEdit(id) {
   document.getElementById('txEditDebit').value = t.debit || '';
   document.getElementById('txEditCredit').value = t.credit || '';
   document.getElementById('txEditDueDate').value = t.dueDate || '';
-  document.getElementById('txEditColor').value = t.color || '#1a1a1a';
-  renderTxColorPalette(t.color || '#1a1a1a');
+  document.getElementById('txEditColor').value = t.color || '#17212F';
+  renderTxColorPalette(t.color || '#17212F');
   const showKdv = currentAccType === 'musteri' || currentAccType === 'tedarikci';
   document.getElementById('txEditKdvRow').style.display = showKdv ? 'flex' : 'none';
   document.getElementById('txEditKdvTypeLabel').textContent = currentAccType === 'musteri' ? 'satış' : 'alış/satış';
   document.getElementById('txEditKdvTransfer').checked = !!t.kdvTransfer;
-  setTaxRateValue('txEditKdvRate', 'txEditKdvRateCustom', t.kdvRate || TAX_DEFAULT_RATES[Number(t.debit) > 0 ? 'satis' : 'alis']);
+  setTaxRateValue('txEditKdvRate', 'txEditKdvRateCustom', t.kdvRate || 20);
   document.getElementById('txEditKdvRate').style.display = t.kdvTransfer ? '' : 'none';
   document.getElementById('txEditKdvRateCustom').style.display = (t.kdvTransfer && document.getElementById('txEditKdvRate').value === 'custom') ? '' : 'none';
   document.getElementById('txModalOverlay').style.display = 'flex';
@@ -1982,7 +2022,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   if (!date) return;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === editingTxId);
   const dateChanged = t.date !== date;
-  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate; t.color = (color === '#1a1a1a') ? null : color;
+  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate; t.color = (color === '#17212F') ? null : color;
   if (dateChanged) {
     const list = data.transactions[currentAccId] || [];
     ensureTxOrders(list);
@@ -2001,7 +2041,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   upsertTaxEntryFromTx(t, acc);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
-  refreshTxDetail(currentAccId);
+  openDetail(currentAccId);
   renderReminders();
 });
 
@@ -2130,11 +2170,11 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txCredit').value = '';
   document.getElementById('txDueDate').value = '';
   document.getElementById('txKdvTransfer').checked = false;
-  document.getElementById('txKdvRate').value = String(TAX_DEFAULT_RATES[currentAccType === 'musteri' ? 'satis' : 'alis']);
+  document.getElementById('txKdvRate').value = '20';
   document.getElementById('txKdvRate').style.display = 'none';
   document.getElementById('txKdvRateCustom').value = '';
   document.getElementById('txKdvRateCustom').style.display = 'none';
-  refreshTxDetail(currentAccId);
+  openDetail(currentAccId);
   renderReminders();
 });
 
@@ -2349,7 +2389,7 @@ function renderStoragePanel() {
   list.innerHTML = fields.map((f, idx) => `
     <div class="acc-row" style="cursor:default;">
       <div style="display:flex; align-items:center; gap:10px;">
-        <img src="${(f.owner === 'vehicle' ? data.vehicles.find(v=>v.id===f.ownerId) : data.drivers.find(d=>d.id===f.ownerId))[f.key]}" style="width:44px; height:32px; object-fit:cover; border-radius:4px; border:1px solid #ddd;" />
+        <img src="${(f.owner === 'vehicle' ? data.vehicles.find(v=>v.id===f.ownerId) : data.drivers.find(d=>d.id===f.ownerId))[f.key]}" style="width:44px; height:32px; object-fit:cover; border-radius:4px; border:1px solid #D7DCE5;" />
         <div>
           <p class="name">${escapeHtml(f.ownerName)}</p>
           <p class="type">${f.label} · ~${Math.round(f.size/1024).toLocaleString('tr-TR')} KB</p>
@@ -2913,14 +2953,14 @@ function renderIrsaliyeKontrol() {
     segCount++;
   }));
   document.getElementById('irsKontrolSummaryCards').innerHTML = `
-    <div class="card"><p class="label">Mükerrer kayıt</p><p class="value" style="${totalDupExtra > 0 ? 'color:#b3261e;' : ''}">${totalDupExtra}</p></div>
-    <div class="card"><p class="label">Atlanan no</p><p class="value" style="${totalSkipped > 0 ? 'color:#b3261e;' : ''}">${totalSkipped}</p></div>
-    <div class="card"><p class="label">Eksik no</p><p class="value" style="${totalNotYetUsed > 0 ? 'color:#8a5a00;' : ''}">${totalNotYetUsed}</p></div>
+    <div class="card"><p class="label">Mükerrer kayıt</p><p class="value" style="${totalDupExtra > 0 ? 'color:#C43D33;' : ''}">${totalDupExtra}</p></div>
+    <div class="card"><p class="label">Atlanan no</p><p class="value" style="${totalSkipped > 0 ? 'color:#C43D33;' : ''}">${totalSkipped}</p></div>
+    <div class="card"><p class="label">Eksik no</p><p class="value" style="${totalNotYetUsed > 0 ? 'color:#A3660F;' : ''}">${totalNotYetUsed}</p></div>
     <div class="card"><p class="label">Kontrol edilen koçan/aralık</p><p class="value">${segCount}</p></div>
   `;
 
-  const vehHeader = (name) => `<div style="padding:10px 14px; background:#fafafa; border-bottom:1px solid #eee; font-weight:600; font-size:13px;">${escapeHtml(name)}</div>`;
-  const segHeader = (label) => `<div style="padding:6px 14px; font-size:12px; color:#777;">${escapeHtml(label)}</div>`;
+  const vehHeader = (name) => `<div style="padding:10px 14px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; font-weight:600; font-size:13px;">${escapeHtml(name)}</div>`;
+  const segHeader = (label) => `<div style="padding:6px 14px; font-size:12px; color:#5B6B82;">${escapeHtml(label)}</div>`;
 
   // Mükerrer liste — araç, sonra koçan/aralık bazında gruplanmış
   const dupList = document.getElementById('irsDupList');
@@ -2963,7 +3003,7 @@ function renderIrsaliyeKontrol() {
           <div class="rem-left">
             <div>
               <p class="rem-desc">${seg.gapInfo.min} – ${seg.gapInfo.max} aralığında <b>${seg.gapInfo.skipped.length}</b> no atlanmış
-                <span class="rem-acc" style="color:#b3261e;">${escapeHtml(formatMissingRanges(seg.gapInfo.skipped))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
+                <span class="rem-acc" style="color:#C43D33;">${escapeHtml(formatMissingRanges(seg.gapInfo.skipped))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
               </p>
             </div>
           </div>
@@ -2992,7 +3032,7 @@ function renderIrsaliyeKontrol() {
           <div class="rem-left">
             <div>
               <p class="rem-desc">${seg.gapInfo.min} – ${seg.gapInfo.max} aralığında <b>${seg.gapInfo.notYetUsed.length}</b> no eksik / henüz işlenmemiş
-                <span class="rem-acc" style="color:#8a5a00;">${escapeHtml(formatMissingRanges(seg.gapInfo.notYetUsed))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
+                <span class="rem-acc" style="color:#A3660F;">${escapeHtml(formatMissingRanges(seg.gapInfo.notYetUsed))}${seg.gapInfo.capped ? ' (aralık çok geniş, sadece ilk ' + IRS_GAP_MAX_RANGE + ' no kontrol edildi)' : ''}</span>
               </p>
             </div>
           </div>
@@ -3193,7 +3233,7 @@ const TRIP_DEF_CATEGORIES = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', l
 function renderTripDefCategoryTabs() {
   const box = document.getElementById('tripDefCategoryTabs');
   box.innerHTML = TRIP_DEF_CATEGORIES.map(cat => `
-    <button class="tripDefCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeTripDefCategory ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+    <button class="tripDefCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeTripDefCategory ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">
       ${cat.label}
     </button>
   `).join('');
@@ -3310,7 +3350,7 @@ function computeExpectedTripDef(trip) {
 function renderPriceControlCategoryTabs() {
   const box = document.getElementById('priceControlCategoryTabs');
   box.innerHTML = PRICE_CONTROL_CATEGORIES.map(c => `
-    <button class="priceControlCatBtn" data-key="${c.key}" style="font-size:12px; padding:6px 10px; ${c.key === activePriceControlCategory ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">${c.label}</button>
+    <button class="priceControlCatBtn" data-key="${c.key}" style="font-size:12px; padding:6px 10px; ${c.key === activePriceControlCategory ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">${c.label}</button>
   `).join('');
   box.querySelectorAll('.priceControlCatBtn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3381,7 +3421,7 @@ function renderPriceControl() {
             <td style="text-align:left;">${escapeHtml(r.trip.desc || '')}</td>
             <td>${fmt(r.actual)}</td>
             <td>${r.expected !== null ? fmt(r.expected) : (r.veh ? 'Bu kategoride tanım yok' : '—')}</td>
-            <td style="font-weight:700; color:${r.diff === null ? '#999' : (r.diff > 0 ? '#b3261e' : (r.diff < 0 ? '#1a7d3a' : '#1a1a1a'))};">${r.diff !== null ? (r.diff > 0 ? '+' : '') + fmt(r.diff) : '—'}</td>
+            <td style="font-weight:700; color:${r.diff === null ? '#8B99AD' : (r.diff > 0 ? '#C43D33' : (r.diff < 0 ? '#1D8A5B' : '#17212F'))};">${r.diff !== null ? (r.diff > 0 ? '+' : '') + fmt(r.diff) : '—'}</td>
             <td>${r.expected !== null ? `<button class="fixPriceBtn" data-id="${r.trip.id}" style="font-size:12px; padding:4px 8px;">Tanıma göre düzelt</button>` : ''}</td>
           </tr>
         `).join('')}
@@ -3470,7 +3510,7 @@ function renderSeferPageTabs() {
   const box = document.getElementById('seferPageTabs');
   if (box) {
     box.innerHTML = pages.map(p => `
-      <button class="seferPageTabBtn" data-id="${p.id === null ? '__GENEL__' : p.id}" style="font-size:12px; padding:6px 10px; ${p.id === activeSeferPageId ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+      <button class="seferPageTabBtn" data-id="${p.id === null ? '__GENEL__' : p.id}" style="font-size:12px; padding:6px 10px; ${p.id === activeSeferPageId ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">
         ${escapeHtml(p.name)}
       </button>
     `).join('');
@@ -3730,7 +3770,7 @@ document.getElementById('tripEditIrsaliyeNo').addEventListener('input', () => {
   if (conflict) {
     warn.textContent = `Bu no zaten kullanılmış: ${fmtDate(conflict.date)} — ${driverVehicleLabelPlain(conflict)}`;
     warn.style.display = 'block';
-    document.getElementById('tripEditIrsaliyeNo').style.borderColor = '#b3261e';
+    document.getElementById('tripEditIrsaliyeNo').style.borderColor = '#C43D33';
   } else {
     warn.style.display = 'none';
     document.getElementById('tripEditIrsaliyeNo').style.borderColor = '';
@@ -3780,7 +3820,7 @@ document.getElementById('tripIrsaliyeNo').addEventListener('input', () => {
   if (conflict) {
     warn.textContent = `Uyarı: bu no zaten kullanılmış — ${fmtDate(conflict.date)}, ${driverVehicleLabelPlain(conflict)}`;
     warn.style.display = 'block';
-    document.getElementById('tripIrsaliyeNo').style.borderColor = '#b3261e';
+    document.getElementById('tripIrsaliyeNo').style.borderColor = '#C43D33';
   } else {
     warn.style.display = 'none';
     document.getElementById('tripIrsaliyeNo').style.borderColor = '';
@@ -3829,9 +3869,9 @@ function renderDrivers() {
         <p class="sub">${d.phone ? escapeHtml(d.phone) + ' · ' : ''}${d.licenseNo ? 'Ehliyet: ' + escapeHtml(d.licenseNo) + ' · ' : ''}${veh ? escapeHtml(veh.name) : 'Araç atanmadı'}${d.notes ? ' · ' + escapeHtml(d.notes) : ''}</p>
         <p class="sub">${d.licenseExpiry ? 'Ehliyet süresi: ' + fmtDate(d.licenseExpiry) + ' · ' : ''}${d.cardExpiry ? 'Sürücü kartı: ' + fmtDate(d.cardExpiry) + ' · ' : ''}${d.psikoteknikExpiry ? 'Psikoteknik: ' + fmtDate(d.psikoteknikExpiry) : ''}</p>
         <p class="sub" style="display:flex; align-items:center; gap:8px;">
-          ${d.licensePolicyImg ? `<img class="policy-thumb" data-img="${d.licensePolicyImg}" src="${d.licensePolicyImg}" title="Ehliyet görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #ddd; cursor:pointer;" />` : ''}
-          ${d.cardPolicyImg ? `<img class="policy-thumb" data-img="${d.cardPolicyImg}" src="${d.cardPolicyImg}" title="Sürücü kartı görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #ddd; cursor:pointer;" />` : ''}
-          ${d.psikoteknikPolicyImg ? `<img class="policy-thumb" data-img="${d.psikoteknikPolicyImg}" src="${d.psikoteknikPolicyImg}" title="Psikoteknik görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #ddd; cursor:pointer;" />` : ''}
+          ${d.licensePolicyImg ? `<img class="policy-thumb" data-img="${d.licensePolicyImg}" src="${d.licensePolicyImg}" title="Ehliyet görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
+          ${d.cardPolicyImg ? `<img class="policy-thumb" data-img="${d.cardPolicyImg}" src="${d.cardPolicyImg}" title="Sürücü kartı görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
+          ${d.psikoteknikPolicyImg ? `<img class="policy-thumb" data-img="${d.psikoteknikPolicyImg}" src="${d.psikoteknikPolicyImg}" title="Psikoteknik görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
         </p>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
@@ -4332,7 +4372,7 @@ function renderVehicles() {
   list.innerHTML = data.vehicles.map(v => `
     <div class="veh-card">
       <div class="veh-head">
-        <p class="name">${escapeHtml(v.name)} <span style="font-size:11px; font-weight:500; color:#888; background:#f2f2f2; border-radius:6px; padding:2px 8px; margin-left:6px;">${v.category === 'kirkayak' ? 'Kırkayak' : (v.category === 'balikesir' ? 'Balıkesir' : 'Tır')}</span></p>
+        <p class="name">${escapeHtml(v.name)} <span style="font-size:11px; font-weight:500; color:#7C8AA0; background:#EEF1F6; border-radius:6px; padding:2px 8px; margin-left:6px;">${v.category === 'kirkayak' ? 'Kırkayak' : (v.category === 'balikesir' ? 'Balıkesir' : 'Tır')}</span></p>
         <div class="veh-actions">
           <button class="editVehBtn" data-id="${v.id}">Düzenle</button>
           <button class="delVehBtn" data-id="${v.id}">Sil</button>
@@ -4342,16 +4382,16 @@ function renderVehicles() {
         <div class="item"><p class="lbl">Ana km</p><p class="val">${v.baseKm ? v.baseKm.toLocaleString('tr-TR') + ' km' : '—'}</p></div>
         <div class="item"><p class="lbl">Son km</p><p class="val">${lastKmOf(v.id) ? lastKmOf(v.id).toLocaleString('tr-TR') + ' km' : '—'}</p></div>
         <div class="item"><p class="lbl">Muayene tarihi</p><p class="val">${v.muayeneTarihi ? fmtDate(v.muayeneTarihi) : '—'}</p></div>
-        <div class="item"><p class="lbl">Ruhsat görseli</p><p class="val">${v.ruhsatPolicyImg ? `<img class="policy-thumb" data-img="${v.ruhsatPolicyImg}" src="${v.ruhsatPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #ddd; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Ruhsat görseli</p><p class="val">${v.ruhsatPolicyImg ? `<img class="policy-thumb" data-img="${v.ruhsatPolicyImg}" src="${v.ruhsatPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
         <div class="item"><p class="lbl">Trafik sigortası tarihi</p><p class="val">${v.trafikTarihi ? fmtDate(v.trafikTarihi) : '—'}</p></div>
         <div class="item"><p class="lbl">Trafik sigortası firması</p><p class="val">${v.trafikFirma ? escapeHtml(v.trafikFirma) : '—'}</p></div>
-        <div class="item"><p class="lbl">Trafik poliçesi</p><p class="val">${v.trafikPolicyImg ? `<img class="policy-thumb" data-img="${v.trafikPolicyImg}" src="${v.trafikPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #ddd; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Trafik poliçesi</p><p class="val">${v.trafikPolicyImg ? `<img class="policy-thumb" data-img="${v.trafikPolicyImg}" src="${v.trafikPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
         <div class="item"><p class="lbl">Kasko tarihi</p><p class="val">${v.kaskoTarihi ? fmtDate(v.kaskoTarihi) : '—'}</p></div>
         <div class="item"><p class="lbl">Kasko firması</p><p class="val">${v.kaskoFirma ? escapeHtml(v.kaskoFirma) : '—'}</p></div>
-        <div class="item"><p class="lbl">Kasko poliçesi</p><p class="val">${v.kaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.kaskoPolicyImg}" src="${v.kaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #ddd; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Kasko poliçesi</p><p class="val">${v.kaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.kaskoPolicyImg}" src="${v.kaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
         <div class="item"><p class="lbl">Ürün kaskosu tarihi</p><p class="val">${v.urunKaskoTarihi ? fmtDate(v.urunKaskoTarihi) : '—'}</p></div>
         <div class="item"><p class="lbl">Ürün kaskosu firması</p><p class="val">${v.urunKaskoFirma ? escapeHtml(v.urunKaskoFirma) : '—'}</p></div>
-        <div class="item"><p class="lbl">Ürün kaskosu poliçesi</p><p class="val">${v.urunKaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.urunKaskoPolicyImg}" src="${v.urunKaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #ddd; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Ürün kaskosu poliçesi</p><p class="val">${v.urunKaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.urunKaskoPolicyImg}" src="${v.urunKaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
       </div>
     </div>
   `).join('');
@@ -4447,7 +4487,7 @@ document.getElementById('vehModalSave').addEventListener('click', () => {
 function renderFkCategoryTabs() {
   const box = document.getElementById('fkCategoryTabs');
   box.innerHTML = FK_CATEGORIES.map(cat => `
-    <button class="fkCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeFkCategory ? 'background:#1a1a1a; color:#fff; border-color:#1a1a1a;' : ''}">
+    <button class="fkCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeFkCategory ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">
       ${cat.label}
     </button>
   `).join('');
@@ -4522,7 +4562,7 @@ function renderFiyatKontrol() {
   const mismatchCount = scoped.filter(e => e.status !== 'ok').length;
   document.getElementById('fkSummaryCards').innerHTML = `
     <div class="card"><p class="label">Toplam sefer</p><p class="value">${scoped.length}</p></div>
-    <div class="card"><p class="label">Uyumsuz kayıt</p><p class="value" style="${mismatchCount > 0 ? 'color:#b3261e;' : ''}">${mismatchCount}</p></div>
+    <div class="card"><p class="label">Uyumsuz kayıt</p><p class="value" style="${mismatchCount > 0 ? 'color:#C43D33;' : ''}">${mismatchCount}</p></div>
     <div class="card"><p class="label">Tanımı bulunamayan</p><p class="value">${scoped.filter(e => e.status === 'nodef').length}</p></div>
   `;
 
@@ -4536,7 +4576,7 @@ function renderFiyatKontrol() {
     list.innerHTML = `<div class="empty">${onlyMismatch ? 'Uyumsuz kayıt bulunamadı.' : 'Kayıt bulunamadı.'}</div>`;
     return;
   }
-  const statusColors = { ok: '#1a7d3a', nodef: '#8a5a00', defmismatch: '#b3261e', carimismatch: '#b3261e' };
+  const statusColors = { ok: '#1D8A5B', nodef: '#A3660F', defmismatch: '#C43D33', carimismatch: '#C43D33' };
   const rowGrid = '90px 140px 140px 90px 1fr 110px 110px 110px 160px';
   list.innerHTML = filtered.map(e => {
     const t = e.trip;
@@ -4606,7 +4646,7 @@ function renderHareketKontrol() {
   const totalExtra = results.reduce((s, r) => s + r.groups.reduce((x, g) => x + (g.length - 1), 0), 0);
   const totalGroups = results.reduce((s, r) => s + r.groups.length, 0);
   document.getElementById('hkSummaryCards').innerHTML = `
-    <div class="card"><p class="label">Şüpheli mükerrer hareket</p><p class="value" style="${totalExtra > 0 ? 'color:#b3261e;' : ''}">${totalExtra}</p></div>
+    <div class="card"><p class="label">Şüpheli mükerrer hareket</p><p class="value" style="${totalExtra > 0 ? 'color:#C43D33;' : ''}">${totalExtra}</p></div>
     <div class="card"><p class="label">Mükerrer grup sayısı</p><p class="value">${totalGroups}</p></div>
     <div class="card"><p class="label">Etkilenen cari sayısı</p><p class="value">${results.length}</p></div>
   `;
@@ -4623,8 +4663,8 @@ function renderHareketKontrol() {
     const groupRows = r.groups.map(g => {
       const occurrences = g.map((t, idx) => {
         const amtLabel = t.debit ? `${fmt(t.debit)} (Borç)` : `${fmt(t.credit || 0)} (Alacak)`;
-        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; ${idx > 0 ? 'border-top:1px dashed #eee;' : ''}">
-          <span style="font-size:12.5px; color:#555;">${fmtDate(t.date)} · ${escapeHtml(t.desc || '(açıklama yok)')}${t.vehiclePlate ? ' (' + escapeHtml(t.vehiclePlate) + ')' : ''} · ${amtLabel}</span>
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; ${idx > 0 ? 'border-top:1px dashed #E7EAF0;' : ''}">
+          <span style="font-size:12.5px; color:#3A4657;">${fmtDate(t.date)} · ${escapeHtml(t.desc || '(açıklama yok)')}${t.vehiclePlate ? ' (' + escapeHtml(t.vehiclePlate) + ')' : ''} · ${amtLabel}</span>
           <button class="hkDelBtn" data-acc="${r.accountId}" data-tx="${t.id}" style="font-size:11px; padding:3px 8px; flex-shrink:0;">Sil</button>
         </div>`;
       }).join('');
@@ -4674,11 +4714,8 @@ function getTaxRateValue(selectId, customId) {
   return parseFloat(sel);
 }
 
-// Satış faturalarında varsayılan KDV oranı %16, alış faturalarında (ve masraflarda) %20 olarak uygulanır.
-const TAX_DEFAULT_RATES = { satis: 16, alis: 20, masraf: 20 };
-
 function setTaxRateValue(selectId, customId, rate) {
-  const presets = ['20', '16', '10', '1', '0'];
+  const presets = ['20', '10', '1', '0'];
   const rateStr = String(rate);
   const sel = document.getElementById(selectId);
   const customInput = document.getElementById(customId);
@@ -4696,11 +4733,6 @@ function setTaxRateValue(selectId, customId, rate) {
 document.getElementById('taxRate').addEventListener('change', () => {
   document.getElementById('taxRateCustom').style.display = document.getElementById('taxRate').value === 'custom' ? '' : 'none';
 });
-document.getElementById('taxType').addEventListener('change', () => {
-  setTaxRateValue('taxRate', 'taxRateCustom', TAX_DEFAULT_RATES[document.getElementById('taxType').value]);
-});
-// Sayfa ilk açıldığında da tür-oran eşleşmesini uygula (varsayılan tür Satış Faturası → %16).
-setTaxRateValue('taxRate', 'taxRateCustom', TAX_DEFAULT_RATES[document.getElementById('taxType').value]);
 document.getElementById('taxEditRate').addEventListener('change', () => {
   document.getElementById('taxEditRateCustom').style.display = document.getElementById('taxEditRate').value === 'custom' ? '' : 'none';
 });
@@ -4754,10 +4786,10 @@ function renderVergiTakibi() {
   list.innerHTML = groups.map(g => {
     const isCollapsed = collapsedTaxMonths.has(g.monthKey);
     const farkLabel = g.kdvFark > 0.005 ? 'Ödenecek KDV' : (g.kdvFark < -0.005 ? 'Devreden KDV' : 'KDV Farkı');
-    const farkColor = g.kdvFark > 0.005 ? '#b3261e' : (g.kdvFark < -0.005 ? '#1a7d3a' : '#555');
-    const karColor = g.karZarar >= 0 ? '#1a7d3a' : '#b3261e';
-    const header = `<div class="taxMonthHeader" data-taxmonth="${g.monthKey}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fafafa; border-bottom:1px solid #eee; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
-      <span style="font-weight:600; font-size:13px;">${isCollapsed ? '▸' : '▾'} ${monthLabelOf(g.monthKey)} <span style="font-weight:400; color:#999; font-size:11.5px;">(${g.items.length} kayıt)</span></span>
+    const farkColor = g.kdvFark > 0.005 ? '#C43D33' : (g.kdvFark < -0.005 ? '#1D8A5B' : '#3A4657');
+    const karColor = g.karZarar >= 0 ? '#1D8A5B' : '#C43D33';
+    const header = `<div class="taxMonthHeader" data-taxmonth="${g.monthKey}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
+      <span style="font-weight:600; font-size:13px;">${isCollapsed ? '▸' : '▾'} ${monthLabelOf(g.monthKey)} <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(${g.items.length} kayıt)</span></span>
       <span style="display:flex; gap:12px; font-size:12px; font-weight:600; flex-wrap:wrap;">
         <span>Satış: ${fmt(g.totalSatis)}</span>
         <span>Alış: ${fmt(g.totalAlis)}</span>
@@ -4770,22 +4802,22 @@ function renderVergiTakibi() {
 
     const rateRows = Object.keys(g.rateBreakdown).sort((a, b) => Number(b) - Number(a)).map(rk => {
       const rb = g.rateBreakdown[rk];
-      return `<div style="display:grid; grid-template-columns: 60px 1fr 1fr 1fr; gap:8px; padding:5px 14px; font-size:12px; border-bottom:1px dashed #eee;">
+      return `<div style="display:grid; grid-template-columns: 60px 1fr 1fr 1fr; gap:8px; padding:5px 14px; font-size:12px; border-bottom:1px dashed #E7EAF0;">
         <span style="font-weight:600;">%${rk}</span>
-        <span>Satış: ${fmt(rb.satis)} <span style="color:#999;">(KDV ${fmt(rb.satisKdv)})</span></span>
-        <span>Alış: ${fmt(rb.alis)} <span style="color:#999;">(KDV ${fmt(rb.alisKdv)})</span></span>
-        <span>Masraf: ${fmt(rb.masraf)} <span style="color:#999;">(KDV ${fmt(rb.masrafKdv)})</span></span>
+        <span>Satış: ${fmt(rb.satis)} <span style="color:#8B99AD;">(KDV ${fmt(rb.satisKdv)})</span></span>
+        <span>Alış: ${fmt(rb.alis)} <span style="color:#8B99AD;">(KDV ${fmt(rb.alisKdv)})</span></span>
+        <span>Masraf: ${fmt(rb.masraf)} <span style="color:#8B99AD;">(KDV ${fmt(rb.masrafKdv)})</span></span>
       </div>`;
     }).join('');
-    const rateSection = rateRows ? `<div style="background:#fcfcfc;"><div style="padding:6px 14px; font-size:11px; color:#777; font-weight:600;">KDV oranına göre dağılım</div>${rateRows}</div>` : '';
+    const rateSection = rateRows ? `<div style="background:#FBFCFE;"><div style="padding:6px 14px; font-size:11px; color:#5B6B82; font-weight:600;">KDV oranına göre dağılım</div>${rateRows}</div>` : '';
 
     const entryRows = g.items.map(e => {
       const vatAmount = e.amount * (e.vatRate / 100);
       const total = e.amount + vatAmount;
-      const typeColor = e.type === 'satis' ? '#1a7d3a' : (e.type === 'alis' ? '#b3261e' : '#8a5a00');
+      const typeColor = e.type === 'satis' ? '#1D8A5B' : (e.type === 'alis' ? '#C43D33' : '#A3660F');
       const isLinked = !!e.fromTxId;
       const actions = isLinked
-        ? `<span style="font-size:11px; color:#999;">🔗 Cariden otomatik</span>`
+        ? `<span style="font-size:11px; color:#8B99AD;">🔗 Cariden otomatik</span>`
         : `<button class="editTaxEntryBtn" data-id="${e.id}">Düzenle</button><button class="delTaxEntryBtn" data-id="${e.id}">Sil</button>`;
       return `<div class="rem-row">
         <div class="rem-left">
