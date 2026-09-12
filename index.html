@@ -53,7 +53,8 @@
     font-family: var(--font-display); font-size: 24px; font-weight: 700;
     letter-spacing: -0.01em; margin: 0 0 20px;
   }
-  .main-nav { display: flex; gap: 8px; margin-bottom: 20px; }
+  .main-nav { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .main-nav .nav-row { display: flex; gap: 8px; }
   .main-nav button {
     flex: 1; padding: 12px; border-radius: var(--r-sm); border: 1px solid var(--line);
     background: var(--surface); cursor: pointer; font-size: 14px; font-weight: 500; position: relative;
@@ -173,6 +174,12 @@
   .rem-actions button { padding: 5px 10px; font-size: 12px; }
   .rem-amt { font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .done-text { text-decoration: line-through; }
+  .fuel-card-body { flex: 1; min-width: 0; }
+  .fuel-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fuel-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 6px; }
+  .fuel-metrics .fm-lbl { font-size: 11px; color: var(--muted); display: block; }
+  .fuel-metrics .fm-val { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fuel-metrics .fm-val.accent { color: var(--accent-hover); }
 
   .veh-card {
     background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft);
@@ -227,7 +234,8 @@
       flex-direction: column; align-items: stretch !important; gap: 10px;
     }
     h1 { font-size: 19px; text-align: center; }
-    .main-nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; padding-bottom: 4px; }
+    .main-nav { gap: 6px; }
+    .main-nav .nav-row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
     .main-nav button { flex: 0 0 auto; white-space: nowrap; padding: 10px 14px; font-size: 13px; }
     .tabs { flex-wrap: wrap; }
     .tabs button { flex: 1 1 45%; }
@@ -284,18 +292,22 @@
   </div>
 
   <div class="main-nav">
-    <button class="navBtn active" data-view="cariler">Cariler</button>
-    <button class="navBtn" data-view="hatirlaticilar">Hatırlatıcılar<span class="badge" id="remBadge" style="display:none;"></span></button>
-    <button class="navBtn" data-view="araclar">Araçlar</button>
-    <button class="navBtn" data-view="yakit">Yakıt Girişi</button>
-    <button class="navBtn" data-view="soforler">Şoförler</button>
-    <button class="navBtn" data-view="seferler">Sefer Ekle</button>
-    <button class="navBtn" data-view="sefertanimlari">Sefer Tanımları</button>
-    <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
-    <button class="navBtn" data-view="irsaliyekontrol">İrsaliye Kontrolü<span class="badge" id="irsKontrolBadge" style="display:none;"></span></button>
-    <button class="navBtn" data-view="fiyatkontrol">Fiyat Kontrolü<span class="badge" id="fkBadge" style="display:none;"></span></button>
-    <button class="navBtn" data-view="hareketkontrol">Hareket Kontrolü<span class="badge" id="hkBadge" style="display:none;"></span></button>
-    <button class="navBtn" data-view="vergitakibi">Vergi Takibi (KDV)</button>
+    <div class="nav-row">
+      <button class="navBtn" data-view="araclar">Araçlar</button>
+      <button class="navBtn active" data-view="cariler">Cariler</button>
+      <button class="navBtn" data-view="fiyatkontrol">Fiyat Kontrolü<span class="badge" id="fkBadge" style="display:none;"></span></button>
+      <button class="navBtn" data-view="hareketkontrol">Hareket Kontrolü<span class="badge" id="hkBadge" style="display:none;"></span></button>
+      <button class="navBtn" data-view="hatirlaticilar">Hatırlatıcılar<span class="badge" id="remBadge" style="display:none;"></span></button>
+      <button class="navBtn" data-view="irsaliyekontrol">İrsaliye Kontrolü<span class="badge" id="irsKontrolBadge" style="display:none;"></span></button>
+    </div>
+    <div class="nav-row">
+      <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
+      <button class="navBtn" data-view="seferler">Sefer Ekle</button>
+      <button class="navBtn" data-view="sefertanimlari">Sefer Tanımları</button>
+      <button class="navBtn" data-view="soforler">Şoförler</button>
+      <button class="navBtn" data-view="vergitakibi">Vergi Takibi (KDV)</button>
+      <button class="navBtn" data-view="yakit">Yakıt Girişi</button>
+    </div>
   </div>
 
   <div id="alertBanner" style="display:none;"></div>
@@ -452,7 +464,7 @@
       <button id="newSeferPageBtn" style="font-size:12px; padding:6px 10px;">+ Yeni sayfa</button>
     </div>
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer ekle</p>
-    <div class="rem-form" style="grid-template-columns: 1fr 120px 130px 1fr 1fr 130px 80px; align-items:end;">
+    <div class="rem-form" style="grid-template-columns: minmax(0,1fr) 100px 120px minmax(0,1fr) minmax(0,1fr) 110px auto; gap:6px; align-items:end;">
       <div>
         <input type="text" id="tripDriverInput" list="tripDriverDatalist" placeholder="Şoför ara ve seçin..." autocomplete="off" />
         <datalist id="tripDriverDatalist"></datalist>
@@ -4260,10 +4272,15 @@ function renderFuelLogs() {
       }
     }
     return `<div class="rem-row">
-      <div class="rem-left">
-        <div>
+      <div class="fuel-card-body">
+        <div class="fuel-card-top">
+          <span class="rem-desc" style="font-weight:600;">${v ? escapeHtml(v.name) : 'Silinmiş araç'}</span>
           <span class="rem-date">${fmtDate(l.date)}</span>
-          <p class="rem-desc">${v ? escapeHtml(v.name) : 'Silinmiş araç'}<span class="rem-acc">${l.liters||0} lt · ${fmt(l.amount||0)}${unitPrice ? ' · ' + fmt(unitPrice) + '/lt' : ''} · Son KM: ${l.km ? l.km.toLocaleString('tr-TR') : '—'}${gidilenKm !== null ? ' · Gidilen: ' + gidilenKm.toLocaleString('tr-TR') + ' km' : ''}${perKmRow !== null ? ' · 1 km\'de: ' + perKmRow.toFixed(3) + ' lt' : ''}</span></p>
+        </div>
+        <div class="fuel-metrics">
+          <div><span class="fm-lbl">Litre</span><span class="fm-val">${l.liters||0} lt</span></div>
+          <div><span class="fm-lbl">Gidilen km</span><span class="fm-val">${gidilenKm !== null ? gidilenKm.toLocaleString('tr-TR') + ' km' : '—'}</span></div>
+          <div><span class="fm-lbl">1 km'de yakıt</span><span class="fm-val accent">${perKmRow !== null ? perKmRow.toFixed(3) + ' lt' : '—'}</span></div>
         </div>
       </div>
       <div class="rem-actions">
