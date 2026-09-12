@@ -253,6 +253,34 @@
     }
     .rem-form, .tx-form { gap: 8px; }
 
+    /* Cari hareketleri: kart görünümü */
+    #txListHeader { display: none; }
+    .tx-row {
+      display: flex !important;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 3px 10px;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--r-md);
+      margin-bottom: 8px;
+    }
+    .tx-row > span:empty { display: none; }
+    .tx-row .tx-col-date { order: 1; flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+    .tx-row .tx-col-debit, .tx-row .tx-col-credit { order: 2; margin-left: auto; font-weight: 700; font-size: 14px; text-align: right; }
+    .tx-row .tx-col-debit { color: var(--danger); }
+    .tx-row .tx-col-credit { color: var(--success); }
+    .tx-row .tx-col-desc { order: 3; flex: 1 1 100%; font-size: 13.5px; color: var(--ink); margin: 2px 0; }
+    .tx-row .tx-col-irsNo, .tx-row .tx-col-plaka { order: 4; flex: 0 0 auto; font-size: 11px; color: var(--muted-2); }
+    .tx-row .tx-col-balance {
+      order: 5; flex: 1 1 100%; font-size: 11px; color: var(--muted);
+      border-top: 1px solid var(--line-soft); padding-top: 4px; margin-top: 2px;
+    }
+    .tx-row .tx-col-balance::before { content: "Bakiye: "; color: var(--muted-2); }
+    .tx-row .editTxBtn, .tx-row .delTxBtn { order: 6; }
+    .tx-row .editTxBtn { margin-left: auto; }
+
     .summary { grid-template-columns: 1fr 1fr; }
     .acc-row, .rem-row, .driver-card, .veh-card { flex-wrap: wrap; }
     .acc-row .bal, .rem-actions { margin-top: 4px; }
@@ -1890,7 +1918,7 @@ function renderTx() {
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
         else if (k === 'balance') val = fmt(t.runningBalance);
-        const cls = TX_COL_ALIGN_RIGHT[k] ? 'tx-col amt' : 'tx-col';
+        const cls = 'tx-col tx-col-' + k + (TX_COL_ALIGN_RIGHT[k] ? ' amt' : '');
         const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
         return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
       }).join('');
