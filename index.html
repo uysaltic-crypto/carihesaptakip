@@ -282,9 +282,20 @@
     .tx-row .editTxBtn { margin-left: auto; }
 
     .summary { grid-template-columns: 1fr 1fr; }
-    .acc-row, .rem-row, .driver-card, .veh-card { flex-wrap: wrap; }
-    .acc-row .bal, .rem-actions { margin-top: 4px; }
-    .rem-actions { flex-wrap: wrap; }
+    .rem-row, .driver-card, .veh-card { flex-wrap: wrap; }
+    .rem-actions { margin-top: 4px; flex-wrap: wrap; }
+
+    /* Cariler listesi: tek satıra sıkıştır */
+    .acc-row { flex-wrap: nowrap; gap: 8px; padding: 10px 8px; }
+    .acc-row > div:first-child {
+      display: flex; align-items: baseline; gap: 6px;
+      min-width: 0; flex: 1 1 auto; overflow: hidden;
+    }
+    .acc-row .name {
+      font-size: 13px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .acc-row .type { font-size: 11px; margin: 0; white-space: nowrap; flex-shrink: 0; }
+    .acc-row .bal { font-size: 13px; white-space: nowrap; flex-shrink: 0; }
 
     .modal-box {
       width: 92vw !important; max-width: 92vw !important;
