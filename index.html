@@ -357,6 +357,10 @@
         <input type="text" id="txIrsNo" placeholder="İrsaliye no" style="display:none;" />
         <input type="text" id="txDesc" placeholder="Açıklama" />
         <input type="text" id="txPlaka" placeholder="Plaka" style="display:none;" />
+        <select id="txType" style="display:none;">
+          <option value="">Normal</option>
+          <option value="masraf">Masraf</option>
+        </select>
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
@@ -758,6 +762,10 @@
       <input type="text" id="txEditIrsNo" placeholder="İrsaliye no" style="display:none;" />
       <input type="text" id="txEditDesc" placeholder="Açıklama" />
       <input type="text" id="txEditPlaka" placeholder="Plaka" style="display:none;" />
+      <select id="txEditType" style="display:none;">
+        <option value="">Normal</option>
+        <option value="masraf">Masraf</option>
+      </select>
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
       <div id="txEditKdvRow" style="display:none; flex-direction:column; gap:6px;">
@@ -922,6 +930,7 @@
 
     <div class="actions">
       <button id="excelModalCancel">Vazgeç</button>
+      <button id="excelModalDownloadPdf">PDF olarak indir</button>
       <button id="excelModalDownload" class="primary-btn">İndir</button>
     </div>
   </div>
@@ -1609,7 +1618,7 @@ document.getElementById('accList').addEventListener('click', (e) => {
 
 let currentAccIsDriver = false;
 const TX_FORM_GRID_NORMAL = '1fr 2fr 100px 100px 130px 40px';
-const TX_FORM_GRID_DRIVER = '1fr 90px 1.5fr 90px 100px 100px 130px 40px';
+const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 90px 90px 120px 40px';
 
 // Kullanıcının sürükleyerek ayarlayabileceği sütun genişlikleri
 const TX_COL_LABELS = { date: 'Tarih', irsNo: 'İrs. No', desc: 'Açıklama', plaka: 'Plaka', debit: 'Borç', credit: 'Alacak', balance: 'Bakiye' };
@@ -1676,6 +1685,7 @@ function updateTxLayout(isDriver) {
   currentAccIsDriver = isDriver;
   document.getElementById('txIrsNo').style.display = isDriver ? '' : 'none';
   document.getElementById('txPlaka').style.display = isDriver ? '' : 'none';
+  document.getElementById('txType').style.display = isDriver ? '' : 'none';
   document.getElementById('txFormGrid').style.gridTemplateColumns = isDriver ? TX_FORM_GRID_DRIVER : TX_FORM_GRID_NORMAL;
   renderTxHeader();
 }
@@ -1875,7 +1885,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = escapeHtml(t.desc || '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
+        else if (k === 'desc') val = (t.txType === 'masraf' ? '<span style="background:#FDEDEA; color:#C0392B; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:8px; margin-right:6px;">Masraf</span>' : '') + escapeHtml(t.desc || '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2003,8 +2013,10 @@ function openTxEdit(id) {
   document.getElementById('txEditDesc').value = t.desc || '';
   document.getElementById('txEditIrsNo').style.display = currentAccIsDriver ? '' : 'none';
   document.getElementById('txEditPlaka').style.display = currentAccIsDriver ? '' : 'none';
+  document.getElementById('txEditType').style.display = currentAccIsDriver ? '' : 'none';
   document.getElementById('txEditIrsNo').value = t.irsaliyeNo || '';
   document.getElementById('txEditPlaka').value = t.vehiclePlate || '';
+  document.getElementById('txEditType').value = t.txType || '';
   document.getElementById('txEditDebit').value = t.debit || '';
   document.getElementById('txEditCredit').value = t.credit || '';
   document.getElementById('txEditDueDate').value = t.dueDate || '';
@@ -2043,6 +2055,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   if (currentAccIsDriver) {
     t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
     t.vehiclePlate = document.getElementById('txEditPlaka').value.trim();
+    t.txType = document.getElementById('txEditType').value;
   }
   if (currentAccType === 'musteri' || currentAccType === 'tedarikci') {
     t.kdvTransfer = document.getElementById('txEditKdvTransfer').checked;
@@ -2159,6 +2172,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const desc = document.getElementById('txDesc').value.trim();
   const irsaliyeNo = currentAccIsDriver ? document.getElementById('txIrsNo').value.trim() : '';
   const vehiclePlate = currentAccIsDriver ? document.getElementById('txPlaka').value.trim() : '';
+  const txType = currentAccIsDriver ? document.getElementById('txType').value : '';
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txCredit').value) || 0;
   const dueDate = document.getElementById('txDueDate').value || null;
@@ -2169,7 +2183,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const list = data.transactions[currentAccId];
   ensureTxOrders(list);
   const order = nextOrderForDate(list, date);
-  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, debit, credit, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null, order };
+  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, txType, debit, credit, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null, order };
   data.transactions[currentAccId].push(tx);
   upsertTxDueReminder(tx, currentAccId);
   const acc = data.accounts.find(a => a.id === currentAccId);
@@ -2178,6 +2192,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txDesc').value = '';
   document.getElementById('txIrsNo').value = '';
   document.getElementById('txPlaka').value = '';
+  document.getElementById('txType').value = '';
   document.getElementById('txDebit').value = '';
   document.getElementById('txCredit').value = '';
   document.getElementById('txDueDate').value = '';
@@ -2279,15 +2294,11 @@ document.getElementById('excelQuickClear').addEventListener('click', () => {
   document.getElementById('excelDateTo').value = '';
 });
 
-document.getElementById('excelModalDownload').addEventListener('click', () => {
-  const selectedIds = Array.from(document.querySelectorAll('.excelVehCheck:checked')).map(c => c.value);
-  if (selectedIds.length === 0) { alert('Lütfen en az bir araç seçin.'); return; }
-  const dateFrom = document.getElementById('excelDateFrom').value;
-  const dateTo = document.getElementById('excelDateTo').value;
-
-  // Seçilen araçların, seçilen tarih aralığındaki her bireysel yakıt girişi için 1 km'de yakıt değerleri.
-  // Hesaplama için bir önceki dolum referans alınır; bu referans aralığın dışında kalsa bile kullanılır,
-  // aksi halde aralığın ilk girişi hesaplanamadan düşer.
+// Seçilen araçların, seçilen tarih aralığındaki her bireysel yakıt girişi için 1 km'de yakıt
+// değerlerini hesaplar. Hem Excel hem PDF indirme butonları bu fonksiyonu kullanır.
+// Hesaplama için bir önceki dolum referans alınır; bu referans aralığın dışında kalsa bile
+// kullanılır, aksi halde aralığın ilk girişi hesaplanamadan düşer.
+function computeFuelComparisonRows(selectedIds, dateFrom, dateTo) {
   const summaryRows = selectedIds.map(vid => {
     const veh = data.vehicles.find(v => v.id === vid);
     const fullSeries = data.fuelLogs.filter(l => l.vehicleId === vid && l.km).slice().sort((a,b) => (a.km||0) - (b.km||0));
@@ -2303,20 +2314,31 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
     return { name: veh ? veh.name : '', values: perEntryValues, avg };
   }).filter(r => r.values.length > 0).sort((a,b) => (b.avg||0) - (a.avg||0));
 
+  const titleParts = ["1 km'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)"];
+  if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
+
+  const maxValuesLen = summaryRows.reduce((m, r) => Math.max(m, r.values.length), 0);
+
+  return { summaryRows, maxValuesLen, title: titleParts.join(' ') };
+}
+
+document.getElementById('excelModalDownload').addEventListener('click', () => {
+  const selectedIds = Array.from(document.querySelectorAll('.excelVehCheck:checked')).map(c => c.value);
+  if (selectedIds.length === 0) { alert('Lütfen en az bir araç seçin.'); return; }
+  const dateFrom = document.getElementById('excelDateFrom').value;
+  const dateTo = document.getElementById('excelDateTo').value;
+
+  const { summaryRows, maxValuesLen, title } = computeFuelComparisonRows(selectedIds, dateFrom, dateTo);
+
   if (summaryRows.length === 0) {
     alert('Seçilen araç(lar) ve tarih aralığında karşılaştırma için yeterli veri (en az 2 km bilgili yakıt girişi) bulunamadı.');
     return;
   }
 
-  const titleParts = ["1 km'de yakıt tüketimi karşılaştırması (en çok yakandan en aza)"];
-  if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
-
   // Tüm araçların "Alış Adedi" sütunu aynı hizada bitsin diye, en uzun değer listesine göre
   // her satır boş hücrelerle doldurulup en sona alış adedi eklenir.
-  const maxValuesLen = summaryRows.reduce((m, r) => Math.max(m, r.values.length), 0);
-
   const rows = [
-    [titleParts.join(' ')],
+    [title],
     ['', 'Ortalama', ...Array(maxValuesLen).fill(''), 'Alış Adedi'],
     ...summaryRows.map(r => {
       const padding = Array(maxValuesLen - r.values.length).fill('');
@@ -2330,6 +2352,62 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
   ws['!cols'] = Array.from({ length: maxCols }, () => ({ wch: 12 }));
   XLSX.utils.book_append_sheet(wb, ws, 'Yakıt Karşılaştırma');
   XLSX.writeFile(wb, 'yakit-karsilastirma-' + todayStr() + '.xlsx');
+
+  document.getElementById('excelModalOverlay').style.display = 'none';
+});
+
+document.getElementById('excelModalDownloadPdf').addEventListener('click', () => {
+  const selectedIds = Array.from(document.querySelectorAll('.excelVehCheck:checked')).map(c => c.value);
+  if (selectedIds.length === 0) { alert('Lütfen en az bir araç seçin.'); return; }
+  const dateFrom = document.getElementById('excelDateFrom').value;
+  const dateTo = document.getElementById('excelDateTo').value;
+
+  const { summaryRows, maxValuesLen, title } = computeFuelComparisonRows(selectedIds, dateFrom, dateTo);
+
+  if (summaryRows.length === 0) {
+    alert('Seçilen araç(lar) ve tarih aralığında karşılaştırma için yeterli veri (en az 2 km bilgili yakıt girişi) bulunamadı.');
+    return;
+  }
+
+  const numCol = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+  const headerCells = ['', 'Ortalama'];
+  for (let i = 0; i < maxValuesLen; i++) headerCells.push('');
+  headerCells.push('Alış Adedi');
+
+  const bodyRowsHtml = summaryRows.map(r => {
+    let cells = `<td class="plate">${escapeHtml(r.name)}</td>`;
+    cells += `<td class="avg">${r.avg !== null ? numCol(r.avg) : ''}</td>`;
+    for (let i = 0; i < maxValuesLen; i++) {
+      const v = r.values[i];
+      cells += v !== undefined ? `<td class="fill">${numCol(v)}</td>` : `<td></td>`;
+    }
+    cells += `<td class="count">${r.values.length}</td>`;
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #1B2028; }
+      h1 { font-size: 14px; margin: 0 0 14px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #999; padding: 5px 8px; font-size: 12.5px; text-align: center; }
+      th:first-child, td.plate { text-align: left; font-weight: 600; }
+      td.avg { color: #C0392B; font-weight: 700; }
+      td.fill { background: #FFF200; }
+      @media print { body { padding: 0; } }
+    </style>
+  </head><body>
+    <h1>${escapeHtml(title)}</h1>
+    <table>
+      <thead><tr>${headerCells.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${bodyRowsHtml}</tbody>
+    </table>
+    <script>window.onload = () => { window.print(); };<\/script>
+  </body></html>`);
+  printWindow.document.close();
 
   document.getElementById('excelModalOverlay').style.display = 'none';
 });
