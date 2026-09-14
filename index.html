@@ -244,7 +244,8 @@
     .container > div[style*="justify-content:space-between"] > div[style*="display:flex; gap:8px"] {
       flex-direction: column; width: 100%;
     }
-    #exportBtn, #importBtn, #storageBtn, #gdriveBtn { width: 100%; }
+    #gdriveBtn { width: 100%; }
+    #storageBtn, #exportBtn, #importBtn { display: none; }
 
     /* Tüm satır-içi grid formlarını mobilde tek sütuna indir */
     .rem-form, .tx-form, .veh-grid,
@@ -290,16 +291,17 @@
     .rem-actions { margin-top: 4px; flex-wrap: wrap; }
 
     /* Cariler listesi: tek satıra sıkıştır */
-    .acc-row { flex-wrap: nowrap; gap: 8px; padding: 10px 8px; }
+    .acc-row { flex-wrap: nowrap; gap: 6px; padding: 9px 8px; }
     .acc-row > div:first-child {
-      display: flex; align-items: baseline; gap: 6px;
+      display: flex; align-items: baseline; gap: 5px;
       min-width: 0; flex: 1 1 auto; overflow: hidden;
     }
     .acc-row .name {
-      font-size: 13px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 12.5px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0; flex: 1 1 auto;
     }
-    .acc-row .type { font-size: 11px; margin: 0; white-space: nowrap; flex-shrink: 0; }
-    .acc-row .bal { font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+    .acc-row .type { font-size: 10.5px; margin: 0; white-space: nowrap; flex-shrink: 0; }
+    .acc-row .bal { font-size: 12.5px; white-space: nowrap; flex-shrink: 0; }
 
     .modal-box {
       width: 92vw !important; max-width: 92vw !important;
@@ -400,10 +402,14 @@
         <input type="text" id="txIrsNo" placeholder="İrsaliye no" style="display:none;" />
         <input type="text" id="txDesc" placeholder="Açıklama" />
         <input type="text" id="txPlaka" placeholder="Plaka" style="display:none;" />
-        <select id="txType" style="display:none;">
-          <option value="">Normal</option>
-          <option value="masraf">Masraf</option>
-        </select>
+        <input type="text" id="txType" list="txTypeList" placeholder="Normal" style="display:none;" />
+        <datalist id="txTypeList">
+          <option value="Normal"></option>
+          <option value="Masraf"></option>
+          <option value="Resmi"></option>
+          <option value="İcra"></option>
+          <option value="Avans"></option>
+        </datalist>
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
@@ -805,10 +811,7 @@
       <input type="text" id="txEditIrsNo" placeholder="İrsaliye no" style="display:none;" />
       <input type="text" id="txEditDesc" placeholder="Açıklama" />
       <input type="text" id="txEditPlaka" placeholder="Plaka" style="display:none;" />
-      <select id="txEditType" style="display:none;">
-        <option value="">Normal</option>
-        <option value="masraf">Masraf</option>
-      </select>
+      <input type="text" id="txEditType" list="txTypeList" placeholder="Normal" style="display:none;" />
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
       <div id="txEditKdvRow" style="display:none; flex-direction:column; gap:6px;">
@@ -1309,6 +1312,22 @@ function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// Şoför hareketlerinde "Tür" alanına girilen serbest metni renkli bir etiket olarak gösterir.
+// Bilinen türler (Masraf/Resmi/İcra/Avans) için sabit renkler, kullanıcının yazdığı diğer
+// isimler için nötr bir renk kullanılır. "Normal" veya boş değer hiçbir etiket göstermez.
+const TX_TYPE_COLORS = {
+  'masraf': ['#FDEDEA', '#C0392B'],
+  'resmi': ['#EAF1FD', '#2F6FE0'],
+  'icra': ['#F5EAFD', '#8E44AD'],
+  'avans': ['#E8F5EE', '#1E8E5A'],
+};
+function txTypeBadge(type) {
+  const label = (type || '').trim();
+  if (!label || label.toLowerCase() === 'normal') return '';
+  const [bg, fg] = TX_TYPE_COLORS[label.toLowerCase()] || ['#F0F1F4', '#5B6270'];
+  return `<span style="background:${bg}; color:${fg}; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:8px; margin-right:6px;">${escapeHtml(label)}</span>`;
 }
 
 // ---- Arama yapılabilir seçim kutuları (input + datalist) için ortak yardımcılar ----
@@ -1928,7 +1947,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = (t.txType === 'masraf' ? '<span style="background:#FDEDEA; color:#C0392B; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:8px; margin-right:6px;">Masraf</span>' : '') + escapeHtml(t.desc || '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2433,13 +2452,18 @@ document.getElementById('excelModalDownloadPdf').addEventListener('click', () =>
   printWindow.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
     <title>${escapeHtml(title)}</title>
     <style>
-      body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #1B2028; }
-      h1 { font-size: 14px; margin: 0 0 14px; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #999; padding: 5px 8px; font-size: 12.5px; text-align: center; }
-      th:first-child, td.plate { text-align: left; font-weight: 600; }
-      td.avg { color: #C0392B; font-weight: 700; }
-      td.fill { background: #FFF200; }
+      body { font-family: Arial, Helvetica, sans-serif; padding: 14px; color: #1B2028; }
+      h1 { font-size: 12px; margin: 0 0 10px; }
+      table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+      th, td {
+        border: 1px solid #999; padding: 2px 4px; font-size: 9.5px; text-align: center;
+        white-space: nowrap; overflow: hidden;
+      }
+      th:first-child, td.plate { text-align: left; font-weight: 600; width: 78px; }
+      td.avg { color: #C0392B; font-weight: 700; width: 42px; }
+      td.fill { background: #FFF200; width: 38px; }
+      td.count { width: 34px; }
+      @page { size: A4 landscape; margin: 10mm; }
       @media print { body { padding: 0; } }
     </style>
   </head><body>
