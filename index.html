@@ -254,37 +254,56 @@
     }
     .rem-form, .tx-form { gap: 8px; }
 
-    /* Cari hareketleri: tek satır, kart görünümü */
+    /* Cari hareketleri: varsayılan olarak en kısa (tek satır) görünüm — dokununca detay açılır */
     #txListHeader { display: none; }
     .tx-row {
       display: flex !important;
       align-items: center;
       flex-wrap: nowrap;
-      gap: 8px;
-      padding: 10px 12px;
+      gap: 6px;
+      padding: 7px 10px;
       background: var(--surface);
       border: 1px solid var(--line-soft);
       border-radius: var(--r-md);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       overflow: hidden;
+      cursor: pointer;
     }
     .tx-row > span:empty { display: none; }
-    .tx-row .tx-col-irsNo, .tx-row .tx-col-plaka { display: none; }
-    .tx-row .tx-col-date { order: 1; flex: 0 0 auto; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+    .tx-row .tx-col-irsNo, .tx-row .tx-col-plaka, .tx-row .tx-col-balance,
+    .tx-row .editTxBtn, .tx-row .delTxBtn { display: none; }
+    .tx-row .tx-col-date { order: 1; flex: 0 0 auto; font-size: 10px; color: var(--muted); white-space: nowrap; }
     .tx-row .tx-col-desc {
-      order: 2; flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--ink);
+      order: 2; flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--ink);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .tx-row .tx-col-debit, .tx-row .tx-col-credit {
-      order: 3; flex: 0 0 auto; font-weight: 700; font-size: 13px; white-space: nowrap;
+      order: 3; flex: 0 0 auto; font-weight: 700; font-size: 12.5px; white-space: nowrap;
     }
     .tx-row .tx-col-debit { color: var(--danger); }
     .tx-row .tx-col-credit { color: var(--success); }
-    .tx-row .tx-col-balance {
-      order: 4; flex: 0 0 auto; font-size: 11px; color: var(--muted); white-space: nowrap;
+
+    /* Dokununca açılan detay: irsaliye no, plaka, bakiye, düzenle/sil */
+    .tx-row.expanded {
+      flex-wrap: wrap;
+      align-items: baseline;
+      padding: 10px 12px;
+      cursor: default;
     }
-    .tx-row .tx-col-balance::before { content: "· "; }
-    .tx-row .editTxBtn, .tx-row .delTxBtn { order: 5; flex: 0 0 auto; padding: 2px 4px; }
+    .tx-row.expanded .tx-col-desc {
+      white-space: normal; overflow: visible; text-overflow: clip;
+      flex: 1 1 100%; order: 4; font-size: 13px; margin: 4px 0 0;
+    }
+    .tx-row.expanded .tx-col-irsNo, .tx-row.expanded .tx-col-plaka {
+      display: inline-block; order: 5; flex: 0 0 auto; font-size: 11px; color: var(--muted-2); margin-right: 10px;
+    }
+    .tx-row.expanded .tx-col-balance {
+      display: block; order: 6; flex: 1 1 100%; font-size: 11px; color: var(--muted);
+      border-top: 1px solid var(--line-soft); padding-top: 4px; margin-top: 4px;
+    }
+    .tx-row.expanded .tx-col-balance::before { content: "Bakiye: "; }
+    .tx-row.expanded .editTxBtn, .tx-row.expanded .delTxBtn { display: inline-block; order: 7; }
+    .tx-row.expanded .editTxBtn { margin-left: auto; }
 
     .summary { grid-template-columns: 1fr 1fr; }
     .rem-row, .driver-card, .veh-card { flex-wrap: wrap; }
@@ -592,7 +611,7 @@
   </div>
 
   <div id="irsaliyeKontrolView" style="display:none;">
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekrandaki mükerrer/atlanan/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilerek teslim edilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir. Hiç işlenmiş numarası olmayan koçanlar bu taramaya hiç dahil edilmez. İşlenmiş numaraları olan bir koçanda, kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar <b>"atlanan"</b>, bu aralığın dışında (başında veya sonunda) kalıp henüz işlenmemiş no'lar ise <b>"eksik"</b> olarak ayrı ayrı gösterilir. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekrandaki mükerrer/atlanan/eksik no taraması SADECE "İrsaliye Takip" ekranında başlangıç-bitiş no'su girilmiş koçanların aralığında yapılır; koçanı kayıtlı olmayan numaralar taranmaz. <b>"Teslim alındı"</b> olarak işaretlenen koçanlar kapanmış sayılır ve <b>atlanan/eksik no taramasına dahil edilmez</b> (mükerrer kontrolü bu koçanlar için de geçerlidir). Bir koçan aralığındaki bir numara, herhangi bir seferde (hangi şoföre veya araca işlenmiş olursa olsun) kullanılmışsa "işlenmiş" kabul edilir. Hiç işlenmiş numarası olmayan koçanlar bu taramaya hiç dahil edilmez. İşlenmiş numaraları olan bir koçanda, kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar <b>"atlanan"</b>, bu aralığın dışında (başında veya sonunda) kalıp henüz işlenmemiş no'lar ise <b>"eksik"</b> olarak ayrı ayrı gösterilir. "Sefer Ekle" bölümüne yeni bir no girilirken, aynı araca daha önce işlenmiş aynı numara girilirse program uyarır ve kaydetmeyi engeller.</p>
     <div class="summary" id="irsKontrolSummaryCards"></div>
 
     <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında mükerrer kullanılan irsaliye no'ları</p>
@@ -2021,7 +2040,9 @@ document.getElementById('txList').addEventListener('click', (e) => {
     return;
   }
   const editBtn = e.target.closest('.editTxBtn');
-  if (editBtn) openTxEdit(editBtn.dataset.id);
+  if (editBtn) { openTxEdit(editBtn.dataset.id); return; }
+  const row = e.target.closest('.tx-row');
+  if (row) row.classList.toggle('expanded');
 });
 
 let editingTxId = null;
@@ -2850,6 +2871,7 @@ function renderIrsaliyeler() {
       i.returnDate = chk.checked ? todayStr() : null;
       save();
       renderIrsaliyeler();
+      renderIrsaliyeKontrol();
     });
   });
   list.querySelectorAll('.delIrsBtn').forEach(btn => {
@@ -3011,6 +3033,9 @@ function bookletRangeOf(bk) {
 
 // İrsaliye Kontrolü ekranı SADECE "İrsaliye Takip" ekranından teslim edilerek başlangıç-bitiş
 // no'su girilmiş koçanların aralığını tarar (koçanı kaydedilmemiş numaralar taranmaz).
+// "Teslim alındı" olarak işaretlenen koçanlar kapanmış sayılır: bu koçanlar için atlanan/eksik
+// no taraması hiç yapılmaz (aşağıdaki hasAnyProcessed koşuluna bakınız); mükerrer no kontrolü ise
+// koçanın teslim durumundan bağımsız olarak tüm koçanlarda çalışmaya devam eder.
 // Bir koçan aralığındaki bir numaranın "işlenmiş" sayılması için o numarayla girilmiş HERHANGİ
 // bir sefer yeterlidir — sefer hangi şoföre veya araca kayıtlı olursa olsun (koçan başka bir
 // araca bağlı olsa bile) o numara işlenmiş kabul edilir ve eksik listesine yazılmaz.
@@ -3040,8 +3065,10 @@ function computeIrsKontrol() {
     const used = new Set(inRange.map(x => x.num));
 
     // Koçanda hiç işlenmiş no yoksa (henüz hiç kullanılmamışsa) bunu "eksik/atlanan" saymıyoruz —
-    // bu tarama sadece en az bir numarası işlenmiş koçanlarda yapılır.
-    const hasAnyProcessed = used.size > 0;
+    // bu tarama sadece en az bir numarası işlenmiş koçanlarda yapılır. Koçan "Teslim alındı" olarak
+    // işaretlenmişse (kapanmış sayılır) bu koçan için de eksik/atlanan taraması hiç yapılmaz —
+    // sadece mükerrer kontrolü (yukarıdaki duplicateGroups) bu koçanlar için de geçerliliğini korur.
+    const hasAnyProcessed = used.size > 0 && !bk.returned;
     // "Atlanan": kullanılan en küçük ve en büyük no arasında kalıp işlenmemiş no'lar — bunlar
     // gerçekten atlanmış/unutulmuş sayılır (aradaki sıradan biri eksik).
     // "Eksik": kullanılan en küçük no'dan önce veya en büyük no'dan sonra kalan, henüz hiç
