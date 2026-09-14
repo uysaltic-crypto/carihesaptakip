@@ -2454,16 +2454,16 @@ document.getElementById('excelModalDownloadPdf').addEventListener('click', () =>
     <style>
       body { font-family: Arial, Helvetica, sans-serif; padding: 14px; color: #1B2028; }
       h1 { font-size: 12px; margin: 0 0 10px; }
-      table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+      table { border-collapse: collapse; width: auto; table-layout: fixed; }
       th, td {
-        border: 1px solid #999; padding: 2px 4px; font-size: 9.5px; text-align: center;
-        white-space: nowrap; overflow: hidden;
+        border: 1px solid #999; padding: 2px 3px; font-size: 9px; text-align: center;
+        white-space: nowrap; overflow: hidden; width: 34px;
       }
-      th:first-child, td.plate { text-align: left; font-weight: 600; width: 78px; }
-      td.avg { color: #C0392B; font-weight: 700; width: 42px; }
-      td.fill { background: #FFF200; width: 38px; }
-      td.count { width: 34px; }
-      @page { size: A4 landscape; margin: 10mm; }
+      th:first-child, td.plate { text-align: left; font-weight: 600; width: 66px; }
+      td.avg { color: #C0392B; font-weight: 700; width: 38px; }
+      td.fill { background: #FFF200; width: 34px; }
+      td.count { width: 30px; }
+      @page { size: A4 landscape; margin: 8mm; }
       @media print { body { padding: 0; } }
     </style>
   </head><body>
