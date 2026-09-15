@@ -529,7 +529,8 @@
   <div class="modal-overlay" id="hakedisPdfModalOverlay">
     <div class="modal-box" style="max-width:420px;">
       <h3>Hakediş raporu (PDF)</h3>
-      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. Masraf ayrı bir sütunda gösterilir, Nakit hesabına dahil edilmez.</p>
+      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında sefer kaydı veya cari hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. "Çalışan" olarak işaretlenen kişiler listenin en altında ayrı bir "Çalışanlar" başlığı altında gösterilir ve Masraf sütunları boş bırakılır. Masraf, diğer gruplarda ayrı bir sütunda gösterilir, Nakit hesabına dahil edilmez.</p>
+      <p style="font-size:12.5px; color:#8B99AD; margin:-6px 0 12px;">Bir şoförü "Çalışan" olarak işaretlemek için Şoförler ekranında ilgili kişiyi düzenleyip "Sefer grubu" alanından "Çalışan"ı seçin.</p>
       <div class="field-group">
         <input type="date" id="hakedisPdfDateFrom" style="flex:1;" />
         <input type="date" id="hakedisPdfDateTo" style="flex:1;" />
@@ -1072,6 +1073,7 @@
         <option value="tir">Tır</option>
         <option value="kirkayak">Kırkayak</option>
         <option value="balikesir">Balıkesir</option>
+        <option value="calisan">Çalışan</option>
       </select>
       <input id="driverPhone" placeholder="Telefon (opsiyonel)" />
       <input id="driverLicenseNo" placeholder="Ehliyet no (opsiyonel)" />
@@ -3541,6 +3543,10 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
 // hesabına dahil edilmez. Hakediş = "Normal" türündeki (çoğunlukla sefer ekleme ekranından
 // otomatik gelen) hareketlerin net bakiyesi (alacak - borç). Nakit = Hakediş - Resmi - (tüm
 // özel/İcra sütunları toplamı, ör. CRT İcra + Sedat İcra) - Avans.
+// Seçilen aralıkta hiç seferi olmasa bile, cari hareketi (ör. masraf) olan şoförler de rapora
+// dahil edilir; grubu belirlenemezse kendi "Sefer grubu" alanına (yoksa Tır'a) düşer. Kategorisi
+// "Çalışan" olarak işaretlenmiş kişiler her zaman ayrı bir "Çalışanlar" grubunda, listenin en
+// altında gösterilir ve onların Masraf hücresi bilinçli olarak boş bırakılır.
 function computeHakedisReport(dateFrom, dateTo) {
   const inRange = (d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo);
 
@@ -3558,11 +3564,20 @@ function computeHakedisReport(dateFrom, dateTo) {
 
   data.drivers.forEach(driver => {
     const counts = driverCatCounts[driver.id];
-    if (!counts) return;
-    let group = 'tir', max = 0;
-    Object.keys(counts).forEach(cat => { if (counts[cat] > max) { max = counts[cat]; group = cat; } });
-
     const txs = driver.accountId ? (data.transactions[driver.accountId] || []).filter(t => inRange(t.date)) : [];
+    if (!counts && txs.length === 0) return;
+
+    let group;
+    if (driver.category === 'calisan') {
+      group = 'calisan';
+    } else if (counts) {
+      group = 'tir';
+      let max = 0;
+      Object.keys(counts).forEach(cat => { if (counts[cat] > max) { max = counts[cat]; group = cat; } });
+    } else {
+      group = driver.category || 'tir';
+    }
+
     let hakedis = 0, resmi = 0, avans = 0, masraf = 0;
     const icra = {};
     txs.forEach(t => {
@@ -3603,13 +3618,13 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const { rows, dynamicLabels } = computeHakedisReport(dateFrom, dateTo);
 
   if (rows.length === 0) {
-    alert('Seçilen tarih aralığında sefer kaydı olan şoför bulunamadı.');
+    alert('Seçilen tarih aralığında sefer kaydı veya cari hareketi olan şoför/çalışan bulunamadı.');
     return;
   }
 
   const dynamicKeys = Object.keys(dynamicLabels).sort((a, b) => dynamicLabels[a].localeCompare(dynamicLabels[b], 'tr'));
-  const CAT_ORDER = ['tir', 'kirkayak', 'balikesir'];
-  const catLabel = (c) => c === 'kirkayak' ? 'KIRKAYAK' : (c === 'balikesir' ? 'BALIKESİR' : 'TIRLAR');
+  const CAT_ORDER = ['tir', 'kirkayak', 'balikesir', 'calisan'];
+  const catLabel = (c) => c === 'kirkayak' ? 'KIRKAYAK' : (c === 'balikesir' ? 'BALIKESİR' : (c === 'calisan' ? 'ÇALIŞANLAR' : 'TIRLAR'));
   const num = (n) => n ? n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 
   const byGroup = {};
@@ -3620,8 +3635,10 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   dynamicKeys.forEach(k => dynTotals[k] = 0);
 
   const rowHtml = (r, showGroupCell, rowspan) => {
+    const isCalisan = r.group === 'calisan';
     totals.hakedis += r.hakedis; totals.resmi += r.resmi; totals.avans += r.avans;
-    totals.nakit += r.nakit; totals.masraf += r.masraf;
+    totals.nakit += r.nakit;
+    if (!isCalisan) totals.masraf += r.masraf; // Çalışanlar bölümünde Masraf sütunu bilinçli olarak boş bırakılır
     dynamicKeys.forEach(k => dynTotals[k] += (r.icra[k] || 0));
     let html = '<tr>';
     html += showGroupCell ? `<td class="grp" rowspan="${rowspan}">${escapeHtml(catLabel(r.group))}</td>` : '';
@@ -3631,7 +3648,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="avans">${num(r.avans)}</td>`;
     html += `<td class="nakit">${num(r.nakit)}</td>`;
-    html += `<td class="masraf">${num(r.masraf)}</td>`;
+    html += `<td class="masraf">${isCalisan ? '' : num(r.masraf)}</td>`;
     return html + '</tr>';
   };
 
