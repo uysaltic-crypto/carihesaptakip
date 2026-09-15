@@ -422,13 +422,8 @@
         <input type="text" id="txDesc" placeholder="Açıklama" />
         <input type="text" id="txPlaka" placeholder="Plaka" style="display:none;" />
         <input type="text" id="txType" list="txTypeList" placeholder="Normal" style="display:none;" />
-        <datalist id="txTypeList">
-          <option value="Normal"></option>
-          <option value="Masraf"></option>
-          <option value="Resmi"></option>
-          <option value="İcra"></option>
-          <option value="Avans"></option>
-        </datalist>
+        <button type="button" id="txTypeManageBtn" title="Tür listesini düzenle (ekle/sil/yeniden adlandır)" style="display:none; padding:9px 6px;">⚙</button>
+        <datalist id="txTypeList"></datalist>
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
@@ -846,7 +841,10 @@
       <input type="text" id="txEditIrsNo" placeholder="İrsaliye no" style="display:none;" />
       <input type="text" id="txEditDesc" placeholder="Açıklama" />
       <input type="text" id="txEditPlaka" placeholder="Plaka" style="display:none;" />
-      <input type="text" id="txEditType" list="txTypeList" placeholder="Normal" style="display:none;" />
+      <div id="txEditTypeRow" style="display:none; gap:8px;">
+        <input type="text" id="txEditType" list="txTypeList" placeholder="Normal" style="flex:1;" />
+        <button type="button" id="txEditTypeManageBtn" title="Tür listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 10px;">⚙</button>
+      </div>
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
       <div id="txEditKdvRow" style="display:none; flex-direction:column; gap:6px;">
@@ -873,6 +871,19 @@
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
       <button id="txEditSave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="txTypeManageModalOverlay">
+  <div class="modal-box">
+    <h3>Tür listesini düzenle</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Şoför hareketlerindeki "Tür" alanında öneri olarak çıkan isimleri buradan ekleyebilir, silebilir veya yeniden adlandırabilirsiniz. Bir ismi değiştirirseniz, o türü kullanan tüm hareketler otomatik olarak yeni isimle güncellenir.</p>
+    <div id="txTypeManageList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px; max-height:340px; overflow-y:auto;"></div>
+    <button type="button" id="txTypeManageAddBtn" style="font-size:13px; text-align:left;">+ Yeni tür ekle</button>
+    <div class="actions">
+      <button id="txTypeManageCancel">Vazgeç</button>
+      <button id="txTypeManageSave" class="primary-btn">Kaydet</button>
     </div>
   </div>
 </div>
@@ -1131,7 +1142,7 @@
 
 <script>
 const STORAGE_KEY = 'cari-hesap-data-v1';
-let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] };
+let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'] };
 let activeFkCategory = 'hepsi';
 const FK_CATEGORIES = [
   { key: 'hepsi', label: 'Tümü' },
@@ -1279,6 +1290,13 @@ function migrateLegacyFuelData() {
   if (changed) save();
 }
 
+function migrateTxTypeOptions() {
+  if (!Array.isArray(data.txTypeOptions) || data.txTypeOptions.length === 0) {
+    data.txTypeOptions = ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'];
+    save();
+  }
+}
+
 function isAllDataEmpty() {
   return data.accounts.length === 0 && data.reminders.length === 0 && data.vehicles.length === 0 &&
     data.drivers.length === 0 && data.trips.length === 0 && data.fuelLogs.length === 0 && data.tripDefs.length === 0;
@@ -1301,13 +1319,14 @@ function updateEmptyDataBanner() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, JSON.parse(raw));
+    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'] }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
-  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase];
+  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase, migrateTxTypeOptions];
   migrations.forEach(fn => {
     try { fn(); } catch (e) { console.error('Düzeltme (migration) hatası: ' + fn.name, e); }
   });
   try {
+    renderTxTypeList();
     updateTabStyles();
     renderList();
     renderReminders();
@@ -1358,6 +1377,94 @@ const TX_TYPE_COLORS = {
   'icra': ['#F5EAFD', '#8E44AD'],
   'avans': ['#E8F5EE', '#1E8E5A'],
 };
+
+// "Tür" alanının öneri listesi (datalist) kullanıcı tarafından yönetilebilir (data.txTypeOptions).
+function renderTxTypeList() {
+  const dl = document.getElementById('txTypeList');
+  dl.innerHTML = (data.txTypeOptions || []).map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+}
+
+let txTypeWorking = [];
+let txTypeOriginal = [];
+
+function renderTxTypeManageRows() {
+  const wrap = document.getElementById('txTypeManageList');
+  if (txTypeWorking.length === 0) {
+    wrap.innerHTML = `<p style="font-size:12.5px; color:#8B99AD; margin:0;">Henüz tür eklenmemiş.</p>`;
+    return;
+  }
+  wrap.innerHTML = txTypeWorking.map((v, i) => `
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="text" data-i="${i}" class="txTypeManageInput" value="${escapeHtml(v)}" style="flex:1;" />
+      <button type="button" data-i="${i}" class="txTypeManageDelBtn" title="Sil" style="border:none; background:none; color:#C43D33; padding:4px 8px; font-size:15px;">✕</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.txTypeManageInput').forEach(inp => {
+    inp.addEventListener('input', () => { txTypeWorking[Number(inp.dataset.i)] = inp.value; });
+  });
+  wrap.querySelectorAll('.txTypeManageDelBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.i);
+      txTypeWorking.splice(i, 1);
+      txTypeOriginal.splice(i, 1);
+      renderTxTypeManageRows();
+    });
+  });
+}
+
+function openTxTypeManageModal() {
+  txTypeWorking = (data.txTypeOptions || []).slice();
+  txTypeOriginal = (data.txTypeOptions || []).slice();
+  renderTxTypeManageRows();
+  document.getElementById('txTypeManageModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('txTypeManageBtn').addEventListener('click', openTxTypeManageModal);
+document.getElementById('txEditTypeManageBtn').addEventListener('click', openTxTypeManageModal);
+
+document.getElementById('txTypeManageAddBtn').addEventListener('click', () => {
+  txTypeWorking.push('');
+  txTypeOriginal.push(null);
+  renderTxTypeManageRows();
+  const inputs = document.querySelectorAll('.txTypeManageInput');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+});
+
+document.getElementById('txTypeManageCancel').addEventListener('click', () => {
+  document.getElementById('txTypeManageModalOverlay').style.display = 'none';
+});
+
+document.getElementById('txTypeManageSave').addEventListener('click', () => {
+  const renames = [];
+  const finalList = [];
+  const seen = new Set();
+  for (let i = 0; i < txTypeWorking.length; i++) {
+    const val = (txTypeWorking[i] || '').trim();
+    if (!val) continue;
+    const key = val.toLocaleLowerCase('tr-TR');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    finalList.push(val);
+    const orig = txTypeOriginal[i];
+    if (orig && orig.trim() && orig.trim().toLocaleLowerCase('tr-TR') !== key) {
+      renames.push({ from: orig.trim(), to: val });
+    }
+  }
+  if (finalList.length === 0) { alert('En az bir tür kalmalı.'); return; }
+  renames.forEach(r => {
+    const fromKey = r.from.toLocaleLowerCase('tr-TR');
+    Object.keys(data.transactions).forEach(accId => {
+      (data.transactions[accId] || []).forEach(t => {
+        if ((t.txType || '').trim().toLocaleLowerCase('tr-TR') === fromKey) t.txType = r.to;
+      });
+    });
+  });
+  data.txTypeOptions = finalList;
+  save();
+  renderTxTypeList();
+  document.getElementById('txTypeManageModalOverlay').style.display = 'none';
+  if (currentAccId) renderTx();
+});
 function txTypeBadge(type) {
   const label = (type || '').trim();
   if (!label || label.toLowerCase() === 'normal') return '';
@@ -1715,7 +1822,7 @@ document.getElementById('accList').addEventListener('click', (e) => {
 
 let currentAccIsDriver = false;
 const TX_FORM_GRID_NORMAL = '1fr 2fr 100px 100px 130px 40px';
-const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 90px 90px 120px 40px';
+const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 30px 90px 90px 120px 40px';
 
 // Kullanıcının sürükleyerek ayarlayabileceği sütun genişlikleri
 const TX_COL_LABELS = { date: 'Tarih', irsNo: 'İrs. No', desc: 'Açıklama', plaka: 'Plaka', debit: 'Borç', credit: 'Alacak', balance: 'Bakiye' };
@@ -1783,6 +1890,7 @@ function updateTxLayout(isDriver) {
   document.getElementById('txIrsNo').style.display = isDriver ? '' : 'none';
   document.getElementById('txPlaka').style.display = isDriver ? '' : 'none';
   document.getElementById('txType').style.display = isDriver ? '' : 'none';
+  document.getElementById('txTypeManageBtn').style.display = isDriver ? '' : 'none';
   document.getElementById('txFormGrid').style.gridTemplateColumns = isDriver ? TX_FORM_GRID_DRIVER : TX_FORM_GRID_NORMAL;
   renderTxHeader();
 }
@@ -2112,7 +2220,7 @@ function openTxEdit(id) {
   document.getElementById('txEditDesc').value = t.desc || '';
   document.getElementById('txEditIrsNo').style.display = currentAccIsDriver ? '' : 'none';
   document.getElementById('txEditPlaka').style.display = currentAccIsDriver ? '' : 'none';
-  document.getElementById('txEditType').style.display = currentAccIsDriver ? '' : 'none';
+  document.getElementById('txEditTypeRow').style.display = currentAccIsDriver ? 'flex' : 'none';
   document.getElementById('txEditIrsNo').value = t.irsaliyeNo || '';
   document.getElementById('txEditPlaka').value = t.vehiclePlate || '';
   document.getElementById('txEditType').value = t.txType || '';
