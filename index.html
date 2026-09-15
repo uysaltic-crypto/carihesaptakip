@@ -3538,7 +3538,9 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
 // fiyatsız girilmiş bir seferi olan şoför grupta görünür ama ilgili hücreleri boş kalabilir.
 // Cari harekette "Tür" alanına Normal/Resmi/Avans/Masraf dışında serbestçe yazılan her isim
 // (örn. "CRT İcra") kendi sütununu oluşturur. Masraf ayrı bir sütunda gösterilir ve Nakit
-// hesabına dahil edilmez. Nakit = Hakediş - Resmi - (tüm özel/İcra sütunları toplamı) - Avans.
+// hesabına dahil edilmez. Hakediş = "Normal" türündeki (çoğunlukla sefer ekleme ekranından
+// otomatik gelen) hareketlerin net bakiyesi (alacak - borç). Nakit = Hakediş - Resmi - (tüm
+// özel/İcra sütunları toplamı, ör. CRT İcra + Sedat İcra) - Avans.
 function computeHakedisReport(dateFrom, dateTo) {
   const inRange = (d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo);
 
@@ -3561,14 +3563,14 @@ function computeHakedisReport(dateFrom, dateTo) {
     Object.keys(counts).forEach(cat => { if (counts[cat] > max) { max = counts[cat]; group = cat; } });
 
     const txs = driver.accountId ? (data.transactions[driver.accountId] || []).filter(t => inRange(t.date)) : [];
-    let hakedis = 0, resmi = 0, avans = 0, masraf = 0, manualAdj = 0;
+    let hakedis = 0, resmi = 0, avans = 0, masraf = 0;
     const icra = {};
     txs.forEach(t => {
       const typeRaw = (t.txType || '').trim();
       const typeKey = typeRaw.toLowerCase();
       const credit = Number(t.credit) || 0;
       const debit = Number(t.debit) || 0;
-      if (!typeRaw || typeKey === 'normal') { hakedis += credit; manualAdj -= debit; }
+      if (!typeRaw || typeKey === 'normal') { hakedis += credit - debit; }
       else if (typeKey === 'resmi') resmi += debit;
       else if (typeKey === 'avans') avans += debit;
       else if (typeKey === 'masraf') masraf += debit;
@@ -3578,7 +3580,7 @@ function computeHakedisReport(dateFrom, dateTo) {
       }
     });
     const icraTotal = Object.values(icra).reduce((s, v) => s + v, 0);
-    const nakit = hakedis - resmi - icraTotal - avans + manualAdj;
+    const nakit = hakedis - resmi - icraTotal - avans;
 
     rows.push({ name: driver.name, group, hakedis, resmi, icra, avans, nakit, masraf });
   });
