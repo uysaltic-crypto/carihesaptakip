@@ -1380,36 +1380,6 @@ const TX_TYPE_COLORS = {
   'avans': ['#E8F5EE', '#1E8E5A'],
 };
 
-// "Tür" alanı boş/"Normal" dışında bir değer taşıyorsa (Masraf/Resmi/İcra/Avans gibi), bu hareket
-// şoförün işletme için yaptığı bir masraf/kesinti sayılır ve tutar HER ZAMAN Borç alanına yazılır.
-// Kullanıcı tutarı yanlışlıkla Alacak alanına girse bile kaydederken otomatik olarak Borç'a taşınır.
-function isDeductionTxType(typeRaw) {
-  const key = (typeRaw || '').trim().toLowerCase();
-  return !!key && key !== 'normal';
-}
-function normalizeDriverDebitCredit(typeRaw, debit, credit) {
-  if (isDeductionTxType(typeRaw) && credit > 0 && debit === 0) {
-    return { debit: credit, credit: 0 };
-  }
-  return { debit, credit };
-}
-function syncTxAmountFields(typeInputId, debitInputId, creditInputId) {
-  const typeEl = document.getElementById(typeInputId);
-  const debitEl = document.getElementById(debitInputId);
-  const creditEl = document.getElementById(creditInputId);
-  const debit = parseFloat(debitEl.value) || 0;
-  const credit = parseFloat(creditEl.value) || 0;
-  const norm = normalizeDriverDebitCredit(typeEl.value, debit, credit);
-  if (norm.debit !== debit || norm.credit !== credit) {
-    debitEl.value = norm.debit || '';
-    creditEl.value = norm.credit || '';
-  }
-}
-document.getElementById('txType').addEventListener('input', () => syncTxAmountFields('txType', 'txDebit', 'txCredit'));
-document.getElementById('txCredit').addEventListener('change', () => syncTxAmountFields('txType', 'txDebit', 'txCredit'));
-document.getElementById('txEditType').addEventListener('input', () => syncTxAmountFields('txEditType', 'txEditDebit', 'txEditCredit'));
-document.getElementById('txEditCredit').addEventListener('change', () => syncTxAmountFields('txEditType', 'txEditDebit', 'txEditCredit'));
-
 // "Tür" alanının öneri listesi (datalist) kullanıcı tarafından yönetilebilir (data.txTypeOptions).
 function renderTxTypeList() {
   const dl = document.getElementById('txTypeList');
@@ -2278,13 +2248,9 @@ document.getElementById('txEditCancel').addEventListener('click', () => {
 document.getElementById('txEditSave').addEventListener('click', () => {
   const date = document.getElementById('txEditDate').value;
   const desc = document.getElementById('txEditDesc').value.trim();
-  let debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
-  let credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
+  const debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
+  const credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
   const editTxType = currentAccIsDriver ? document.getElementById('txEditType').value : '';
-  if (currentAccIsDriver) {
-    const norm = normalizeDriverDebitCredit(editTxType, debit, credit);
-    debit = norm.debit; credit = norm.credit;
-  }
   const dueDate = document.getElementById('txEditDueDate').value || null;
   const color = document.getElementById('txEditColor').value;
   if (!date) return;
@@ -2417,12 +2383,8 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const irsaliyeNo = currentAccIsDriver ? document.getElementById('txIrsNo').value.trim() : '';
   const vehiclePlate = currentAccIsDriver ? document.getElementById('txPlaka').value.trim() : '';
   const txType = currentAccIsDriver ? document.getElementById('txType').value : '';
-  let debit = parseFloat(document.getElementById('txDebit').value) || 0;
-  let credit = parseFloat(document.getElementById('txCredit').value) || 0;
-  if (currentAccIsDriver) {
-    const norm = normalizeDriverDebitCredit(txType, debit, credit);
-    debit = norm.debit; credit = norm.credit;
-  }
+  const debit = parseFloat(document.getElementById('txDebit').value) || 0;
+  const credit = parseFloat(document.getElementById('txCredit').value) || 0;
   const dueDate = document.getElementById('txDueDate').value || null;
   const kdvTransfer = document.getElementById('txKdvTransfer').checked;
   const kdvRate = getTaxRateValue('txKdvRate', 'txKdvRateCustom');
@@ -3581,7 +3543,9 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
 // (örn. "CRT İcra") kendi sütununu oluşturur. Masraf ayrı bir sütunda gösterilir ve Nakit
 // hesabına dahil edilmez. Hakediş = "Normal" türündeki (çoğunlukla sefer ekleme ekranından
 // otomatik gelen) hareketlerin net bakiyesi (alacak - borç). Nakit = Hakediş - Resmi - (tüm
-// özel/İcra sütunları toplamı, ör. CRT İcra + Sedat İcra) - Avans.
+// özel/İcra sütunları toplamı, ör. CRT İcra + Sedat İcra) - Avans. Masraf, "Masraf" türündeki
+// hareketlerin net bakiyesidir (borç - alacak); yani Masraf tutarı Borç'a da Alacak'a da
+// girilebilir, rapor hangi tarafa girildiyse ona göre (Alacak'a girilmişse eksi işaretle) hesaplar.
 // Seçilen aralıkta hiç seferi olmasa bile, cari hareketi (ör. masraf) olan şoförler de rapora
 // dahil edilir; grubu belirlenemezse kendi "Sefer grubu" alanına (yoksa Tır'a) düşer. Kategorisi
 // "Çalışan" olarak işaretlenmiş kişiler her zaman ayrı bir "Çalışanlar" grubunda, listenin en
@@ -3627,7 +3591,7 @@ function computeHakedisReport(dateFrom, dateTo) {
       if (!typeRaw || typeKey === 'normal') { hakedis += credit - debit; }
       else if (typeKey === 'resmi') resmi += debit;
       else if (typeKey === 'avans') avans += debit;
-      else if (typeKey === 'masraf') masraf += debit;
+      else if (typeKey === 'masraf') masraf += (debit - credit);
       else {
         icra[typeKey] = (icra[typeKey] || 0) + debit;
         if (!dynamicLabels[typeKey]) dynamicLabels[typeKey] = typeRaw;
