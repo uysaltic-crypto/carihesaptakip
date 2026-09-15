@@ -526,8 +526,24 @@
     <div class="toolbar">
       <button id="newDriverBtn" class="primary-btn">+ Yeni şoför</button>
       <button id="driverExcelBtn">📊 Excel raporu al</button>
+      <button id="hakedisPdfBtn">🧾 Hakediş raporu (PDF)</button>
     </div>
     <div id="driverList"></div>
+  </div>
+
+  <div class="modal-overlay" id="hakedisPdfModalOverlay">
+    <div class="modal-box" style="max-width:420px;">
+      <h3>Hakediş raporu (PDF)</h3>
+      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. Masraf ayrı bir sütunda gösterilir, Nakit hesabına dahil edilmez.</p>
+      <div class="field-group">
+        <input type="date" id="hakedisPdfDateFrom" style="flex:1;" />
+        <input type="date" id="hakedisPdfDateTo" style="flex:1;" />
+      </div>
+      <div class="actions">
+        <button id="hakedisPdfCancel">Vazgeç</button>
+        <button id="hakedisPdfGenerate" class="primary-btn">Rapor Oluştur</button>
+      </div>
+    </div>
   </div>
 
   <div id="seferlerView" style="display:none;">
@@ -3404,6 +3420,163 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
   XLSX.writeFile(wb, 'sofor-sefer-raporu-' + todayStr() + '.xlsx');
 
   document.getElementById('driverExcelModalOverlay').style.display = 'none';
+});
+
+// ---- Hakediş raporu (PDF) ----
+// Seçilen tarih aralığında en az bir seferi olan şoförleri, o aralıktaki sefer kayıtlarına göre
+// en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplar. Grup tespiti için trip
+// kaydının varlığı yeterlidir (fiyatsız girilmiş bir sefer de gruba sayılır); ama Hakediş/Resmi/
+// Avans/Nakit gibi tutarlar SADECE cari hareketlerinden (data.transactions) hesaplanır — bu yüzden
+// fiyatsız girilmiş bir seferi olan şoför grupta görünür ama ilgili hücreleri boş kalabilir.
+// Cari harekette "Tür" alanına Normal/Resmi/Avans/Masraf dışında serbestçe yazılan her isim
+// (örn. "CRT İcra") kendi sütununu oluşturur. Masraf ayrı bir sütunda gösterilir ve Nakit
+// hesabına dahil edilmez. Nakit = Hakediş - Resmi - (tüm özel/İcra sütunları toplamı) - Avans.
+function computeHakedisReport(dateFrom, dateTo) {
+  const inRange = (d) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo);
+
+  const driverCatCounts = {};
+  data.trips.forEach(t => {
+    if (!inRange(t.date)) return;
+    const veh = t.vehicleId ? data.vehicles.find(v => v.id === t.vehicleId) : null;
+    const cat = veh ? (veh.category || 'tir') : 'tir';
+    driverCatCounts[t.driverId] = driverCatCounts[t.driverId] || {};
+    driverCatCounts[t.driverId][cat] = (driverCatCounts[t.driverId][cat] || 0) + 1;
+  });
+
+  const dynamicLabels = {};
+  const rows = [];
+
+  data.drivers.forEach(driver => {
+    const counts = driverCatCounts[driver.id];
+    if (!counts) return;
+    let group = 'tir', max = 0;
+    Object.keys(counts).forEach(cat => { if (counts[cat] > max) { max = counts[cat]; group = cat; } });
+
+    const txs = driver.accountId ? (data.transactions[driver.accountId] || []).filter(t => inRange(t.date)) : [];
+    let hakedis = 0, resmi = 0, avans = 0, masraf = 0, manualAdj = 0;
+    const icra = {};
+    txs.forEach(t => {
+      const typeRaw = (t.txType || '').trim();
+      const typeKey = typeRaw.toLowerCase();
+      const credit = Number(t.credit) || 0;
+      const debit = Number(t.debit) || 0;
+      if (!typeRaw || typeKey === 'normal') { hakedis += credit; manualAdj -= debit; }
+      else if (typeKey === 'resmi') resmi += debit;
+      else if (typeKey === 'avans') avans += debit;
+      else if (typeKey === 'masraf') masraf += debit;
+      else {
+        icra[typeKey] = (icra[typeKey] || 0) + debit;
+        if (!dynamicLabels[typeKey]) dynamicLabels[typeKey] = typeRaw;
+      }
+    });
+    const icraTotal = Object.values(icra).reduce((s, v) => s + v, 0);
+    const nakit = hakedis - resmi - icraTotal - avans + manualAdj;
+
+    rows.push({ name: driver.name, group, hakedis, resmi, icra, avans, nakit, masraf });
+  });
+
+  return { rows, dynamicLabels };
+}
+
+document.getElementById('hakedisPdfBtn').addEventListener('click', () => {
+  document.getElementById('hakedisPdfDateFrom').value = '';
+  document.getElementById('hakedisPdfDateTo').value = '';
+  document.getElementById('hakedisPdfModalOverlay').style.display = 'flex';
+});
+document.getElementById('hakedisPdfCancel').addEventListener('click', () => {
+  document.getElementById('hakedisPdfModalOverlay').style.display = 'none';
+});
+
+document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
+  const dateFrom = document.getElementById('hakedisPdfDateFrom').value;
+  const dateTo = document.getElementById('hakedisPdfDateTo').value;
+  const { rows, dynamicLabels } = computeHakedisReport(dateFrom, dateTo);
+
+  if (rows.length === 0) {
+    alert('Seçilen tarih aralığında sefer kaydı olan şoför bulunamadı.');
+    return;
+  }
+
+  const dynamicKeys = Object.keys(dynamicLabels).sort((a, b) => dynamicLabels[a].localeCompare(dynamicLabels[b], 'tr'));
+  const CAT_ORDER = ['tir', 'kirkayak', 'balikesir'];
+  const catLabel = (c) => c === 'kirkayak' ? 'KIRKAYAK' : (c === 'balikesir' ? 'BALIKESİR' : 'TIRLAR');
+  const num = (n) => n ? n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+
+  const byGroup = {};
+  rows.forEach(r => { (byGroup[r.group] = byGroup[r.group] || []).push(r); });
+
+  const totals = { hakedis: 0, resmi: 0, avans: 0, nakit: 0, masraf: 0 };
+  const dynTotals = {};
+  dynamicKeys.forEach(k => dynTotals[k] = 0);
+
+  const rowHtml = (r, showGroupCell, rowspan) => {
+    totals.hakedis += r.hakedis; totals.resmi += r.resmi; totals.avans += r.avans;
+    totals.nakit += r.nakit; totals.masraf += r.masraf;
+    dynamicKeys.forEach(k => dynTotals[k] += (r.icra[k] || 0));
+    let html = '<tr>';
+    html += showGroupCell ? `<td class="grp" rowspan="${rowspan}">${escapeHtml(catLabel(r.group))}</td>` : '';
+    html += `<td class="drv">${escapeHtml(r.name)}</td>`;
+    html += `<td class="hakedis">${num(r.hakedis)}</td>`;
+    html += `<td class="resmi">${num(r.resmi)}</td>`;
+    dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
+    html += `<td class="avans">${num(r.avans)}</td>`;
+    html += `<td class="nakit">${num(r.nakit)}</td>`;
+    html += `<td class="masraf">${num(r.masraf)}</td>`;
+    return html + '</tr>';
+  };
+
+  let bodyHtml = '';
+  CAT_ORDER.filter(c => byGroup[c] && byGroup[c].length > 0).forEach(cat => {
+    byGroup[cat].forEach((r, idx) => { bodyHtml += rowHtml(r, idx === 0, byGroup[cat].length); });
+  });
+  rows.filter(r => !CAT_ORDER.includes(r.group)).forEach(r => { bodyHtml += rowHtml(r, false, 1); });
+
+  const headerHtml = `<tr>
+    <th></th><th>ŞOFÖRLER</th><th>HAKEDİŞ</th><th>RESMİ</th>
+    ${dynamicKeys.map(k => `<th>${escapeHtml(dynamicLabels[k].toLocaleUpperCase('tr'))}</th>`).join('')}
+    <th>AVANS</th><th>NAKİT</th><th>MASRAF</th>
+  </tr>`;
+  const totalsHtml = `<tr class="totals">
+    <td></td><td></td><td>${num(totals.hakedis)}</td><td>${num(totals.resmi)}</td>
+    ${dynamicKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
+    <td>${num(totals.avans)}</td><td>${num(totals.nakit)}</td><td>${num(totals.masraf)}</td>
+  </tr>`;
+
+  const titleParts = ['Şoför Hakediş Raporu'];
+  if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
+  const title = titleParts.join(' ');
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; padding: 14px; color: #1B2028; }
+      h1 { font-size: 13px; margin: 0 0 10px; }
+      table { border-collapse: collapse; width: auto; }
+      th, td { border: 1px solid #999; padding: 4px 7px; font-size: 10.5px; text-align: right; white-space: nowrap; }
+      th { text-align: center; font-weight: 700; background: #fff; }
+      td.grp { writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font-weight: 700; }
+      td.drv { text-align: left; font-weight: 600; }
+      td.hakedis { background: #C6E8C6; }
+      td.resmi { background: #F4C9A0; }
+      td.icra { background: #FFF200; }
+      td.nakit { color: #C0392B; font-weight: 700; }
+      td.masraf { border-left: 2px solid #333; }
+      tr.totals td { font-weight: 700; color: #2F6FE0; border-top: 2px solid #333; }
+      @page { size: A4 landscape; margin: 10mm; }
+      @media print { body { padding: 0; } }
+    </style>
+  </head><body>
+    <h1>${escapeHtml(title)}</h1>
+    <table>
+      <thead>${headerHtml}</thead>
+      <tbody>${bodyHtml}${totalsHtml}</tbody>
+    </table>
+    <script>window.onload = () => { window.print(); };<\/script>
+  </body></html>`);
+  printWindow.document.close();
+
+  document.getElementById('hakedisPdfModalOverlay').style.display = 'none';
 });
 
 load();
