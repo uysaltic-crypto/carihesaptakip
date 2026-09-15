@@ -2518,7 +2518,7 @@ function computeFuelComparisonRows(selectedIds, dateFrom, dateTo) {
       const inRange = (!dateFrom || entry.date >= dateFrom) && (!dateTo || entry.date <= dateTo);
       if (!inRange) continue;
       const segKm = entry.km - fullSeries[i-1].km;
-      if (segKm > 0 && entry.liters) perEntryValues.push(Number((entry.liters / segKm).toFixed(3)));
+      if (segKm > 0 && entry.liters) perEntryValues.push(Number((entry.liters / segKm).toFixed(2)));
     }
     const avg = perEntryValues.length ? perEntryValues.reduce((s,v) => s+v, 0) / perEntryValues.length : null;
     return { name: veh ? veh.name : '', values: perEntryValues, avg };
@@ -2552,7 +2552,7 @@ document.getElementById('excelModalDownload').addEventListener('click', () => {
     ['', 'Ortalama', ...Array(maxValuesLen).fill(''), 'Alış Adedi'],
     ...summaryRows.map(r => {
       const padding = Array(maxValuesLen - r.values.length).fill('');
-      return [r.name, r.avg !== null ? Number(r.avg.toFixed(3)) : '', ...r.values, ...padding, r.values.length];
+      return [r.name, r.avg !== null ? Number(r.avg.toFixed(2)) : '', ...r.values, ...padding, r.values.length];
     }),
   ];
 
@@ -2579,7 +2579,7 @@ document.getElementById('excelModalDownloadPdf').addEventListener('click', () =>
     return;
   }
 
-  const numCol = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const numCol = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const headerCells = ['', 'Ortalama'];
   for (let i = 0; i < maxValuesLen; i++) headerCells.push('');
@@ -4643,11 +4643,11 @@ function renderFuelReport() {
           <tr class="${r.id === bestId ? 'best' : (r.id === worstId ? 'worst' : '')}">
             <td>${escapeHtml(r.name)}</td>
             <td>${r.last && r.last.km ? r.last.km.toLocaleString('tr-TR') + ' km' : '—'}</td>
-            <td>${r.totalLitersVeh ? r.totalLitersVeh.toLocaleString('tr-TR') + ' lt' : '—'}</td>
+            <td>${r.totalLitersVeh ? r.totalLitersVeh.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' lt' : '—'}</td>
             <td>${r.totalAmountVeh ? fmt(r.totalAmountVeh) : '—'}</td>
             <td class="unit-price">${r.unitPrice !== null ? fmt(r.unitPrice) + '/lt' : '—'}</td>
-            <td>${r.perKm !== null ? r.perKm.toFixed(3) + ' lt' : '—'}</td>
-            <td>${r.per100km !== null ? r.per100km.toFixed(1) + ' lt' : '—'}</td>
+            <td>${r.perKm !== null ? r.perKm.toFixed(2) + ' lt' : '—'}</td>
+            <td>${r.per100km !== null ? r.per100km.toFixed(2) + ' lt' : '—'}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -4655,7 +4655,7 @@ function renderFuelReport() {
         <tr>
           <td>Toplam / Ortalama</td>
           <td></td>
-          <td>${totalLiters ? totalLiters.toLocaleString('tr-TR') + ' lt' : '—'}</td>
+          <td>${totalLiters ? totalLiters.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' lt' : '—'}</td>
           <td>${totalAmount ? fmt(totalAmount) : '—'}</td>
           <td>${avgUnitPrice ? fmt(avgUnitPrice) + '/lt' : '—'}</td>
           <td></td>
@@ -4684,10 +4684,10 @@ function renderVehicleFuelStats(vehicleId) {
   const per100km = computeVehicleConsumption(vehicleId).per100km;
   box.style.display = 'grid';
   box.innerHTML = `
-    <div class="card"><p class="label">Toplam litre</p><p class="value">${totalLiters ? totalLiters.toLocaleString('tr-TR') + ' lt' : '—'}</p></div>
+    <div class="card"><p class="label">Toplam litre</p><p class="value">${totalLiters ? totalLiters.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' lt' : '—'}</p></div>
     <div class="card"><p class="label">Toplam tutar</p><p class="value">${totalAmount ? fmt(totalAmount) : '—'}</p></div>
     <div class="card"><p class="label">Ortalama litre fiyatı</p><p class="value">${avgUnitPrice ? fmt(avgUnitPrice) + '/lt' : '—'}</p></div>
-    <div class="card"><p class="label">100 km'de yakıt</p><p class="value">${per100km !== null ? per100km.toFixed(1) + ' lt' : '—'}</p></div>
+    <div class="card"><p class="label">100 km'de yakıt</p><p class="value">${per100km !== null ? per100km.toFixed(2) + ' lt' : '—'}</p></div>
     <div class="card"><p class="label">Giriş sayısı</p><p class="value">${realLogs.length}</p></div>
   `;
 }
@@ -4725,7 +4725,7 @@ function renderPerKmCompare() {
     <div class="perkm-row">
       <div class="perkm-top">
         <span class="perkm-name">${escapeHtml(v.name)}</span>
-        <span class="perkm-value">${v.perKm.toFixed(3)} lt</span>
+        <span class="perkm-value">${v.perKm.toFixed(2)} lt</span>
         <div class="perkm-bar-bg"><div class="perkm-bar-fill" style="width:${Math.min(100, (v.perKm/maxPerKm)*100)}%; background:linear-gradient(90deg, rgb(${r},${g},${b}), rgb(${r},${g},${b})); box-shadow: 0 1px 4px rgba(${r},${g},${b},0.4);"></div></div>
       </div>
     </div>
@@ -4769,7 +4769,7 @@ function renderFuelLogs() {
         <div class="fuel-metrics">
           <div><span class="fm-lbl">Litre</span><span class="fm-val">${l.liters||0} lt</span></div>
           <div><span class="fm-lbl">Gidilen km</span><span class="fm-val">${gidilenKm !== null ? gidilenKm.toLocaleString('tr-TR') + ' km' : '—'}</span></div>
-          <div><span class="fm-lbl">1 km'de yakıt</span><span class="fm-val accent">${perKmRow !== null ? perKmRow.toFixed(3) + ' lt' : '—'}</span></div>
+          <div><span class="fm-lbl">1 km'de yakıt</span><span class="fm-val accent">${perKmRow !== null ? perKmRow.toFixed(2) + ' lt' : '—'}</span></div>
         </div>
       </div>
       <div class="rem-actions">
