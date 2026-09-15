@@ -1380,6 +1380,36 @@ const TX_TYPE_COLORS = {
   'avans': ['#E8F5EE', '#1E8E5A'],
 };
 
+// "Tür" alanı boş/"Normal" dışında bir değer taşıyorsa (Masraf/Resmi/İcra/Avans gibi), bu hareket
+// şoförün işletme için yaptığı bir masraf/kesinti sayılır ve tutar HER ZAMAN Borç alanına yazılır.
+// Kullanıcı tutarı yanlışlıkla Alacak alanına girse bile kaydederken otomatik olarak Borç'a taşınır.
+function isDeductionTxType(typeRaw) {
+  const key = (typeRaw || '').trim().toLowerCase();
+  return !!key && key !== 'normal';
+}
+function normalizeDriverDebitCredit(typeRaw, debit, credit) {
+  if (isDeductionTxType(typeRaw) && credit > 0 && debit === 0) {
+    return { debit: credit, credit: 0 };
+  }
+  return { debit, credit };
+}
+function syncTxAmountFields(typeInputId, debitInputId, creditInputId) {
+  const typeEl = document.getElementById(typeInputId);
+  const debitEl = document.getElementById(debitInputId);
+  const creditEl = document.getElementById(creditInputId);
+  const debit = parseFloat(debitEl.value) || 0;
+  const credit = parseFloat(creditEl.value) || 0;
+  const norm = normalizeDriverDebitCredit(typeEl.value, debit, credit);
+  if (norm.debit !== debit || norm.credit !== credit) {
+    debitEl.value = norm.debit || '';
+    creditEl.value = norm.credit || '';
+  }
+}
+document.getElementById('txType').addEventListener('input', () => syncTxAmountFields('txType', 'txDebit', 'txCredit'));
+document.getElementById('txCredit').addEventListener('change', () => syncTxAmountFields('txType', 'txDebit', 'txCredit'));
+document.getElementById('txEditType').addEventListener('input', () => syncTxAmountFields('txEditType', 'txEditDebit', 'txEditCredit'));
+document.getElementById('txEditCredit').addEventListener('change', () => syncTxAmountFields('txEditType', 'txEditDebit', 'txEditCredit'));
+
 // "Tür" alanının öneri listesi (datalist) kullanıcı tarafından yönetilebilir (data.txTypeOptions).
 function renderTxTypeList() {
   const dl = document.getElementById('txTypeList');
@@ -2248,8 +2278,13 @@ document.getElementById('txEditCancel').addEventListener('click', () => {
 document.getElementById('txEditSave').addEventListener('click', () => {
   const date = document.getElementById('txEditDate').value;
   const desc = document.getElementById('txEditDesc').value.trim();
-  const debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
-  const credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
+  let debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
+  let credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
+  const editTxType = currentAccIsDriver ? document.getElementById('txEditType').value : '';
+  if (currentAccIsDriver) {
+    const norm = normalizeDriverDebitCredit(editTxType, debit, credit);
+    debit = norm.debit; credit = norm.credit;
+  }
   const dueDate = document.getElementById('txEditDueDate').value || null;
   const color = document.getElementById('txEditColor').value;
   if (!date) return;
@@ -2264,7 +2299,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   if (currentAccIsDriver) {
     t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
     t.vehiclePlate = document.getElementById('txEditPlaka').value.trim();
-    t.txType = document.getElementById('txEditType').value;
+    t.txType = editTxType;
   }
   if (currentAccType === 'musteri' || currentAccType === 'tedarikci') {
     t.kdvTransfer = document.getElementById('txEditKdvTransfer').checked;
@@ -2382,8 +2417,12 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const irsaliyeNo = currentAccIsDriver ? document.getElementById('txIrsNo').value.trim() : '';
   const vehiclePlate = currentAccIsDriver ? document.getElementById('txPlaka').value.trim() : '';
   const txType = currentAccIsDriver ? document.getElementById('txType').value : '';
-  const debit = parseFloat(document.getElementById('txDebit').value) || 0;
-  const credit = parseFloat(document.getElementById('txCredit').value) || 0;
+  let debit = parseFloat(document.getElementById('txDebit').value) || 0;
+  let credit = parseFloat(document.getElementById('txCredit').value) || 0;
+  if (currentAccIsDriver) {
+    const norm = normalizeDriverDebitCredit(txType, debit, credit);
+    debit = norm.debit; credit = norm.credit;
+  }
   const dueDate = document.getElementById('txDueDate').value || null;
   const kdvTransfer = document.getElementById('txKdvTransfer').checked;
   const kdvRate = getTaxRateValue('txKdvRate', 'txKdvRateCustom');
