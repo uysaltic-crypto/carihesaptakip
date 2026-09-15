@@ -529,7 +529,7 @@
   <div class="modal-overlay" id="hakedisPdfModalOverlay">
     <div class="modal-box" style="max-width:420px;">
       <h3>Hakediş raporu (PDF)</h3>
-      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında sefer kaydı veya cari hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. "Çalışan" olarak işaretlenen kişiler listenin en altında ayrı bir "Çalışanlar" başlığı altında gösterilir ve Masraf sütunları boş bırakılır. Masraf, diğer gruplarda ayrı bir sütunda gösterilir, Nakit hesabına dahil edilmez.</p>
+      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında sefer kaydı veya cari hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. "Çalışan" olarak işaretlenen kişiler listenin en altında ayrı bir "Çalışanlar" başlığı altında gösterilir. Masraf, çalışanlar dahil tüm satırlarda ayrı bir sütunda <b>eksi (negatif)</b> olarak gösterilir; Nakit hesabına dahil edilmez.</p>
       <p style="font-size:12.5px; color:#8B99AD; margin:-6px 0 12px;">Bir şoförü "Çalışan" olarak işaretlemek için Şoförler ekranında ilgili kişiyi düzenleyip "Sefer grubu" alanından "Çalışan"ı seçin.</p>
       <div class="field-group">
         <input type="date" id="hakedisPdfDateFrom" style="flex:1;" />
@@ -3637,11 +3637,15 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const dynTotals = {};
   dynamicKeys.forEach(k => dynTotals[k] = 0);
 
+  // Masraf, raporda eksi (negatif) olarak gösterilir: cari harekette Borç'a yazılan masraf
+  // (masraf = borç - alacak, yani pozitif) ekranda "-2.400,00" şeklinde çıkar. Çalışanlar da
+  // dahil olmak üzere tüm satırlarda gösterilir ve genel toplama katılır.
+  const numMasraf = (n) => n ? (-n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+
   const rowHtml = (r, showGroupCell, rowspan) => {
-    const isCalisan = r.group === 'calisan';
     totals.hakedis += r.hakedis; totals.resmi += r.resmi; totals.avans += r.avans;
     totals.nakit += r.nakit;
-    if (!isCalisan) totals.masraf += r.masraf; // Çalışanlar bölümünde Masraf sütunu bilinçli olarak boş bırakılır
+    totals.masraf += r.masraf;
     dynamicKeys.forEach(k => dynTotals[k] += (r.icra[k] || 0));
     let html = '<tr>';
     html += showGroupCell ? `<td class="grp" rowspan="${rowspan}">${escapeHtml(catLabel(r.group))}</td>` : '';
@@ -3651,7 +3655,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="avans">${num(r.avans)}</td>`;
     html += `<td class="nakit">${num(r.nakit)}</td>`;
-    html += `<td class="masraf">${isCalisan ? '' : num(r.masraf)}</td>`;
+    html += `<td class="masraf">${numMasraf(r.masraf)}</td>`;
     return html + '</tr>';
   };
 
@@ -3669,7 +3673,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const totalsHtml = `<tr class="totals">
     <td></td><td></td><td>${num(totals.hakedis)}</td><td>${num(totals.resmi)}</td>
     ${dynamicKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
-    <td>${num(totals.avans)}</td><td>${num(totals.nakit)}</td><td>${num(totals.masraf)}</td>
+    <td>${num(totals.avans)}</td><td>${num(totals.nakit)}</td><td>${numMasraf(totals.masraf)}</td>
   </tr>`;
 
   const titleParts = ['Şoför Hakediş Raporu'];
@@ -3691,7 +3695,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       td.resmi { background: #F4C9A0; }
       td.icra { background: #FFF200; }
       td.nakit { color: #C0392B; font-weight: 700; }
-      td.masraf { border-left: 2px solid #333; }
+      td.masraf { border-left: 2px solid #333; color: #C0392B; }
       tr.totals td { font-weight: 700; color: #2F6FE0; border-top: 2px solid #333; }
       @page { size: A4 landscape; margin: 10mm; }
       @media print { body { padding: 0; } }
