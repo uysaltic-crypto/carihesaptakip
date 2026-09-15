@@ -3655,25 +3655,33 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="avans">${num(r.avans)}</td>`;
     html += `<td class="nakit">${num(r.nakit)}</td>`;
+    html += `<td class="spacer"></td>`;
     html += `<td class="masraf">${numMasraf(r.masraf)}</td>`;
     return html + '</tr>';
   };
 
+  const totalColCount = 2 + 2 + dynamicKeys.length + 2 + 1 + 1; // grp+drv, hakedis+resmi, icra..., avans+nakit, spacer, masraf
+  const spacerRow = '<tr class="grp-spacer"><td colspan="' + totalColCount + '"></td></tr>';
+
   let bodyHtml = '';
-  CAT_ORDER.filter(c => byGroup[c] && byGroup[c].length > 0).forEach(cat => {
+  const activeCats = CAT_ORDER.filter(c => byGroup[c] && byGroup[c].length > 0);
+  activeCats.forEach((cat, catIdx) => {
+    if (catIdx > 0) bodyHtml += spacerRow;
     byGroup[cat].forEach((r, idx) => { bodyHtml += rowHtml(r, idx === 0, byGroup[cat].length); });
   });
-  rows.filter(r => !CAT_ORDER.includes(r.group)).forEach(r => { bodyHtml += rowHtml(r, false, 1); });
+  const looseRows = rows.filter(r => !CAT_ORDER.includes(r.group));
+  if (looseRows.length > 0 && activeCats.length > 0) bodyHtml += spacerRow;
+  looseRows.forEach(r => { bodyHtml += rowHtml(r, false, 1); });
 
   const headerHtml = `<tr>
     <th></th><th>ŞOFÖRLER</th><th>HAKEDİŞ</th><th>RESMİ</th>
     ${dynamicKeys.map(k => `<th>${escapeHtml(dynamicLabels[k].toLocaleUpperCase('tr'))}</th>`).join('')}
-    <th>AVANS</th><th>NAKİT</th><th>MASRAF</th>
+    <th>AVANS</th><th>NAKİT</th><th class="spacer"></th><th>MASRAF</th>
   </tr>`;
   const totalsHtml = `<tr class="totals">
     <td></td><td></td><td>${num(totals.hakedis)}</td><td>${num(totals.resmi)}</td>
     ${dynamicKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
-    <td>${num(totals.avans)}</td><td>${num(totals.nakit)}</td><td>${numMasraf(totals.masraf)}</td>
+    <td>${num(totals.avans)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td>
   </tr>`;
 
   const titleParts = ['Şoför Hakediş Raporu'];
@@ -3696,6 +3704,8 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       td.icra { background: #FFF200; }
       td.nakit { color: #C0392B; font-weight: 700; }
       td.masraf { border-left: 2px solid #333; color: #C0392B; }
+      td.spacer, th.spacer { border: none; background: transparent; width: 14px; padding: 0; }
+      tr.grp-spacer td { border: none; padding: 5px 0; }
       tr.totals td { font-weight: 700; color: #2F6FE0; border-top: 2px solid #333; }
       @page { size: A4 landscape; margin: 10mm; }
       @media print { body { padding: 0; } }
