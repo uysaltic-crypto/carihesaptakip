@@ -1994,6 +1994,18 @@ function openDetail(id) {
   renderTx();
 }
 
+// Cari detayını, ay gizleme/açma durumunu bozmadan yeniler.
+// (openDetail tüm ayları yeniden gizlediği için düzenleme sonrası bu kullanılır.)
+function refreshDetail() {
+  if (!currentAccId) return;
+  const acc = data.accounts.find(a => a.id === currentAccId);
+  if (!acc) return;
+  document.getElementById('detName').textContent = acc.name;
+  document.getElementById('detSub').textContent = (acc.type === 'musteri' ? 'Müşteri' : (acc.type === 'tedarikci' ? 'Tedarikçi' : (acc.type === 'sofor' ? 'Şoför' : 'Ortak'))) + (acc.phone ? ' · ' + acc.phone : '') + (acc.taxNo ? ' · VN: ' + acc.taxNo : '') + (acc.banka ? ' · ' + acc.banka : '') + (acc.iban ? ' · IBAN: ' + acc.iban : '');
+  document.getElementById('detBalance').textContent = fmt(balanceOf(currentAccId));
+  renderTx();
+}
+
 let lastTxDisplayOrder = [];
 let collapsedMonths = new Set();
 let collapseMonthsOnNextRender = false;
@@ -2161,7 +2173,7 @@ document.getElementById('txList').addEventListener('click', (e) => {
       if (t && t.taxEntryId) data.taxEntries = data.taxEntries.filter(e => e.id !== t.taxEntryId);
       data.transactions[currentAccId] = data.transactions[currentAccId].filter(t => t.id !== delBtn.dataset.id);
       save();
-      openDetail(currentAccId);
+      refreshDetail();
     });
     return;
   }
@@ -2276,7 +2288,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   upsertTaxEntryFromTx(t, acc);
   save();
   document.getElementById('txModalOverlay').style.display = 'none';
-  openDetail(currentAccId);
+  refreshDetail();
   renderReminders();
 });
 
@@ -2332,7 +2344,10 @@ document.getElementById('modalSave').addEventListener('click', () => {
   }
   save();
   document.getElementById('modalOverlay').style.display = 'none';
-  if (editingAccId) openDetail(editingAccId); else renderList();
+  if (editingAccId) {
+    if (editingAccId === currentAccId) refreshDetail();
+    else openDetail(editingAccId);
+  } else renderList();
 });
 
 document.getElementById('delAccBtn').addEventListener('click', () => {
@@ -2411,7 +2426,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txKdvRate').style.display = 'none';
   document.getElementById('txKdvRateCustom').value = '';
   document.getElementById('txKdvRateCustom').style.display = 'none';
-  openDetail(currentAccId);
+  refreshDetail();
   renderReminders();
 });
 
@@ -5200,7 +5215,7 @@ function renderHareketKontrol() {
         data.transactions[accId] = (data.transactions[accId] || []).filter(t => t.id !== btn.dataset.tx);
         save();
         renderHareketKontrol();
-        if (currentAccId === accId) openDetail(accId);
+        if (currentAccId === accId) refreshDetail();
         renderList();
       });
     });
