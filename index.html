@@ -1823,15 +1823,20 @@ document.getElementById('accList').addEventListener('click', (e) => {
 });
 
 let currentAccIsDriver = false;
-const TX_FORM_GRID_NORMAL = '1fr 2fr 100px 100px 130px 40px';
+const TX_FORM_GRID_NORMAL = '1fr 110px 2fr 100px 100px 130px 40px';
 const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 30px 90px 90px 120px 40px';
 
 // Kullanıcının sürükleyerek ayarlayabileceği sütun genişlikleri
 const TX_COL_LABELS = { date: 'Tarih', irsNo: 'İrs. No', desc: 'Açıklama', plaka: 'Plaka', debit: 'Borç', credit: 'Alacak', balance: 'Bakiye' };
 const TX_COL_ALIGN_RIGHT = { debit: true, credit: true, balance: true };
 const TX_COL_DEFAULTS = { date: 110, irsNo: 90, desc: 260, plaka: 90, debit: 100, credit: 100, balance: 110 };
-const TX_COLS_NORMAL = ['date', 'desc', 'debit', 'credit', 'balance'];
+const TX_COLS_NORMAL = ['date', 'irsNo', 'desc', 'debit', 'credit', 'balance'];
 const TX_COLS_DRIVER = ['date', 'irsNo', 'desc', 'plaka', 'debit', 'credit', 'balance'];
+
+// Şoför carilerinde bu alan "İrsaliye No", diğer carilerde (müşteri/tedarikçi/ortak)
+// "Fatura No" olarak kullanılır. Veri modelinde aynı alandır (t.irsaliyeNo).
+function docNoLabel(isDriver) { return isDriver ? 'İrs. No' : 'Fatura No'; }
+function docNoPlaceholder(isDriver) { return isDriver ? 'İrsaliye no' : 'Fatura no'; }
 
 function getTxColWidths() {
   if (!data.txColWidths) data.txColWidths = {};
@@ -1860,7 +1865,8 @@ function renderTxHeader() {
   header.style.gridTemplateColumns = txGridTemplate(currentAccIsDriver);
   header.innerHTML = cols.map(k => {
     const alignStyle = TX_COL_ALIGN_RIGHT[k] ? 'text-align:right;' : '';
-    return `<div class="tx-col" style="${alignStyle}">${TX_COL_LABELS[k]}<div class="col-resizer" data-col="${k}" title="Sütunu daraltmak/genişletmek için sürükleyin"></div></div>`;
+    const label = k === 'irsNo' ? docNoLabel(currentAccIsDriver) : TX_COL_LABELS[k];
+    return `<div class="tx-col" style="${alignStyle}">${label}<div class="col-resizer" data-col="${k}" title="Sütunu daraltmak/genişletmek için sürükleyin"></div></div>`;
   }).join('') + '<span></span><span></span><span></span>';
 }
 
@@ -1889,7 +1895,8 @@ document.getElementById('txListHeader').addEventListener('mousedown', (e) => {
 
 function updateTxLayout(isDriver) {
   currentAccIsDriver = isDriver;
-  document.getElementById('txIrsNo').style.display = isDriver ? '' : 'none';
+  document.getElementById('txIrsNo').style.display = '';
+  document.getElementById('txIrsNo').placeholder = docNoPlaceholder(isDriver);
   document.getElementById('txPlaka').style.display = isDriver ? '' : 'none';
   document.getElementById('txType').style.display = isDriver ? '' : 'none';
   document.getElementById('txTypeManageBtn').style.display = isDriver ? '' : 'none';
@@ -2232,7 +2239,8 @@ function openTxEdit(id) {
   const t = (data.transactions[currentAccId] || []).find(x => x.id === id);
   document.getElementById('txEditDate').value = t.date;
   document.getElementById('txEditDesc').value = t.desc || '';
-  document.getElementById('txEditIrsNo').style.display = currentAccIsDriver ? '' : 'none';
+  document.getElementById('txEditIrsNo').style.display = '';
+  document.getElementById('txEditIrsNo').placeholder = docNoPlaceholder(currentAccIsDriver);
   document.getElementById('txEditPlaka').style.display = currentAccIsDriver ? '' : 'none';
   document.getElementById('txEditTypeRow').style.display = currentAccIsDriver ? 'flex' : 'none';
   document.getElementById('txEditIrsNo').value = t.irsaliyeNo || '';
@@ -2274,8 +2282,8 @@ document.getElementById('txEditSave').addEventListener('click', () => {
     ensureTxOrders(list);
     t.order = nextOrderForDate(list, date, t.id);
   }
+  t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
   if (currentAccIsDriver) {
-    t.irsaliyeNo = document.getElementById('txEditIrsNo').value.trim();
     t.vehiclePlate = document.getElementById('txEditPlaka').value.trim();
     t.txType = editTxType;
   }
@@ -2395,7 +2403,7 @@ function upsertTxDueReminder(tx, accountId) {
 document.getElementById('addTxBtn').addEventListener('click', () => {
   const date = document.getElementById('txDate').value;
   const desc = document.getElementById('txDesc').value.trim();
-  const irsaliyeNo = currentAccIsDriver ? document.getElementById('txIrsNo').value.trim() : '';
+  const irsaliyeNo = document.getElementById('txIrsNo').value.trim();
   const vehiclePlate = currentAccIsDriver ? document.getElementById('txPlaka').value.trim() : '';
   const txType = currentAccIsDriver ? document.getElementById('txType').value : '';
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
@@ -5136,7 +5144,7 @@ function computeHareketKontrol() {
       .filter(g => g.length > 1)
       .sort((a, b) => b[0].date.localeCompare(a[0].date));
     if (dupGroups.length > 0) {
-      results.push({ accountId: acc.id, accountName: acc.name, groups: dupGroups });
+      results.push({ accountId: acc.id, accountName: acc.name, accountType: acc.type, groups: dupGroups });
     }
   });
   results.sort((a, b) => a.accountName.localeCompare(b.accountName, 'tr'));
@@ -5174,12 +5182,14 @@ function renderHareketKontrol() {
 
   const list = document.getElementById('hkList');
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty">${q ? 'Eşleşen kayıt bulunamadı.' : 'Aynı irsaliye no ile tekrar eden hareket bulunamadı. 👍'}</div>`;
+    list.innerHTML = `<div class="empty">${q ? 'Eşleşen kayıt bulunamadı.' : 'Aynı irsaliye / fatura no ile tekrar eden hareket bulunamadı. 👍'}</div>`;
     return;
   }
   list.innerHTML = filtered.map(r => {
+    const noLabel = r.accountType === 'sofor' ? 'İrs. No' : 'Fatura No';
+    const typeLabel = r.accountType === 'musteri' ? 'Müşteri' : (r.accountType === 'tedarikci' ? 'Tedarikçi' : (r.accountType === 'sofor' ? 'Şoför' : 'Ortak'));
     const header = `<div class="acc-row hkAccHeader" style="cursor:pointer;" data-goto="${r.accountId}">
-      <div><p class="name">${escapeHtml(r.accountName)}</p><p class="type">${r.groups.length} mükerrer irsaliye no grubu</p></div>
+      <div><p class="name">${escapeHtml(r.accountName)}</p><p class="type">${typeLabel} · ${r.groups.length} mükerrer ${noLabel.toLowerCase()} grubu</p></div>
     </div>`;
     const groupRows = r.groups.map(g => {
       const occurrences = g.map((t, idx) => {
@@ -5192,7 +5202,7 @@ function renderHareketKontrol() {
       return `<div class="rem-row" style="align-items:flex-start;">
         <div class="rem-left" style="width:100%;">
           <div style="width:100%;">
-            <p class="rem-desc"><b>İrs. No: ${escapeHtml(g[0].irsaliyeNo)}</b> — ${g.length} hareket kaydında kullanılmış</p>
+            <p class="rem-desc"><b>${noLabel}: ${escapeHtml(g[0].irsaliyeNo)}</b> — ${g.length} hareket kaydında kullanılmış</p>
             <div style="margin-top:4px;">${occurrences}</div>
           </div>
         </div>
