@@ -2400,6 +2400,19 @@ function upsertTxDueReminder(tx, accountId) {
   }
 }
 
+// Aynı harekette hem Borç hem Alacak girilmesi (veri hatalarına ve Hakediş raporunda
+// yanlış hesaba yol açtığı için) engellenir: biri girilince diğeri otomatik temizlenir.
+function wireExclusiveDebitCredit(debitId, creditId) {
+  document.getElementById(debitId).addEventListener('input', function () {
+    if (this.value) document.getElementById(creditId).value = '';
+  });
+  document.getElementById(creditId).addEventListener('input', function () {
+    if (this.value) document.getElementById(debitId).value = '';
+  });
+}
+wireExclusiveDebitCredit('txDebit', 'txCredit');
+wireExclusiveDebitCredit('txEditDebit', 'txEditCredit');
+
 document.getElementById('addTxBtn').addEventListener('click', () => {
   const date = document.getElementById('txDate').value;
   const desc = document.getElementById('txDesc').value.trim();
@@ -3612,11 +3625,11 @@ function computeHakedisReport(dateFrom, dateTo) {
       const credit = Number(t.credit) || 0;
       const debit = Number(t.debit) || 0;
       if (!typeRaw || typeKey === 'normal') { hakedis += credit - debit; }
-      else if (typeKey === 'resmi') resmi += debit;
-      else if (typeKey === 'avans') avans += debit;
+      else if (typeKey === 'resmi') resmi += (debit - credit);
+      else if (typeKey === 'avans') avans += (debit - credit);
       else if (typeKey === 'masraf') masraf += (debit - credit);
       else {
-        icra[typeKey] = (icra[typeKey] || 0) + debit;
+        icra[typeKey] = (icra[typeKey] || 0) + (debit - credit);
         if (!dynamicLabels[typeKey]) dynamicLabels[typeKey] = typeRaw;
       }
     });
@@ -3690,9 +3703,10 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const activeCats = CAT_ORDER.filter(c => byGroup[c] && byGroup[c].length > 0);
   activeCats.forEach((cat, catIdx) => {
     if (catIdx > 0) bodyHtml += spacerRow;
+    byGroup[cat].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
     byGroup[cat].forEach((r, idx) => { bodyHtml += rowHtml(r, idx === 0, byGroup[cat].length); });
   });
-  const looseRows = rows.filter(r => !CAT_ORDER.includes(r.group));
+  const looseRows = rows.filter(r => !CAT_ORDER.includes(r.group)).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   if (looseRows.length > 0 && activeCats.length > 0) bodyHtml += spacerRow;
   looseRows.forEach(r => { bodyHtml += rowHtml(r, false, 1); });
 
