@@ -363,6 +363,7 @@
       <button class="navBtn" data-view="hareketkontrol">Hareket Kontrolü<span class="badge" id="hkBadge" style="display:none;"></span></button>
       <button class="navBtn" data-view="hatirlaticilar">Hatırlatıcılar<span class="badge" id="remBadge" style="display:none;"></span></button>
       <button class="navBtn" data-view="irsaliyekontrol">İrsaliye Kontrolü<span class="badge" id="irsKontrolBadge" style="display:none;"></span></button>
+      <button class="navBtn" data-view="kasa">Kasa</button>
     </div>
     <div class="nav-row">
       <button class="navBtn" data-view="irsaliye">İrsaliye Takip</button>
@@ -694,6 +695,50 @@
       <button id="taxExcelBtn">📊 Excel raporu al</button>
     </div>
     <div class="list-wrap" id="taxList"></div>
+  </div>
+
+  <div id="kasaView" style="display:none;">
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran gerçek nakit/banka hareketlerinizi (yaptığınız ödemeler ve aldığınız tahsilatlar) tarihe göre kaydeder ve kasa bakiyenizi takip eder. Bir hareketi isterseniz bir cariyle ilişkilendirebilirsiniz; ancak bu ekrandaki kayıtlar carinin bakiyesini <b>etkilemez</b> — cari hesaplardan bağımsız, ayrı bir kasa defteridir.</p>
+    <div class="summary" id="kasaSummaryCards"></div>
+    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 130px 110px 1.4fr 1fr 150px 34px 110px 70px;">
+      <input type="date" id="kasaDate" />
+      <select id="kasaType">
+        <option value="tahsilat">Tahsilat</option>
+        <option value="odeme">Ödeme</option>
+      </select>
+      <input type="text" id="kasaDesc" placeholder="Açıklama" />
+      <input type="text" id="kasaAcc" list="kasaAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="kasaAccDatalist"></datalist>
+      <input type="text" id="kasaPayMethod" list="payMethodList" placeholder="Ödeme şekli (opsiyonel)" />
+      <button type="button" id="kasaPayMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 6px;">⚙</button>
+      <input type="number" id="kasaAmount" placeholder="Tutar" min="0" step="0.01" />
+      <button id="addKasaBtn" class="primary-btn">+ Ekle</button>
+    </div>
+    <div class="list-wrap" id="kasaList"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="kasaEditModalOverlay">
+  <div class="modal-box">
+    <h3>Kasa hareketini düzenle</h3>
+    <div class="field-group">
+      <input type="date" id="kasaEditDate" />
+      <select id="kasaEditType">
+        <option value="tahsilat">Tahsilat</option>
+        <option value="odeme">Ödeme</option>
+      </select>
+      <input type="text" id="kasaEditDesc" placeholder="Açıklama" />
+      <input type="text" id="kasaEditAcc" list="kasaEditAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="kasaEditAccDatalist"></datalist>
+      <label style="font-size:12px; color:#5B6B82;">Ödeme şekli</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="kasaEditPayMethod" list="payMethodList" placeholder="Nakit, Havale/EFT, Çek..." style="flex:1;" />
+        <button type="button" id="kasaEditPayMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 10px;">⚙</button>
+      </div>
+      <input type="number" id="kasaEditAmount" placeholder="Tutar" min="0" step="0.01" />
+    </div>
+    <div class="actions">
+      <button id="kasaEditCancel">Vazgeç</button>
+      <button id="kasaEditSave" class="primary-btn">Kaydet</button>
+    </div>
   </div>
 </div>
 
@@ -1350,7 +1395,7 @@ function updateEmptyDataBanner() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'], payMethodOptions: ['Nakit', 'Havale/EFT', 'Çek', 'Senet', 'Kredi Kartı'] }, JSON.parse(raw));
+    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'], payMethodOptions: ['Nakit', 'Havale/EFT', 'Çek', 'Senet', 'Kredi Kartı'], kasaEntries: [] }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
   const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase, migrateTxTypeOptions, migratePayMethodOptions];
   migrations.forEach(fn => {
@@ -1578,12 +1623,16 @@ document.getElementById('payMethodManageSave').addEventListener('click', () => {
         if ((t.paymentMethod || '').trim().toLocaleLowerCase('tr-TR') === fromKey) t.paymentMethod = r.to;
       });
     });
+    (data.kasaEntries || []).forEach(e => {
+      if ((e.paymentMethod || '').trim().toLocaleLowerCase('tr-TR') === fromKey) e.paymentMethod = r.to;
+    });
   });
   data.payMethodOptions = finalList;
   save();
   renderPayMethodList();
   document.getElementById('payMethodManageModalOverlay').style.display = 'none';
   if (currentAccId) renderTx();
+  if (activeView === 'kasa') renderKasa();
 });
 
 function txTypeBadge(type) {
@@ -1626,6 +1675,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('fiyatkontrolView').style.display = activeView === 'fiyatkontrol' ? 'block' : 'none';
     document.getElementById('hareketkontrolView').style.display = activeView === 'hareketkontrol' ? 'block' : 'none';
     document.getElementById('vergitakibiView').style.display = activeView === 'vergitakibi' ? 'block' : 'none';
+    document.getElementById('kasaView').style.display = activeView === 'kasa' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
     if (activeView === 'yakit') renderFuelLogs();
@@ -1637,6 +1687,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     if (activeView === 'fiyatkontrol') renderFiyatKontrol();
     if (activeView === 'hareketkontrol') renderHareketKontrol();
     if (activeView === 'vergitakibi') renderVergiTakibi();
+    if (activeView === 'kasa') renderKasa();
   });
 });
 
@@ -2103,6 +2154,47 @@ function upsertTaxEntryFromTx(tx, acc) {
   entry.fromAccountId = acc.id;
 }
 
+// Belirtilen id'ye sahip hareketi, hangi cari altında olursa olsun bulup listesinden kaldırır.
+function removeLinkedCariTx(txId) {
+  if (!txId) return;
+  Object.keys(data.transactions).forEach(accId => {
+    data.transactions[accId] = (data.transactions[accId] || []).filter(t => t.id !== txId);
+  });
+}
+
+// Kasa hareketi (tahsilat/ödeme) bir cariyle ilişkilendirilmişse, o caride otomatik bir hareket
+// oluşturur/günceller. entry.linkedTxId ile bağlantı korunur; her çağrıda önce eski hareket
+// silinip yeniden oluşturulur (cari değişse veya bağlantı kaldırılsa bile tutarlılık bozulmaz).
+// Yön: Tahsilat → carinin hesabına Alacak, Ödeme → carinin hesabına Borç (avans mantığıyla aynı yön).
+function upsertCariTxFromKasa(entry) {
+  removeLinkedCariTx(entry.linkedTxId);
+  entry.linkedTxId = null;
+  if (!entry.accountId) return;
+  const acc = data.accounts.find(a => a.id === entry.accountId);
+  if (!acc) { entry.accountId = null; return; }
+  if (!data.transactions[entry.accountId]) data.transactions[entry.accountId] = [];
+  const list = data.transactions[entry.accountId];
+  ensureTxOrders(list);
+  const order = nextOrderForDate(list, entry.date);
+  const isTahsilat = entry.type === 'tahsilat';
+  const amount = Number(entry.amount) || 0;
+  const tx = {
+    id: 'tx_k_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    date: entry.date,
+    desc: entry.desc || (isTahsilat ? 'Kasa tahsilatı' : 'Kasa ödemesi'),
+    irsaliyeNo: '', vehiclePlate: '', txType: '',
+    debit: isTahsilat ? 0 : amount,
+    credit: isTahsilat ? amount : 0,
+    paymentMethod: entry.paymentMethod || '',
+    dueDate: null, dueReminderId: null,
+    kdvTransfer: false, kdvRate: 20, taxEntryId: null,
+    kasaEntryId: entry.id,
+    order
+  };
+  list.push(tx);
+  entry.linkedTxId = tx.id;
+}
+
 function openDetail(id) {
   currentAccId = id;
   collapsedMonths = new Set();
@@ -2230,7 +2322,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2239,11 +2331,14 @@ function renderTx() {
         const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
         return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
       }).join('');
+      const actionsHtml = t.kasaEntryId
+        ? `<span title="Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın." style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
+        : `<button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#17212F;">✎</button>
+        <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>`;
       return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; grid-template-columns:${rowGrid}; ${colorStyle}">
         ${cells}
         <span></span>
-        <button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#17212F;">✎</button>
-        <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>
+        ${actionsHtml}
       </div>`;
     }).join('');
     return header + rows;
@@ -2483,6 +2578,9 @@ document.getElementById('delAccBtn').addEventListener('click', () => {
   showConfirm('Bu cariyi ve tüm hareketlerini silmek istediğinize emin misiniz?', () => {
     const linkedTaxIds = (data.transactions[currentAccId] || []).map(t => t.taxEntryId).filter(Boolean);
     if (linkedTaxIds.length > 0) data.taxEntries = data.taxEntries.filter(e => !linkedTaxIds.includes(e.id));
+    (data.kasaEntries || []).forEach(e => {
+      if (e.accountId === currentAccId) { e.accountId = null; e.linkedTxId = null; }
+    });
     data.accounts = data.accounts.filter(a => a.id !== currentAccId);
     delete data.transactions[currentAccId];
     data.reminders = data.reminders.filter(r => r.accountId !== currentAccId);
@@ -5597,6 +5695,188 @@ document.getElementById('taxExcelBtn').addEventListener('click', () => {
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Aylık Özet');
   XLSX.writeFile(wb, 'kdv-takip-' + todayStr() + '.xlsx');
 });
+
+// ---- Kasa (nakit/banka takibi) ----
+// Cari hesaplardan bağımsız, ayrı bir defter: sadece gerçekleşen tahsilat/ödeme
+// hareketlerini tarih sırasına göre tutar ve kümülatif kasa bakiyesini hesaplar.
+let editingKasaId = null;
+let collapsedKasaMonths = new Set();
+
+function computeKasaRows() {
+  const entries = (data.kasaEntries || []).slice().sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
+  });
+  let running = 0;
+  const withRunning = entries.map(e => {
+    running += (e.type === 'tahsilat' ? Number(e.amount) || 0 : -(Number(e.amount) || 0));
+    return Object.assign({}, e, { runningBalance: running });
+  });
+  return withRunning.slice().reverse(); // ekranda en yeni en üstte
+}
+
+function renderKasaSummary() {
+  const entries = data.kasaEntries || [];
+  let totalTahsilat = 0, totalOdeme = 0;
+  entries.forEach(e => {
+    if (e.type === 'tahsilat') totalTahsilat += Number(e.amount) || 0;
+    else totalOdeme += Number(e.amount) || 0;
+  });
+  const bakiye = totalTahsilat - totalOdeme;
+  document.getElementById('kasaSummaryCards').innerHTML = `
+    <div class="card"><p class="label">Toplam tahsilat</p><p class="value" style="color:#1D8A5B;">${fmt(totalTahsilat)}</p></div>
+    <div class="card"><p class="label">Toplam ödeme</p><p class="value" style="color:#C43D33;">${fmt(totalOdeme)}</p></div>
+    <div class="card"><p class="label">Kasa bakiyesi</p><p class="value" style="${bakiye < 0 ? 'color:#C43D33;' : ''}">${fmt(bakiye)}</p></div>
+  `;
+}
+
+function renderKasa() {
+  renderKasaSummary();
+  fillSearchableDatalist('kasaAccDatalist', data.accounts);
+  fillSearchableDatalist('kasaEditAccDatalist', data.accounts);
+
+  const rows = computeKasaRows();
+  const list = document.getElementById('kasaList');
+  if (rows.length === 0) {
+    list.innerHTML = `<div class="empty">Henüz kasa hareketi yok. Yukarıdaki formdan bir tahsilat veya ödeme ekleyin.</div>`;
+    return;
+  }
+
+  const groups = [];
+  rows.forEach(r => {
+    const monthKey = r.date.slice(0, 7);
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup && lastGroup.monthKey === monthKey) lastGroup.items.push(r);
+    else groups.push({ monthKey, items: [r] });
+  });
+
+  list.innerHTML = groups.map(g => {
+    const totalTahsilat = g.items.reduce((s, r) => s + (r.type === 'tahsilat' ? Number(r.amount) || 0 : 0), 0);
+    const totalOdeme = g.items.reduce((s, r) => s + (r.type === 'odeme' ? Number(r.amount) || 0 : 0), 0);
+    const isCollapsed = collapsedKasaMonths.has(g.monthKey);
+    const header = `<div class="txMonthHeader" data-kasamonth="${g.monthKey}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
+      <span style="font-weight:600; font-size:13px;">${isCollapsed ? '▸' : '▾'} ${monthLabelOf(g.monthKey)} <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(${g.items.length} hareket)</span></span>
+      <span style="display:flex; gap:14px; font-size:12.5px; font-weight:600;">
+        <span style="color:#1D8A5B;">Tahsilat: ${fmt(totalTahsilat)}</span>
+        <span style="color:#C43D33;">Ödeme: ${fmt(totalOdeme)}</span>
+      </span>
+    </div>`;
+    if (isCollapsed) return header;
+
+    const rowsHtml = g.items.map(r => {
+      const acc = r.accountId ? data.accounts.find(a => a.id === r.accountId) : null;
+      const typeColor = r.type === 'tahsilat' ? '#1D8A5B' : '#C43D33';
+      const typeLabel = r.type === 'tahsilat' ? 'Tahsilat' : 'Ödeme';
+      const extras = [
+        acc ? ('🔗 ' + escapeHtml(acc.name)) : null,
+        r.paymentMethod ? escapeHtml(r.paymentMethod) : null,
+      ].filter(Boolean).join(' · ');
+      return `<div class="rem-row">
+        <div class="rem-left">
+          <div>
+            <span class="rem-date">${fmtDate(r.date)}</span>
+            <p class="rem-desc"><span style="color:${typeColor}; font-weight:600;">${typeLabel}</span> — ${escapeHtml(r.desc || '')}
+              <span class="rem-acc">${extras ? extras + ' · ' : ''}Bakiye: ${fmt(r.runningBalance)}</span>
+            </p>
+          </div>
+        </div>
+        <div class="rem-actions">
+          <span style="font-weight:600; color:${typeColor}; min-width:100px; text-align:right;">${r.type === 'tahsilat' ? '+' : '-'}${fmt(r.amount)}</span>
+          <button class="editKasaBtn" data-id="${r.id}">Düzenle</button>
+          <button class="delKasaBtn" data-id="${r.id}">Sil</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return header + rowsHtml;
+  }).join('');
+
+  list.querySelectorAll('.txMonthHeader').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.kasamonth;
+      if (collapsedKasaMonths.has(key)) collapsedKasaMonths.delete(key);
+      else collapsedKasaMonths.add(key);
+      renderKasa();
+    });
+  });
+  list.querySelectorAll('.editKasaBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openKasaEdit(btn.dataset.id); });
+  });
+  list.querySelectorAll('.delKasaBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showConfirm('Bu kasa hareketini silmek istediğinize emin misiniz?', () => {
+        const entry = (data.kasaEntries || []).find(x => x.id === btn.dataset.id);
+        const linkedAccId = entry ? entry.accountId : null;
+        if (entry) removeLinkedCariTx(entry.linkedTxId);
+        data.kasaEntries = (data.kasaEntries || []).filter(x => x.id !== btn.dataset.id);
+        save();
+        renderKasa();
+        if (currentAccId && currentAccId === linkedAccId) refreshDetail();
+      });
+    });
+  });
+}
+
+fillSearchableDatalist('kasaAccDatalist', data.accounts);
+
+document.getElementById('addKasaBtn').addEventListener('click', () => {
+  const date = document.getElementById('kasaDate').value;
+  const type = document.getElementById('kasaType').value;
+  const desc = document.getElementById('kasaDesc').value.trim();
+  const accountId = resolveSearchableId('kasaAcc', data.accounts);
+  const paymentMethod = document.getElementById('kasaPayMethod').value.trim();
+  const amount = parseFloat(document.getElementById('kasaAmount').value) || 0;
+  if (!date || !amount) return;
+  if (!data.kasaEntries) data.kasaEntries = [];
+  const entry = { id: 'kasa_' + Date.now(), date, type, desc, accountId, paymentMethod, amount, linkedTxId: null };
+  data.kasaEntries.push(entry);
+  upsertCariTxFromKasa(entry);
+  save();
+  document.getElementById('kasaDesc').value = '';
+  document.getElementById('kasaAcc').value = '';
+  document.getElementById('kasaPayMethod').value = '';
+  document.getElementById('kasaAmount').value = '';
+  renderKasa();
+  if (currentAccId === accountId) refreshDetail();
+});
+
+function openKasaEdit(id) {
+  editingKasaId = id;
+  const e = (data.kasaEntries || []).find(x => x.id === id);
+  document.getElementById('kasaEditDate').value = e.date;
+  document.getElementById('kasaEditType').value = e.type;
+  document.getElementById('kasaEditDesc').value = e.desc || '';
+  setSearchableValue('kasaEditAcc', data.accounts, e.accountId);
+  document.getElementById('kasaEditPayMethod').value = e.paymentMethod || '';
+  document.getElementById('kasaEditAmount').value = e.amount;
+  document.getElementById('kasaEditModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('kasaEditCancel').addEventListener('click', () => {
+  document.getElementById('kasaEditModalOverlay').style.display = 'none';
+});
+
+document.getElementById('kasaEditSave').addEventListener('click', () => {
+  const date = document.getElementById('kasaEditDate').value;
+  const type = document.getElementById('kasaEditType').value;
+  const desc = document.getElementById('kasaEditDesc').value.trim();
+  const accountId = resolveSearchableId('kasaEditAcc', data.accounts);
+  const paymentMethod = document.getElementById('kasaEditPayMethod').value.trim();
+  const amount = parseFloat(document.getElementById('kasaEditAmount').value) || 0;
+  if (!date || !amount) return;
+  const e = (data.kasaEntries || []).find(x => x.id === editingKasaId);
+  const prevAccountId = e.accountId;
+  e.date = date; e.type = type; e.desc = desc; e.accountId = accountId; e.paymentMethod = paymentMethod; e.amount = amount;
+  upsertCariTxFromKasa(e);
+  save();
+  document.getElementById('kasaEditModalOverlay').style.display = 'none';
+  renderKasa();
+  if (currentAccId && (currentAccId === accountId || currentAccId === prevAccountId)) refreshDetail();
+});
+
+document.getElementById('kasaPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
+document.getElementById('kasaEditPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
 
 </script>
 </body>
