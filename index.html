@@ -426,6 +426,7 @@
         <datalist id="txTypeList"></datalist>
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
+        <input type="text" id="txPayMethod" placeholder="Ödeme şekli (Nakit, Havale...)" />
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
         <button id="addTxBtn" class="primary-btn">+</button>
       </div>
@@ -848,6 +849,8 @@
       </div>
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
+      <label style="font-size:12px; color:#5B6B82;">Ödeme şekli</label>
+      <input type="text" id="txEditPayMethod" placeholder="Nakit, Havale/EFT, Çek..." />
       <div id="txEditKdvRow" style="display:none; flex-direction:column; gap:6px;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
           <input type="checkbox" id="txEditKdvTransfer" />
@@ -1823,8 +1826,8 @@ document.getElementById('accList').addEventListener('click', (e) => {
 });
 
 let currentAccIsDriver = false;
-const TX_FORM_GRID_NORMAL = '1fr 110px 2fr 100px 100px 130px 40px';
-const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 30px 90px 90px 120px 40px';
+const TX_FORM_GRID_NORMAL = '1fr 110px 2fr 100px 100px 150px 130px 40px';
+const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 30px 90px 90px 130px 120px 40px';
 
 // Kullanıcının sürükleyerek ayarlayabileceği sütun genişlikleri
 const TX_COL_LABELS = { date: 'Tarih', irsNo: 'İrs. No', desc: 'Açıklama', plaka: 'Plaka', debit: 'Borç', credit: 'Alacak', balance: 'Bakiye' };
@@ -2111,7 +2114,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2248,6 +2251,7 @@ function openTxEdit(id) {
   document.getElementById('txEditType').value = t.txType || '';
   document.getElementById('txEditDebit').value = t.debit || '';
   document.getElementById('txEditCredit').value = t.credit || '';
+  document.getElementById('txEditPayMethod').value = t.paymentMethod || '';
   document.getElementById('txEditDueDate').value = t.dueDate || '';
   document.getElementById('txEditColor').value = t.color || '#17212F';
   renderTxColorPalette(t.color || '#17212F');
@@ -2270,13 +2274,14 @@ document.getElementById('txEditSave').addEventListener('click', () => {
   const desc = document.getElementById('txEditDesc').value.trim();
   const debit = parseFloat(document.getElementById('txEditDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txEditCredit').value) || 0;
+  const paymentMethod = document.getElementById('txEditPayMethod').value.trim();
   const editTxType = currentAccIsDriver ? document.getElementById('txEditType').value : '';
   const dueDate = document.getElementById('txEditDueDate').value || null;
   const color = document.getElementById('txEditColor').value;
   if (!date) return;
   const t = (data.transactions[currentAccId] || []).find(x => x.id === editingTxId);
   const dateChanged = t.date !== date;
-  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.dueDate = dueDate; t.color = (color === '#17212F') ? null : color;
+  t.date = date; t.desc = desc; t.debit = debit; t.credit = credit; t.paymentMethod = paymentMethod; t.dueDate = dueDate; t.color = (color === '#17212F') ? null : color;
   if (dateChanged) {
     const list = data.transactions[currentAccId] || [];
     ensureTxOrders(list);
@@ -2421,6 +2426,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const txType = currentAccIsDriver ? document.getElementById('txType').value : '';
   const debit = parseFloat(document.getElementById('txDebit').value) || 0;
   const credit = parseFloat(document.getElementById('txCredit').value) || 0;
+  const paymentMethod = document.getElementById('txPayMethod').value.trim();
   const dueDate = document.getElementById('txDueDate').value || null;
   const kdvTransfer = document.getElementById('txKdvTransfer').checked;
   const kdvRate = getTaxRateValue('txKdvRate', 'txKdvRateCustom');
@@ -2429,7 +2435,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   const list = data.transactions[currentAccId];
   ensureTxOrders(list);
   const order = nextOrderForDate(list, date);
-  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, txType, debit, credit, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null, order };
+  const tx = { id: 'tx_' + Date.now(), date, desc, irsaliyeNo, vehiclePlate, txType, debit, credit, paymentMethod, dueDate, dueReminderId: null, kdvTransfer, kdvRate, taxEntryId: null, order };
   data.transactions[currentAccId].push(tx);
   upsertTxDueReminder(tx, currentAccId);
   const acc = data.accounts.find(a => a.id === currentAccId);
@@ -2441,6 +2447,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txType').value = '';
   document.getElementById('txDebit').value = '';
   document.getElementById('txCredit').value = '';
+  document.getElementById('txPayMethod').value = '';
   document.getElementById('txDueDate').value = '';
   document.getElementById('txKdvTransfer').checked = false;
   document.getElementById('txKdvRate').value = '20';
