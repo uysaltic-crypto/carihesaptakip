@@ -426,7 +426,9 @@
         <datalist id="txTypeList"></datalist>
         <input type="number" id="txDebit" placeholder="Borç" min="0" step="0.01" />
         <input type="number" id="txCredit" placeholder="Alacak" min="0" step="0.01" />
-        <input type="text" id="txPayMethod" placeholder="Ödeme şekli (Nakit, Havale...)" />
+        <input type="text" id="txPayMethod" list="payMethodList" placeholder="Ödeme şekli (Nakit, Havale...)" />
+        <button type="button" id="payMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 6px;">⚙</button>
+        <datalist id="payMethodList"></datalist>
         <input type="date" id="txDueDate" title="Son ödeme günü (opsiyonel) — girilirse hatırlatıcılara eklenir" />
         <button id="addTxBtn" class="primary-btn">+</button>
       </div>
@@ -850,7 +852,10 @@
       <input type="number" id="txEditDebit" placeholder="Borç" min="0" step="0.01" />
       <input type="number" id="txEditCredit" placeholder="Alacak" min="0" step="0.01" />
       <label style="font-size:12px; color:#5B6B82;">Ödeme şekli</label>
-      <input type="text" id="txEditPayMethod" placeholder="Nakit, Havale/EFT, Çek..." />
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="txEditPayMethod" list="payMethodList" placeholder="Nakit, Havale/EFT, Çek..." style="flex:1;" />
+        <button type="button" id="txEditPayMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 10px;">⚙</button>
+      </div>
       <div id="txEditKdvRow" style="display:none; flex-direction:column; gap:6px;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
           <input type="checkbox" id="txEditKdvTransfer" />
@@ -891,6 +896,20 @@
     </div>
   </div>
 </div>
+
+<div class="modal-overlay" id="payMethodManageModalOverlay">
+  <div class="modal-box">
+    <h3>Ödeme şekli listesini düzenle</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Hareket formundaki "Ödeme şekli" alanında öneri olarak çıkan isimleri buradan ekleyebilir, silebilir veya yeniden adlandırabilirsiniz. Bir ismi değiştirirseniz, o ödeme şeklini kullanan tüm hareketler otomatik olarak yeni isimle güncellenir.</p>
+    <div id="payMethodManageList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px; max-height:340px; overflow-y:auto;"></div>
+    <button type="button" id="payMethodManageAddBtn" style="font-size:13px; text-align:left;">+ Yeni ödeme şekli ekle</button>
+    <div class="actions">
+      <button id="payMethodManageCancel">Vazgeç</button>
+      <button id="payMethodManageSave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="modal-overlay" id="taxEditModalOverlay">
   <div class="modal-box">
@@ -1302,6 +1321,13 @@ function migrateTxTypeOptions() {
   }
 }
 
+function migratePayMethodOptions() {
+  if (!Array.isArray(data.payMethodOptions) || data.payMethodOptions.length === 0) {
+    data.payMethodOptions = ['Nakit', 'Havale/EFT', 'Çek', 'Senet', 'Kredi Kartı'];
+    save();
+  }
+}
+
 function isAllDataEmpty() {
   return data.accounts.length === 0 && data.reminders.length === 0 && data.vehicles.length === 0 &&
     data.drivers.length === 0 && data.trips.length === 0 && data.fuelLogs.length === 0 && data.tripDefs.length === 0;
@@ -1324,14 +1350,15 @@ function updateEmptyDataBanner() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'] }, JSON.parse(raw));
+    if (raw) data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'], payMethodOptions: ['Nakit', 'Havale/EFT', 'Çek', 'Senet', 'Kredi Kartı'] }, JSON.parse(raw));
   } catch (e) { /* bozuk veri, sıfırdan başla */ }
-  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase, migrateTxTypeOptions];
+  const migrations = [migrateLegacyFuelData, migrateTripTxDescriptions, migrateTripDefsLowercase, migrateRefreshAllTripTx, migrateTripDefsUppercase, migrateTxTypeOptions, migratePayMethodOptions];
   migrations.forEach(fn => {
     try { fn(); } catch (e) { console.error('Düzeltme (migration) hatası: ' + fn.name, e); }
   });
   try {
     renderTxTypeList();
+    renderPayMethodList();
     updateTabStyles();
     renderList();
     renderReminders();
@@ -1470,6 +1497,95 @@ document.getElementById('txTypeManageSave').addEventListener('click', () => {
   document.getElementById('txTypeManageModalOverlay').style.display = 'none';
   if (currentAccId) renderTx();
 });
+
+// "Ödeme şekli" alanının öneri listesi (datalist) kullanıcı tarafından yönetilebilir (data.payMethodOptions).
+// Mantık, yukarıdaki "Tür" listesi yönetimiyle birebir aynıdır.
+function renderPayMethodList() {
+  const dl = document.getElementById('payMethodList');
+  dl.innerHTML = (data.payMethodOptions || []).map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+}
+
+let payMethodWorking = [];
+let payMethodOriginal = [];
+
+function renderPayMethodManageRows() {
+  const wrap = document.getElementById('payMethodManageList');
+  if (payMethodWorking.length === 0) {
+    wrap.innerHTML = `<p style="font-size:12.5px; color:#8B99AD; margin:0;">Henüz ödeme şekli eklenmemiş.</p>`;
+    return;
+  }
+  wrap.innerHTML = payMethodWorking.map((v, i) => `
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="text" data-i="${i}" class="payMethodManageInput" value="${escapeHtml(v)}" style="flex:1;" />
+      <button type="button" data-i="${i}" class="payMethodManageDelBtn" title="Sil" style="border:none; background:none; color:#C43D33; padding:4px 8px; font-size:15px;">✕</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.payMethodManageInput').forEach(inp => {
+    inp.addEventListener('input', () => { payMethodWorking[Number(inp.dataset.i)] = inp.value; });
+  });
+  wrap.querySelectorAll('.payMethodManageDelBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = Number(btn.dataset.i);
+      payMethodWorking.splice(i, 1);
+      payMethodOriginal.splice(i, 1);
+      renderPayMethodManageRows();
+    });
+  });
+}
+
+function openPayMethodManageModal() {
+  payMethodWorking = (data.payMethodOptions || []).slice();
+  payMethodOriginal = (data.payMethodOptions || []).slice();
+  renderPayMethodManageRows();
+  document.getElementById('payMethodManageModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('payMethodManageBtn').addEventListener('click', openPayMethodManageModal);
+document.getElementById('txEditPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
+
+document.getElementById('payMethodManageAddBtn').addEventListener('click', () => {
+  payMethodWorking.push('');
+  payMethodOriginal.push(null);
+  renderPayMethodManageRows();
+  const inputs = document.querySelectorAll('.payMethodManageInput');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+});
+
+document.getElementById('payMethodManageCancel').addEventListener('click', () => {
+  document.getElementById('payMethodManageModalOverlay').style.display = 'none';
+});
+
+document.getElementById('payMethodManageSave').addEventListener('click', () => {
+  const renames = [];
+  const finalList = [];
+  const seen = new Set();
+  for (let i = 0; i < payMethodWorking.length; i++) {
+    const val = (payMethodWorking[i] || '').trim();
+    if (!val) continue;
+    const key = val.toLocaleLowerCase('tr-TR');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    finalList.push(val);
+    const orig = payMethodOriginal[i];
+    if (orig && orig.trim() && orig.trim().toLocaleLowerCase('tr-TR') !== key) {
+      renames.push({ from: orig.trim(), to: val });
+    }
+  }
+  renames.forEach(r => {
+    const fromKey = r.from.toLocaleLowerCase('tr-TR');
+    Object.keys(data.transactions).forEach(accId => {
+      (data.transactions[accId] || []).forEach(t => {
+        if ((t.paymentMethod || '').trim().toLocaleLowerCase('tr-TR') === fromKey) t.paymentMethod = r.to;
+      });
+    });
+  });
+  data.payMethodOptions = finalList;
+  save();
+  renderPayMethodList();
+  document.getElementById('payMethodManageModalOverlay').style.display = 'none';
+  if (currentAccId) renderTx();
+});
+
 function txTypeBadge(type) {
   const label = (type || '').trim();
   if (!label || label.toLowerCase() === 'normal') return '';
@@ -1826,8 +1942,8 @@ document.getElementById('accList').addEventListener('click', (e) => {
 });
 
 let currentAccIsDriver = false;
-const TX_FORM_GRID_NORMAL = '1fr 110px 2fr 100px 100px 150px 130px 40px';
-const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 30px 90px 90px 130px 120px 40px';
+const TX_FORM_GRID_NORMAL = '1fr 110px 2fr 100px 100px 150px 34px 130px 40px';
+const TX_FORM_GRID_DRIVER = '1fr 85px 1.2fr 80px 90px 30px 90px 90px 130px 30px 120px 40px';
 
 // Kullanıcının sürükleyerek ayarlayabileceği sütun genişlikleri
 const TX_COL_LABELS = { date: 'Tarih', irsNo: 'İrs. No', desc: 'Açıklama', plaka: 'Plaka', debit: 'Borç', credit: 'Alacak', balance: 'Bakiye' };
