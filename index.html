@@ -670,16 +670,16 @@
 
   <div id="vergitakibiView" style="display:none;">
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
-    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 200px 110px 160px 150px 90px 90px 80px;">
+    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 110px 120px 130px 90px 140px 130px 75px 80px 70px;">
       <input type="date" id="taxDate" />
       <select id="taxType">
         <option value="satis">Satış Faturası</option>
         <option value="alis">Alış Faturası</option>
         <option value="masraf">Masraf</option>
       </select>
-      <input type="text" id="taxDesc" placeholder="Açıklama (ör. Yemek masrafı, A Ticaret satış faturası)" />
+      <input type="text" id="taxDesc" placeholder="Açıklama" />
       <input type="text" id="taxIrsNo" placeholder="Fatura no" />
-      <input type="text" id="taxAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="taxAccDatalist"></datalist>
+      <input type="text" id="taxAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyon)..." autocomplete="off" /><datalist id="taxAccDatalist"></datalist>
       <input type="number" id="taxAmount" placeholder="Tutar (KDV dahil)" min="0" step="0.01" />
       <select id="taxRate">
         <option value="20">%20</option>
