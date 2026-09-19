@@ -670,7 +670,7 @@
 
   <div id="vergitakibiView" style="display:none;">
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
-    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 1fr 150px 90px 90px 80px;">
+    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 1fr 160px 150px 90px 90px 80px;">
       <input type="date" id="taxDate" />
       <select id="taxType">
         <option value="satis">Satış Faturası</option>
@@ -678,6 +678,7 @@
         <option value="masraf">Masraf</option>
       </select>
       <input type="text" id="taxDesc" placeholder="Açıklama (ör. Yemek masrafı, A Ticaret satış faturası)" />
+      <input type="text" id="taxAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="taxAccDatalist"></datalist>
       <input type="number" id="taxAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
       <select id="taxRate">
         <option value="20">%20</option>
@@ -960,6 +961,7 @@
         <option value="masraf">Masraf</option>
       </select>
       <input type="text" id="taxEditDesc" placeholder="Açıklama" />
+      <input type="text" id="taxEditAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" />
       <input type="number" id="taxEditAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
       <select id="taxEditRate">
         <option value="20">%20</option>
@@ -2568,6 +2570,9 @@ document.getElementById('delAccBtn').addEventListener('click', () => {
     if (linkedTaxIds.length > 0) data.taxEntries = data.taxEntries.filter(e => !linkedTaxIds.includes(e.id));
     (data.kasaEntries || []).forEach(e => {
       if (e.accountId === currentAccId) { e.accountId = null; e.linkedTxId = null; }
+    });
+    (data.taxEntries || []).forEach(e => {
+      if (!e.fromTxId && e.accountId === currentAccId) e.accountId = null;
     });
     data.accounts = data.accounts.filter(a => a.id !== currentAccId);
     delete data.transactions[currentAccId];
@@ -5529,6 +5534,7 @@ function computeTaxMonthlyGroups() {
 }
 
 function renderVergiTakibi() {
+  fillSearchableDatalist('taxAccDatalist', data.accounts);
   const groups = computeTaxMonthlyGroups();
   const list = document.getElementById('taxList');
   if (groups.length === 0) {
@@ -5568,6 +5574,7 @@ function renderVergiTakibi() {
       const total = e.amount + vatAmount;
       const typeColor = e.type === 'satis' ? '#1D8A5B' : (e.type === 'alis' ? '#C43D33' : '#A3660F');
       const isLinked = !!e.fromTxId;
+      const relatedAcc = data.accounts.find(a => a.id === (e.fromAccountId || e.accountId));
       const actions = isLinked
         ? `<span style="font-size:11px; color:#8B99AD;">🔗 Cariden otomatik</span>`
         : `<button class="editTaxEntryBtn" data-id="${e.id}">Düzenle</button><button class="delTaxEntryBtn" data-id="${e.id}">Sil</button>`;
@@ -5576,7 +5583,7 @@ function renderVergiTakibi() {
           <div>
             <span class="rem-date">${fmtDate(e.date)}</span>
             <p class="rem-desc"><span style="color:${typeColor}; font-weight:600;">${TAX_TYPE_LABELS[e.type]}</span> — ${escapeHtml(e.desc || '')}
-              <span class="rem-acc">Matrah: ${fmt(e.amount)} · %${e.vatRate} KDV: ${fmt(vatAmount)} · Toplam: ${fmt(total)}</span>
+              <span class="rem-acc">${relatedAcc ? '🔗 ' + escapeHtml(relatedAcc.name) + ' · ' : ''}Matrah: ${fmt(e.amount)} · %${e.vatRate} KDV: ${fmt(vatAmount)} · Toplam: ${fmt(total)}</span>
             </p>
           </div>
         </div>
@@ -5616,12 +5623,14 @@ document.getElementById('addTaxEntryBtn').addEventListener('click', () => {
   const date = document.getElementById('taxDate').value;
   const type = document.getElementById('taxType').value;
   const desc = document.getElementById('taxDesc').value.trim();
+  const accountId = resolveSearchableId('taxAcc', data.accounts);
   const amount = parseFloat(document.getElementById('taxAmount').value) || 0;
   const vatRate = getTaxRateValue('taxRate', 'taxRateCustom');
   if (!date || !amount) return;
-  data.taxEntries.push({ id: 'taxe_' + Date.now(), date, type, desc, amount, vatRate });
+  data.taxEntries.push({ id: 'taxe_' + Date.now(), date, type, desc, accountId, amount, vatRate });
   save();
   document.getElementById('taxDesc').value = '';
+  document.getElementById('taxAcc').value = '';
   document.getElementById('taxAmount').value = '';
   renderVergiTakibi();
 });
@@ -5632,6 +5641,7 @@ function openTaxEntryEdit(id) {
   document.getElementById('taxEditDate').value = e.date;
   document.getElementById('taxEditType').value = e.type;
   document.getElementById('taxEditDesc').value = e.desc || '';
+  setSearchableValue('taxEditAcc', data.accounts, e.accountId);
   document.getElementById('taxEditAmount').value = e.amount;
   setTaxRateValue('taxEditRate', 'taxEditRateCustom', e.vatRate);
   document.getElementById('taxEditModalOverlay').style.display = 'flex';
@@ -5645,11 +5655,12 @@ document.getElementById('taxEditSave').addEventListener('click', () => {
   const date = document.getElementById('taxEditDate').value;
   const type = document.getElementById('taxEditType').value;
   const desc = document.getElementById('taxEditDesc').value.trim();
+  const accountId = resolveSearchableId('taxEditAcc', data.accounts);
   const amount = parseFloat(document.getElementById('taxEditAmount').value) || 0;
   const vatRate = getTaxRateValue('taxEditRate', 'taxEditRateCustom');
   if (!date || !amount) return;
   const e = data.taxEntries.find(x => x.id === editingTaxEntryId);
-  e.date = date; e.type = type; e.desc = desc; e.amount = amount; e.vatRate = vatRate;
+  e.date = date; e.type = type; e.desc = desc; e.accountId = accountId; e.amount = amount; e.vatRate = vatRate;
   save();
   document.getElementById('taxEditModalOverlay').style.display = 'none';
   renderVergiTakibi();
