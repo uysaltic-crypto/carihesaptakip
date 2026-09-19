@@ -670,7 +670,7 @@
 
   <div id="vergitakibiView" style="display:none;">
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
-    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 1fr 110px 160px 150px 90px 90px 80px;">
+    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 120px 130px 200px 110px 160px 150px 90px 90px 80px;">
       <input type="date" id="taxDate" />
       <select id="taxType">
         <option value="satis">Satış Faturası</option>
@@ -680,7 +680,7 @@
       <input type="text" id="taxDesc" placeholder="Açıklama (ör. Yemek masrafı, A Ticaret satış faturası)" />
       <input type="text" id="taxIrsNo" placeholder="Fatura no" />
       <input type="text" id="taxAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="taxAccDatalist"></datalist>
-      <input type="number" id="taxAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
+      <input type="number" id="taxAmount" placeholder="Tutar (KDV dahil)" min="0" step="0.01" />
       <select id="taxRate">
         <option value="20">%20</option>
         <option value="10">%10</option>
@@ -964,7 +964,7 @@
       <input type="text" id="taxEditDesc" placeholder="Açıklama" />
       <input type="text" id="taxEditIrsNo" placeholder="Fatura no" />
       <input type="text" id="taxEditAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" />
-      <input type="number" id="taxEditAmount" placeholder="Tutar (KDV hariç)" min="0" step="0.01" />
+      <input type="number" id="taxEditAmount" placeholder="Tutar (KDV dahil)" min="0" step="0.01" />
       <select id="taxEditRate">
         <option value="20">%20</option>
         <option value="10">%10</option>
@@ -2190,6 +2190,43 @@ function upsertCariTxFromKasa(entry) {
   entry.linkedTxId = tx.id;
 }
 
+// Vergi Takibi'nde manuel eklenen bir kayıt bir cariyle ilişkilendirilmişse, o caride otomatik
+// bir hareket oluşturur/günceller (Kasa ile aynı mantık). "Cariden otomatik" gelen kayıtlar
+// (entry.fromTxId dolu olanlar) zaten bir cari hareketinden türediği için burada tekrar bir
+// cari hareketi oluşturmaz — aksi halde sonsuz döngü riski doğar.
+// Yön: Satış Faturası → carinin hesabına Borç, Alış Faturası → Alacak, Masraf → Borç (Tür: Masraf).
+function upsertCariTxFromTaxEntry(entry) {
+  removeLinkedCariTx(entry.linkedTxId);
+  entry.linkedTxId = null;
+  if (entry.fromTxId) return;
+  if (!entry.accountId) return;
+  const acc = data.accounts.find(a => a.id === entry.accountId);
+  if (!acc) { entry.accountId = null; return; }
+  if (!data.transactions[entry.accountId]) data.transactions[entry.accountId] = [];
+  const list = data.transactions[entry.accountId];
+  ensureTxOrders(list);
+  const order = nextOrderForDate(list, entry.date);
+  const rate = Number(entry.vatRate) || 0;
+  const totalIncl = Number(((Number(entry.amount) || 0) * (1 + rate / 100)).toFixed(2));
+  let debit = 0, credit = 0, txType = '';
+  if (entry.type === 'alis') credit = totalIncl;
+  else if (entry.type === 'masraf') { debit = totalIncl; txType = 'Masraf'; }
+  else debit = totalIncl; // satis
+  const tx = {
+    id: 'tx_t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    date: entry.date,
+    desc: entry.desc || TAX_TYPE_LABELS[entry.type],
+    irsaliyeNo: entry.irsaliyeNo || '', vehiclePlate: '', txType,
+    debit, credit,
+    paymentMethod: '', dueDate: null, dueReminderId: null,
+    kdvTransfer: false, kdvRate: rate, taxEntryId: null,
+    fromTaxEntryId: entry.id,
+    order
+  };
+  list.push(tx);
+  entry.linkedTxId = tx.id;
+}
+
 function openDetail(id) {
   currentAccId = id;
   collapsedMonths = new Set();
@@ -2317,7 +2354,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2326,8 +2363,8 @@ function renderTx() {
         const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
         return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
       }).join('');
-      const actionsHtml = t.kasaEntryId
-        ? `<span title="Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın." style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
+      const actionsHtml = (t.kasaEntryId || t.fromTaxEntryId)
+        ? `<span title="${t.kasaEntryId ? 'Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın.' : 'Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın.'}" style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
         : `<button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#17212F;">✎</button>
         <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>`;
       return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; grid-template-columns:${rowGrid}; ${colorStyle}">
@@ -2575,7 +2612,7 @@ document.getElementById('delAccBtn').addEventListener('click', () => {
       if (e.accountId === currentAccId) { e.accountId = null; e.linkedTxId = null; }
     });
     (data.taxEntries || []).forEach(e => {
-      if (!e.fromTxId && e.accountId === currentAccId) e.accountId = null;
+      if (!e.fromTxId && e.accountId === currentAccId) { e.accountId = null; e.linkedTxId = null; }
     });
     data.accounts = data.accounts.filter(a => a.id !== currentAccId);
     delete data.transactions[currentAccId];
@@ -5614,9 +5651,13 @@ function renderVergiTakibi() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       showConfirm('Bu kaydı silmek istediğinize emin misiniz?', () => {
+        const entry = data.taxEntries.find(x => x.id === btn.dataset.id);
+        const linkedAccId = entry ? entry.accountId : null;
+        if (entry) removeLinkedCariTx(entry.linkedTxId);
         data.taxEntries = data.taxEntries.filter(x => x.id !== btn.dataset.id);
         save();
         renderVergiTakibi();
+        if (currentAccId && currentAccId === linkedAccId) refreshDetail();
       });
     });
   });
@@ -5628,16 +5669,20 @@ document.getElementById('addTaxEntryBtn').addEventListener('click', () => {
   const desc = document.getElementById('taxDesc').value.trim();
   const irsaliyeNo = document.getElementById('taxIrsNo').value.trim();
   const accountId = resolveSearchableId('taxAcc', data.accounts);
-  const amount = parseFloat(document.getElementById('taxAmount').value) || 0;
+  const amountIncl = parseFloat(document.getElementById('taxAmount').value) || 0;
   const vatRate = getTaxRateValue('taxRate', 'taxRateCustom');
-  if (!date || !amount) return;
-  data.taxEntries.push({ id: 'taxe_' + Date.now(), date, type, desc, irsaliyeNo, accountId, amount, vatRate });
+  if (!date || !amountIncl) return;
+  const amount = Number((vatRate > 0 ? amountIncl / (1 + vatRate / 100) : amountIncl).toFixed(2));
+  const entry = { id: 'taxe_' + Date.now(), date, type, desc, irsaliyeNo, accountId, amount, vatRate, linkedTxId: null };
+  data.taxEntries.push(entry);
+  upsertCariTxFromTaxEntry(entry);
   save();
   document.getElementById('taxDesc').value = '';
   document.getElementById('taxIrsNo').value = '';
   document.getElementById('taxAcc').value = '';
   document.getElementById('taxAmount').value = '';
   renderVergiTakibi();
+  if (currentAccId && currentAccId === accountId) refreshDetail();
 });
 
 function openTaxEntryEdit(id) {
@@ -5648,7 +5693,8 @@ function openTaxEntryEdit(id) {
   document.getElementById('taxEditDesc').value = e.desc || '';
   document.getElementById('taxEditIrsNo').value = e.irsaliyeNo || '';
   setSearchableValue('taxEditAcc', data.accounts, e.accountId);
-  document.getElementById('taxEditAmount').value = e.amount;
+  const amountIncl = e.vatRate > 0 ? e.amount * (1 + e.vatRate / 100) : e.amount;
+  document.getElementById('taxEditAmount').value = Number(amountIncl.toFixed(2));
   setTaxRateValue('taxEditRate', 'taxEditRateCustom', e.vatRate);
   document.getElementById('taxEditModalOverlay').style.display = 'flex';
 }
@@ -5663,14 +5709,18 @@ document.getElementById('taxEditSave').addEventListener('click', () => {
   const desc = document.getElementById('taxEditDesc').value.trim();
   const irsaliyeNo = document.getElementById('taxEditIrsNo').value.trim();
   const accountId = resolveSearchableId('taxEditAcc', data.accounts);
-  const amount = parseFloat(document.getElementById('taxEditAmount').value) || 0;
+  const amountIncl = parseFloat(document.getElementById('taxEditAmount').value) || 0;
   const vatRate = getTaxRateValue('taxEditRate', 'taxEditRateCustom');
-  if (!date || !amount) return;
+  if (!date || !amountIncl) return;
+  const amount = Number((vatRate > 0 ? amountIncl / (1 + vatRate / 100) : amountIncl).toFixed(2));
   const e = data.taxEntries.find(x => x.id === editingTaxEntryId);
+  const prevAccountId = e.accountId;
   e.date = date; e.type = type; e.desc = desc; e.irsaliyeNo = irsaliyeNo; e.accountId = accountId; e.amount = amount; e.vatRate = vatRate;
+  upsertCariTxFromTaxEntry(e);
   save();
   document.getElementById('taxEditModalOverlay').style.display = 'none';
   renderVergiTakibi();
+  if (currentAccId && (currentAccId === accountId || currentAccId === prevAccountId)) refreshDetail();
 });
 
 document.getElementById('taxExcelBtn').addEventListener('click', () => {
