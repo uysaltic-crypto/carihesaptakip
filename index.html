@@ -550,7 +550,7 @@
       <button id="newSeferPageBtn" style="font-size:12px; padding:6px 10px;">+ Yeni sayfa</button>
     </div>
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer ekle</p>
-    <div class="rem-form" style="grid-template-columns: minmax(0,1fr) 100px 120px minmax(0,1fr) minmax(0,1fr) 110px auto; gap:6px; align-items:end;">
+    <div class="rem-form" style="grid-template-columns: minmax(0,1fr) 100px 150px minmax(0,1fr) minmax(0,1fr) 110px auto; gap:6px; align-items:end;">
       <div>
         <input type="text" id="tripDriverInput" list="tripDriverDatalist" placeholder="Şoför ara ve seçin..." autocomplete="off" />
         <datalist id="tripDriverDatalist"></datalist>
@@ -670,7 +670,7 @@
 
   <div id="vergitakibiView" style="display:none;">
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran; alış faturaları, satış faturaları ve masrafları KDV oranlarına göre ayırarak kaydetmenizi ve ay bazında KDV ile kâr/zarar durumunu takip etmenizi sağlar. Buradan elle eklediğiniz kayıtlarda tutarları <b>KDV hariç (matrah)</b> olarak girin. Ayrıca <b>Cariler</b> ekranında bir müşteri/tedarikçi hareketi eklerken "Vergi Takibi'ne aktar" seçeneğini işaretlerseniz, o hareket (girdiğiniz tutar KDV dahil kabul edilerek) otomatik olarak buraya fatura kaydı şeklinde düşer; bu kayıtlar "🔗 Cariden otomatik" etiketiyle görünür ve kaynağı olan cari hareketi düzenlenip/silinince burada da otomatik güncellenir/silinir. Bu ekran bir takip aracıdır, resmi vergi beyannamesi yerine geçmez — beyan öncesi mutlaka muhasebecinizle teyit edin.</p>
-    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 110px 120px 130px 90px 140px 130px 75px 80px 70px;">
+    <div class="rem-form" id="taxEntryFormGrid" style="grid-template-columns: 110px 120px 100px 150px 140px 130px 75px 80px 70px;">
       <input type="date" id="taxDate" />
       <select id="taxType">
         <option value="satis">Satış Faturası</option>
@@ -3721,7 +3721,24 @@ document.getElementById('tripPrice').addEventListener('keydown', (e) => {
 // yazılan metni ilk uygun sonuca tamamlar.
 bindSearchableEnter('remAcc', () => data.accounts);
 bindSearchableEnter('remEditAcc', () => data.accounts);
-bindSearchableEnter('fuelLogVeh', () => data.vehicles);
+bindSearchableEnter('fuelLogVeh', () => data.vehicles, () => focusAndSelect('fuelLogDate'));
+
+[['fuelLogDate', 'fuelLogAmount'], ['fuelLogAmount', 'fuelLogLiters'], ['fuelLogLiters', 'fuelLogKm']].forEach(([from, to]) => {
+  document.getElementById(from).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      focusAndSelect(to);
+    }
+  });
+});
+
+document.getElementById('fuelLogKm').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('addFuelLogBtn').click();
+    if (!document.getElementById('fuelLogVeh').value) focusAndSelect('fuelLogVeh');
+  }
+});
 bindSearchableEnter('fuelLogFilterVeh', () => data.vehicles);
 bindSearchableEnter('fuelLogEditVeh', () => data.vehicles);
 bindSearchableEnter('irsVehicle', () => data.vehicles);
