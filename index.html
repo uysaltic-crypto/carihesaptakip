@@ -698,7 +698,8 @@
   </div>
 
   <div id="kasaView" style="display:none;">
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran gerçek nakit/banka hareketlerinizi (yaptığınız ödemeler ve aldığınız tahsilatlar) tarihe göre kaydeder ve kasa bakiyenizi takip eder. Bir hareketi isterseniz bir cariyle ilişkilendirebilirsiniz; ancak bu ekrandaki kayıtlar carinin bakiyesini <b>etkilemez</b> — cari hesaplardan bağımsız, ayrı bir kasa defteridir.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran gerçek hareketlerinizi (yaptığınız ödemeler ve aldığınız tahsilatlar) tarihe göre kaydeder. <b>Kasa sekmesinde sadece nakit</b> işlenir; <b>Banka</b> ve <b>Kredi Kartı</b> hareketleri kendi sekmelerinde, ayrı bakiyelerle takip edilir. Bir hareketi isterseniz bir cariyle ilişkilendirebilirsiniz; ancak bu ekrandaki kayıtlar carinin bakiyesini <b>etkilemez</b> — cari hesaplardan bağımsız, ayrı bir kasa defteridir.</p>
+    <div id="kasaTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px;"></div>
     <div class="summary" id="kasaSummaryCards"></div>
     <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 130px 110px 1.4fr 1fr 150px 34px 110px 70px;">
       <input type="date" id="kasaDate" />
@@ -725,6 +726,12 @@
       <select id="kasaEditType">
         <option value="tahsilat">Tahsilat</option>
         <option value="odeme">Ödeme</option>
+      </select>
+      <label style="font-size:12px; color:#5B6B82;">Hesap</label>
+      <select id="kasaEditAcct">
+        <option value="nakit">Kasa (Nakit)</option>
+        <option value="banka">Banka</option>
+        <option value="kart">Kredi Kartı</option>
       </select>
       <input type="text" id="kasaEditDesc" placeholder="Açıklama" />
       <input type="text" id="kasaEditAcc" list="kasaEditAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="kasaEditAccDatalist"></datalist>
@@ -5755,9 +5762,41 @@ document.getElementById('taxExcelBtn').addEventListener('click', () => {
 // hareketlerini tarih sırasına göre tutar ve kümülatif kasa bakiyesini hesaplar.
 let editingKasaId = null;
 let collapsedKasaMonths = new Set();
+let activeKasaAcct = 'nakit';
+const KASA_ACCTS = {
+  nakit: { label: 'Kasa (Nakit)', bal: 'Kasa (nakit) bakiyesi' },
+  banka: { label: 'Banka', bal: 'Banka bakiyesi' },
+  kart:  { label: 'Kredi Kartı', bal: 'Kredi kartı bakiyesi' }
+};
+// Hesap alanı olmayan eski kayıtlar ödeme şekline göre yerleştirilir:
+// boş/Nakit → Kasa, Kredi Kartı → Kredi Kartı, diğerleri (Havale/EFT, Çek, Senet...) → Banka.
+function kasaAcctOf(e) {
+  if (e.kasaAccount && KASA_ACCTS[e.kasaAccount]) return e.kasaAccount;
+  const pm = (e.paymentMethod || '').trim().toLocaleLowerCase('tr-TR');
+  if (!pm || pm === 'nakit') return 'nakit';
+  if (pm.indexOf('kredi') !== -1 || pm.indexOf('kart') !== -1) return 'kart';
+  return 'banka';
+}
+function kasaEntriesOf(acct) {
+  return (data.kasaEntries || []).filter(e => kasaAcctOf(e) === acct);
+}
+function kasaBalanceOf(acct) {
+  return kasaEntriesOf(acct).reduce((s, e) => s + (e.type === 'tahsilat' ? 1 : -1) * (Number(e.amount) || 0), 0);
+}
+function renderKasaTabs() {
+  const box = document.getElementById('kasaTabs');
+  box.innerHTML = Object.keys(KASA_ACCTS).map(k => {
+    const active = k === activeKasaAcct;
+    const b = kasaBalanceOf(k);
+    return `<button type="button" class="kasaTabBtn" data-acct="${k}" style="padding:9px 16px; border-radius:10px; cursor:pointer; font-size:13.5px; font-weight:600; border:1px solid ${active ? '#1F6FEB' : '#D7DDE7'}; background:${active ? '#1F6FEB' : '#fff'}; color:${active ? '#fff' : '#1B2A41'};">${KASA_ACCTS[k].label} <span style="font-weight:500; opacity:.85; margin-left:6px;">${fmt(b)}</span></button>`;
+  }).join('');
+  box.querySelectorAll('.kasaTabBtn').forEach(btn => {
+    btn.addEventListener('click', () => { activeKasaAcct = btn.dataset.acct; renderKasa(); });
+  });
+}
 
 function computeKasaRows() {
-  const entries = (data.kasaEntries || []).slice().sort((a, b) => {
+  const entries = kasaEntriesOf(activeKasaAcct).sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
     return a.id < b.id ? -1 : 1;
   });
@@ -5770,7 +5809,7 @@ function computeKasaRows() {
 }
 
 function renderKasaSummary() {
-  const entries = data.kasaEntries || [];
+  const entries = kasaEntriesOf(activeKasaAcct);
   let totalTahsilat = 0, totalOdeme = 0;
   entries.forEach(e => {
     if (e.type === 'tahsilat') totalTahsilat += Number(e.amount) || 0;
@@ -5780,11 +5819,12 @@ function renderKasaSummary() {
   document.getElementById('kasaSummaryCards').innerHTML = `
     <div class="card"><p class="label">Toplam tahsilat</p><p class="value" style="color:#1D8A5B;">${fmt(totalTahsilat)}</p></div>
     <div class="card"><p class="label">Toplam ödeme</p><p class="value" style="color:#C43D33;">${fmt(totalOdeme)}</p></div>
-    <div class="card"><p class="label">Kasa bakiyesi</p><p class="value" style="${bakiye < 0 ? 'color:#C43D33;' : ''}">${fmt(bakiye)}</p></div>
+    <div class="card"><p class="label">${KASA_ACCTS[activeKasaAcct].bal}</p><p class="value" style="${bakiye < 0 ? 'color:#C43D33;' : ''}">${fmt(bakiye)}</p></div>
   `;
 }
 
 function renderKasa() {
+  renderKasaTabs();
   renderKasaSummary();
   fillSearchableDatalist('kasaAccDatalist', data.accounts);
   fillSearchableDatalist('kasaEditAccDatalist', data.accounts);
@@ -5792,7 +5832,7 @@ function renderKasa() {
   const rows = computeKasaRows();
   const list = document.getElementById('kasaList');
   if (rows.length === 0) {
-    list.innerHTML = `<div class="empty">Henüz kasa hareketi yok. Yukarıdaki formdan bir tahsilat veya ödeme ekleyin.</div>`;
+    list.innerHTML = `<div class="empty">${KASA_ACCTS[activeKasaAcct].label} hesabında henüz hareket yok. Yukarıdaki formdan bir tahsilat veya ödeme ekleyin.</div>`;
     return;
   }
 
@@ -5883,7 +5923,7 @@ document.getElementById('addKasaBtn').addEventListener('click', () => {
   const amount = parseFloat(document.getElementById('kasaAmount').value) || 0;
   if (!date || !amount) return;
   if (!data.kasaEntries) data.kasaEntries = [];
-  const entry = { id: 'kasa_' + Date.now(), date, type, desc, accountId, paymentMethod, amount, linkedTxId: null };
+  const entry = { id: 'kasa_' + Date.now(), date, type, desc, accountId, paymentMethod, amount, kasaAccount: activeKasaAcct, linkedTxId: null };
   data.kasaEntries.push(entry);
   upsertCariTxFromKasa(entry);
   save();
@@ -5899,6 +5939,7 @@ function openKasaEdit(id) {
   editingKasaId = id;
   const e = (data.kasaEntries || []).find(x => x.id === id);
   document.getElementById('kasaEditDate').value = e.date;
+  document.getElementById('kasaEditAcct').value = kasaAcctOf(e);
   document.getElementById('kasaEditType').value = e.type;
   document.getElementById('kasaEditDesc').value = e.desc || '';
   setSearchableValue('kasaEditAcc', data.accounts, e.accountId);
@@ -5922,6 +5963,7 @@ document.getElementById('kasaEditSave').addEventListener('click', () => {
   const e = (data.kasaEntries || []).find(x => x.id === editingKasaId);
   const prevAccountId = e.accountId;
   e.date = date; e.type = type; e.desc = desc; e.accountId = accountId; e.paymentMethod = paymentMethod; e.amount = amount;
+  e.kasaAccount = document.getElementById('kasaEditAcct').value;
   upsertCariTxFromKasa(e);
   save();
   document.getElementById('kasaEditModalOverlay').style.display = 'none';
