@@ -496,12 +496,6 @@
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 8px;">
       <p style="font-weight:600; font-size:15px; margin:0;">Kayıtlar</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <select id="maintFilterType">
-          <option value="">Tüm türler</option>
-          <option value="yag">🛢️ Yağ değişimi</option>
-          <option value="tekerlek">🛞 Tekerlek / lastik</option>
-          <option value="bakim">🔧 Bakım</option>
-        </select>
         <select id="maintFilterVeh"></select>
         <button id="newMaintBtn" class="primary-btn">+ Kayıt ekle</button>
       </div>
@@ -834,20 +828,18 @@
     <div class="field-group">
       <label style="font-size:12px; color:#5B6B82;">Araç</label>
       <select id="maintVeh"></select>
-      <label style="font-size:12px; color:#5B6B82;">Tür</label>
-      <select id="maintType">
-        <option value="yag">🛢️ Yağ değişimi</option>
-        <option value="tekerlek">🛞 Tekerlek / lastik</option>
-        <option value="bakim">🔧 Bakım</option>
-      </select>
       <label style="font-size:12px; color:#5B6B82;">Tarih</label>
       <input type="date" id="maintDate" />
       <label style="font-size:12px; color:#5B6B82;">Tutar (TL)</label>
       <input type="number" id="maintAmount" placeholder="Tutar (TL)" min="0" step="0.01" />
-      <label style="font-size:12px; color:#5B6B82;">Araç km (opsiyonel)</label>
-      <input type="number" id="maintKm" placeholder="Km" min="0" step="1" />
-      <label style="font-size:12px; color:#5B6B82;">Açıklama (ör. 15W-40 yağ + filtre, ön lastik takımı, periyodik bakım)</label>
-      <input type="text" id="maintNote" placeholder="Açıklama (opsiyonel)" />
+      <label style="font-size:12px; color:#5B6B82;">Bakım yapıldığı km</label>
+      <input type="number" id="maintKm" placeholder="Bakım yapıldığı km" min="0" step="1" />
+      <label style="font-size:12px; color:#5B6B82;">Bakım yapılacak km (sonraki bakım)</label>
+      <input type="number" id="maintNextKm" placeholder="Bakım yapılacak km" min="0" step="1" />
+      <label style="font-size:12px; color:#5B6B82;">Yapılan işler</label>
+      <textarea id="maintWork" rows="3" placeholder="Ör. motor yağı + yağ filtresi, ön lastik takımı, fren balatası..." style="resize:vertical; font-family:inherit; font-size:14px; padding:8px 10px; border:1px solid #D5DCE8; border-radius:8px;"></textarea>
+      <label style="font-size:12px; color:#5B6B82;">Yapan firma</label>
+      <input type="text" id="maintFirm" placeholder="Yapan firma / servis" />
       <label style="font-size:12px; color:#5B6B82;">Durum</label>
       <select id="maintStatus">
         <option value="done">Yapıldı (hatırlatma yok)</option>
@@ -1759,7 +1751,7 @@ function vehicleVirtualReminders() {
     if (m.status !== 'planned' || !m.date) return;
     const v = data.vehicles.find(x => x.id === m.vehicleId);
     if (!v) return;
-    out.push({ id: 'vmnt_' + m.id, date: m.date, desc: `${v.name} — ${MAINT_TYPES[m.type] ? MAINT_TYPES[m.type].label : 'Bakım'}${m.note ? ': ' + m.note : ''}`, amount: m.amount || 0, vehicleId: v.id, maintId: m.id, maintType: m.type, virtual: true });
+    out.push({ id: 'vmnt_' + m.id, date: m.date, desc: `${v.name} — Bakım${(m.work || m.note) ? ': ' + (m.work || m.note) : ''}${m.firm ? ' (' + m.firm + ')' : ''}${m.nextKm ? ' · Hedef km: ' + Number(m.nextKm).toLocaleString('tr-TR') : ''}`, amount: m.amount || 0, vehicleId: v.id, maintId: m.id, maintType: 'bakim', virtual: true });
   });
   return out;
 }
@@ -5271,42 +5263,45 @@ function fillMaintVehSelect(selectId, withAll) {
 
 function renderMaintenance() {
   fillMaintVehSelect('maintFilterVeh', true);
-  const fType = document.getElementById('maintFilterType').value;
   const fVeh = document.getElementById('maintFilterVeh').value;
   let rows = maintList().filter(m => data.vehicles.some(v => v.id === m.vehicleId));
-  if (fType) rows = rows.filter(m => m.type === fType);
   if (fVeh) rows = rows.filter(m => m.vehicleId === fVeh);
   rows = rows.slice().sort((a, b) => b.date.localeCompare(a.date));
 
   const t = todayStr();
-  const sum = (type) => rows.filter(m => m.type === type && m.status !== 'planned').reduce((s, m) => s + (Number(m.amount) || 0), 0);
-  const plannedCount = rows.filter(m => m.status === 'planned').length;
+  const done = rows.filter(m => m.status !== 'planned');
+  const totalDone = done.reduce((s, m) => s + (Number(m.amount) || 0), 0);
+  const plannedRows = rows.filter(m => m.status === 'planned');
+  const plannedTotal = plannedRows.reduce((s, m) => s + (Number(m.amount) || 0), 0);
   document.getElementById('maintSummary').innerHTML = `
-    <div class="card"><p class="label">🛢️ Yağ (yapılan)</p><p class="value">${fmt(sum('yag'))}</p></div>
-    <div class="card"><p class="label">🛞 Tekerlek (yapılan)</p><p class="value">${fmt(sum('tekerlek'))}</p></div>
-    <div class="card"><p class="label">🔧 Bakım (yapılan)</p><p class="value">${fmt(sum('bakim'))}</p></div>
-    <div class="card"><p class="label">Planlı / bekleyen</p><p class="value">${plannedCount}</p></div>`;
+    <div class="card"><p class="label">🔧 Yapılan bakım tutarı</p><p class="value">${fmt(totalDone)}</p></div>
+    <div class="card"><p class="label">Yapılan bakım sayısı</p><p class="value">${done.length}</p></div>
+    <div class="card"><p class="label">Planlı / bekleyen</p><p class="value">${plannedRows.length}</p></div>
+    <div class="card"><p class="label">Planlı tutar</p><p class="value">${fmt(plannedTotal)}</p></div>`;
 
   const list = document.getElementById('maintList');
   if (rows.length === 0) {
-    list.innerHTML = `<div class="empty">Henüz yağ / tekerlek / bakım kaydı yok.</div>`;
+    list.innerHTML = `<div class="empty">Henüz bakım kaydı yok.</div>`;
     return;
   }
+  const km = (n) => n ? Number(n).toLocaleString('tr-TR') + ' km' : '—';
   list.innerHTML = rows.map(m => {
     const v = data.vehicles.find(x => x.id === m.vehicleId);
-    const ty = MAINT_TYPES[m.type] || MAINT_TYPES.bakim;
     const planned = m.status === 'planned';
     const overdue = planned && m.date <= t;
+    const work = m.work || m.note || '';
     return `<div class="rem-row ${overdue ? 'overdue' : ''}">
       <div class="fuel-card-body">
         <div class="fuel-card-top">
-          <span class="rem-desc" style="font-weight:600;">${ty.icon} ${escapeHtml(v ? v.name : '—')} — ${ty.label}${planned ? ' <span style="font-size:11px; font-weight:600; color:#C97814; background:#FDF1DF; border-radius:8px; padding:1px 7px; margin-left:4px;">Planlı</span>' : ''}</span>
+          <span class="rem-desc" style="font-weight:600;">🔧 ${escapeHtml(v ? v.name : '—')}${planned ? ' <span style="font-size:11px; font-weight:600; color:#C97814; background:#FDF1DF; border-radius:8px; padding:1px 7px; margin-left:4px;">Planlı</span>' : ''}</span>
           <span class="rem-date" style="${overdue ? 'color:#C43D33; font-weight:700;' : ''}">${fmtDate(m.date)}</span>
         </div>
         <div class="fuel-metrics">
           <div><span class="fm-lbl">Tutar</span><span class="fm-val">${m.amount ? fmt(m.amount) : '—'}</span></div>
-          <div><span class="fm-lbl">Km</span><span class="fm-val">${m.km ? Number(m.km).toLocaleString('tr-TR') + ' km' : '—'}</span></div>
-          <div><span class="fm-lbl">Açıklama</span><span class="fm-val" style="font-weight:500;">${m.note ? escapeHtml(m.note) : '—'}</span></div>
+          <div><span class="fm-lbl">Yapıldığı km</span><span class="fm-val">${km(m.km)}</span></div>
+          <div><span class="fm-lbl">Yapılacak km</span><span class="fm-val">${km(m.nextKm)}</span></div>
+          <div><span class="fm-lbl">Yapan firma</span><span class="fm-val" style="font-weight:500;">${m.firm ? escapeHtml(m.firm) : '—'}</span></div>
+          <div><span class="fm-lbl">Yapılan işler</span><span class="fm-val" style="font-weight:500; white-space:pre-wrap;">${work ? escapeHtml(work) : '—'}</span></div>
         </div>
       </div>
       <div class="rem-actions">
@@ -5326,11 +5321,12 @@ function openMaintModal(id) {
   document.getElementById('maintModalTitle').textContent = m ? 'Kaydı düzenle' : 'Bakım kaydı ekle';
   const fv = document.getElementById('maintFilterVeh').value;
   document.getElementById('maintVeh').value = m ? m.vehicleId : (fv || data.vehicles[0].id);
-  document.getElementById('maintType').value = m ? m.type : (document.getElementById('maintFilterType').value || 'yag');
   document.getElementById('maintDate').value = m ? m.date : todayStr();
   document.getElementById('maintAmount').value = m && m.amount ? m.amount : '';
   document.getElementById('maintKm').value = m && m.km ? m.km : '';
-  document.getElementById('maintNote').value = m ? (m.note || '') : '';
+  document.getElementById('maintNextKm').value = m && m.nextKm ? m.nextKm : '';
+  document.getElementById('maintWork').value = m ? (m.work || m.note || '') : '';
+  document.getElementById('maintFirm').value = m ? (m.firm || '') : '';
   document.getElementById('maintStatus').value = m ? (m.status || 'done') : 'done';
   document.getElementById('maintModalOverlay').style.display = 'flex';
 }
@@ -5339,7 +5335,6 @@ document.getElementById('newMaintBtn').addEventListener('click', () => openMaint
 document.getElementById('maintModalCancel').addEventListener('click', () => {
   document.getElementById('maintModalOverlay').style.display = 'none';
 });
-document.getElementById('maintFilterType').addEventListener('change', renderMaintenance);
 document.getElementById('maintFilterVeh').addEventListener('change', renderMaintenance);
 
 document.getElementById('maintModalSave').addEventListener('click', () => {
@@ -5350,11 +5345,13 @@ document.getElementById('maintModalSave').addEventListener('click', () => {
   const rec = {
     id: editingMaintId || ('mnt_' + Date.now()),
     vehicleId,
-    type: document.getElementById('maintType').value,
+    type: 'bakim',
     date,
     amount: parseFloat(document.getElementById('maintAmount').value) || 0,
     km: parseFloat(document.getElementById('maintKm').value) || null,
-    note: document.getElementById('maintNote').value.trim(),
+    nextKm: parseFloat(document.getElementById('maintNextKm').value) || null,
+    work: document.getElementById('maintWork').value.trim(),
+    firm: document.getElementById('maintFirm').value.trim(),
     status: document.getElementById('maintStatus').value
   };
   const list = maintList();
