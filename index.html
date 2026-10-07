@@ -370,6 +370,7 @@
       <button class="navBtn" data-view="seferler">Sefer Ekle</button>
       <button class="navBtn" data-view="sefertanimlari">Sefer Tanımları</button>
       <button class="navBtn" data-view="soforler">Şoförler</button>
+      <button class="navBtn" data-view="bakim">Bakım Takibi</button>
       <button class="navBtn" data-view="vergitakibi">Vergi Takibi (KDV)</button>
       <button class="navBtn" data-view="yakit">Yakıt Girişi</button>
     </div>
@@ -436,14 +437,9 @@
           <input type="checkbox" id="txKdvTransfer" />
           Bu tutarı (KDV dahil) Vergi Takibi'ne <b id="txKdvTypeLabel">satış</b> faturası olarak aktar
         </label>
-        <select id="txKdvRate" style="display:none;">
-          <option value="20">%20</option>
-          <option value="10">%10</option>
-          <option value="1">%1</option>
-          <option value="0">%0</option>
-          <option value="custom">Diğer...</option>
-        </select>
+        <select id="txKdvRate" style="display:none;"></select>
         <input type="number" id="txKdvRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
+        <button type="button" id="txKdvRateManageBtn" title="KDV oranı listesini düzenle" style="display:none; padding:6px 9px;">⚙</button>
         <span id="txKdvHint" style="color:#8B99AD; font-size:11.5px;"></span>
       </div>
       <div id="txTableScroll" style="overflow-x:auto;">
@@ -490,8 +486,15 @@
     </div>
     <div id="vehList"></div>
 
+
+    <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Son KM karşılaştırması</p>
+    <div class="list-wrap" id="fuelCompare" style="padding:14px 16px;"></div>
+  </div>
+
+  <div id="bakimView" style="display:none;">
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Araçlarınızın yağ değişimi, tekerlek/lastik ve bakım kayıtlarını tarih ve tutarıyla takip edin. Durumu <b>"Planlandı"</b> olan kayıtlar, tarihi yaklaşınca (45 gün kala) Hatırlatıcılar ekranında görünür.</p>
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 8px;">
-      <p style="font-weight:600; font-size:15px; margin:0;">Yağ / Tekerlek / Bakım takibi</p>
+      <p style="font-weight:600; font-size:15px; margin:0;">Kayıtlar</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <select id="maintFilterType">
           <option value="">Tüm türler</option>
@@ -505,9 +508,6 @@
     </div>
     <div class="summary" id="maintSummary"></div>
     <div class="list-wrap" id="maintList" style="margin-bottom:20px;"></div>
-
-    <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Son KM karşılaştırması</p>
-    <div class="list-wrap" id="fuelCompare" style="padding:14px 16px;"></div>
   </div>
 
   <div id="yakitView" style="display:none;">
@@ -698,17 +698,12 @@
       <input type="text" id="taxIrsNo" placeholder="Fatura no" />
       <input type="text" id="taxAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyon)..." autocomplete="off" /><datalist id="taxAccDatalist"></datalist>
       <input type="number" id="taxAmount" placeholder="Tutar (KDV dahil)" min="0" step="0.01" />
-      <select id="taxRate">
-        <option value="20">%20</option>
-        <option value="10">%10</option>
-        <option value="1">%1</option>
-        <option value="0">%0</option>
-        <option value="custom">Diğer...</option>
-      </select>
+      <select id="taxRate"></select>
       <input type="number" id="taxRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
       <button id="addTaxEntryBtn" class="primary-btn">+ Ekle</button>
     </div>
     <div class="toolbar" style="justify-content:flex-end;">
+      <button id="taxRateManageBtn">⚙ KDV oranlarını düzenle</button>
       <button id="taxExcelBtn">📊 Excel raporu al</button>
     </div>
     <div class="list-wrap" id="taxList"></div>
@@ -958,13 +953,7 @@
           <input type="checkbox" id="txEditKdvTransfer" />
           Bu tutarı (KDV dahil) Vergi Takibi'ne <b id="txEditKdvTypeLabel">satış</b> faturası olarak aktar
         </label>
-        <select id="txEditKdvRate" style="display:none;">
-          <option value="20">%20</option>
-          <option value="10">%10</option>
-          <option value="1">%1</option>
-          <option value="0">%0</option>
-          <option value="custom">Diğer...</option>
-        </select>
+        <select id="txEditKdvRate" style="display:none;"></select>
         <input type="number" id="txEditKdvRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
       </div>
       <label style="font-size:12px; color:#5B6B82;">Son ödeme günü (opsiyonel)</label>
@@ -977,6 +966,19 @@
     <div class="actions">
       <button id="txEditCancel">Vazgeç</button>
       <button id="txEditSave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taxRateManageModalOverlay">
+  <div class="modal-box">
+    <h3>KDV oranı listesini düzenle</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Vergi Takibi ve cari hareketlerindeki KDV oranı seçiminde çıkan oranları buradan ekleyebilir, silebilir veya değiştirebilirsiniz (ör. 20, 10, 1, 0). Geçmiş kayıtlar kendi oranlarını korur; yalnızca seçim listesi değişir.</p>
+    <div id="taxRateManageList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px; max-height:340px; overflow-y:auto;"></div>
+    <button type="button" id="taxRateManageAddBtn" style="font-size:13px; text-align:left;">+ Yeni oran ekle</button>
+    <div class="actions">
+      <button id="taxRateManageCancel">Vazgeç</button>
+      <button id="taxRateManageSave" class="primary-btn">Kaydet</button>
     </div>
   </div>
 </div>
@@ -1022,13 +1024,7 @@
       <input type="text" id="taxEditIrsNo" placeholder="Fatura no" />
       <input type="text" id="taxEditAcc" list="taxAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" />
       <input type="number" id="taxEditAmount" placeholder="Tutar (KDV dahil)" min="0" step="0.01" />
-      <select id="taxEditRate">
-        <option value="20">%20</option>
-        <option value="10">%10</option>
-        <option value="1">%1</option>
-        <option value="0">%0</option>
-        <option value="custom">Diğer...</option>
-      </select>
+      <select id="taxEditRate"></select>
       <input type="number" id="taxEditRateCustom" placeholder="Oran %" min="0" step="0.01" style="display:none;" />
     </div>
     <div class="actions">
@@ -1461,6 +1457,7 @@ function load() {
     try { fn(); } catch (e) { console.error('Düzeltme (migration) hatası: ' + fn.name, e); }
   });
   try {
+    renderTaxRateSelects();
     renderTxTypeList();
     renderPayMethodList();
     updateTabStyles();
@@ -1722,6 +1719,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('carilerView').style.display = activeView === 'cariler' ? 'block' : 'none';
     document.getElementById('hatirlaticilarView').style.display = activeView === 'hatirlaticilar' ? 'block' : 'none';
     document.getElementById('araclarView').style.display = activeView === 'araclar' ? 'block' : 'none';
+    document.getElementById('bakimView').style.display = activeView === 'bakim' ? 'block' : 'none';
     document.getElementById('yakitView').style.display = activeView === 'yakit' ? 'block' : 'none';
     document.getElementById('soforlerView').style.display = activeView === 'soforler' ? 'block' : 'none';
     document.getElementById('seferlerView').style.display = activeView === 'seferler' ? 'block' : 'none';
@@ -1734,6 +1732,7 @@ document.querySelectorAll('.navBtn').forEach(b => {
     document.getElementById('kasaView').style.display = activeView === 'kasa' ? 'block' : 'none';
     if (activeView === 'hatirlaticilar') renderReminders();
     if (activeView === 'araclar') renderVehicles();
+    if (activeView === 'bakim') renderMaintenance();
     if (activeView === 'yakit') renderFuelLogs();
     if (activeView === 'soforler') renderDrivers();
     if (activeView === 'seferler') renderTrips();
@@ -1906,7 +1905,7 @@ function nextRecurDate(dateStr, recurrence) {
   });
   list.querySelectorAll('.editMaintFromRemBtn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelector('.navBtn[data-view="araclar"]').click();
+      document.querySelector('.navBtn[data-view="bakim"]').click();
       openMaintModal(btn.dataset.id);
     });
   });
@@ -2168,7 +2167,7 @@ function updateTxKdvRow(accType) {
   row.style.display = showFor ? 'flex' : 'none';
   if (!showFor) {
     document.getElementById('txKdvTransfer').checked = false;
-    document.getElementById('txKdvRate').style.display = 'none';
+    document.getElementById('txKdvRate').style.display = 'none'; document.getElementById('txKdvRateManageBtn').style.display = 'none';
     document.getElementById('txKdvRateCustom').style.display = 'none';
     return;
   }
@@ -2180,6 +2179,7 @@ function updateTxKdvRow(accType) {
 
 document.getElementById('txKdvTransfer').addEventListener('change', () => {
   document.getElementById('txKdvRate').style.display = document.getElementById('txKdvTransfer').checked ? '' : 'none';
+  document.getElementById('txKdvRateManageBtn').style.display = document.getElementById('txKdvTransfer').checked ? '' : 'none';
   document.getElementById('txKdvRateCustom').style.display = (document.getElementById('txKdvTransfer').checked && document.getElementById('txKdvRate').value === 'custom') ? '' : 'none';
 });
 document.getElementById('txKdvRate').addEventListener('change', () => {
@@ -2326,7 +2326,7 @@ function openDetail(id) {
   updateTxLayout(acc.type === 'sofor');
   updateTxKdvRow(acc.type);
   document.getElementById('txKdvTransfer').checked = false;
-  document.getElementById('txKdvRate').style.display = 'none';
+  document.getElementById('txKdvRate').style.display = 'none'; document.getElementById('txKdvRateManageBtn').style.display = 'none';
   renderTx();
 }
 
@@ -2782,7 +2782,7 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   document.getElementById('txDueDate').value = '';
   document.getElementById('txKdvTransfer').checked = false;
   document.getElementById('txKdvRate').value = '20';
-  document.getElementById('txKdvRate').style.display = 'none';
+  document.getElementById('txKdvRate').style.display = 'none'; document.getElementById('txKdvRateManageBtn').style.display = 'none';
   document.getElementById('txKdvRateCustom').value = '';
   document.getElementById('txKdvRateCustom').style.display = 'none';
   refreshDetail();
@@ -5755,14 +5755,32 @@ const TAX_TYPE_LABELS = { satis: 'Satış Faturası', alis: 'Alış Faturası', 
 let editingTaxEntryId = null;
 let collapsedTaxMonths = new Set();
 
+function taxRateList() {
+  if (!Array.isArray(data.taxRateOptions) || data.taxRateOptions.length === 0) data.taxRateOptions = [20, 10, 1, 0];
+  return data.taxRateOptions;
+}
+
+function renderTaxRateSelects() {
+  const rates = taxRateList();
+  ['txKdvRate', 'txEditKdvRate', 'taxRate', 'taxEditRate'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = rates.map(r => `<option value="${r}">%${r}</option>`).join('') + '<option value="custom">Diğer...</option>';
+    if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+    else sel.value = String(rates[0]);
+  });
+}
+
 function getTaxRateValue(selectId, customId) {
   const sel = document.getElementById(selectId).value;
   if (sel === 'custom') return parseFloat(document.getElementById(customId).value) || 0;
-  return parseFloat(sel);
+  const v = parseFloat(sel);
+  return isNaN(v) ? 0 : v;
 }
 
 function setTaxRateValue(selectId, customId, rate) {
-  const presets = ['20', '10', '1', '0'];
+  const presets = taxRateList().map(String);
   const rateStr = String(rate);
   const sel = document.getElementById(selectId);
   const customInput = document.getElementById(customId);
@@ -5776,6 +5794,64 @@ function setTaxRateValue(selectId, customId, rate) {
     customInput.value = rate;
   }
 }
+
+// KDV oranı listesi yönetimi ("Tür listesini düzenle" ile aynı mantık)
+let taxRateWorking = [];
+function renderTaxRateManageRows() {
+  const wrap = document.getElementById('taxRateManageList');
+  if (taxRateWorking.length === 0) {
+    wrap.innerHTML = `<p style="font-size:12.5px; color:#8B99AD; margin:0;">Henüz oran eklenmemiş.</p>`;
+    return;
+  }
+  wrap.innerHTML = taxRateWorking.map((v, i) => `
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="number" data-i="${i}" class="taxRateManageInput" value="${escapeHtml(String(v))}" min="0" step="0.01" placeholder="Oran %" style="flex:1;" />
+      <button type="button" data-i="${i}" class="taxRateManageDelBtn" title="Sil" style="border:none; background:none; color:#C43D33; padding:4px 8px; font-size:15px;">✕</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.taxRateManageInput').forEach(inp => {
+    inp.addEventListener('input', () => { taxRateWorking[Number(inp.dataset.i)] = inp.value; });
+  });
+  wrap.querySelectorAll('.taxRateManageDelBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      taxRateWorking.splice(Number(btn.dataset.i), 1);
+      renderTaxRateManageRows();
+    });
+  });
+}
+function openTaxRateManageModal() {
+  taxRateWorking = taxRateList().slice();
+  renderTaxRateManageRows();
+  document.getElementById('taxRateManageModalOverlay').style.display = 'flex';
+}
+document.getElementById('taxRateManageBtn').addEventListener('click', openTaxRateManageModal);
+document.getElementById('txKdvRateManageBtn').addEventListener('click', openTaxRateManageModal);
+document.getElementById('taxRateManageAddBtn').addEventListener('click', () => {
+  taxRateWorking.push('');
+  renderTaxRateManageRows();
+  const inputs = document.querySelectorAll('.taxRateManageInput');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+});
+document.getElementById('taxRateManageCancel').addEventListener('click', () => {
+  document.getElementById('taxRateManageModalOverlay').style.display = 'none';
+});
+document.getElementById('taxRateManageSave').addEventListener('click', () => {
+  const finalList = [];
+  const seen = new Set();
+  taxRateWorking.forEach(v => {
+    if (v === '' || v === null || v === undefined) return;
+    const n = parseFloat(v);
+    if (isNaN(n) || n < 0 || seen.has(n)) return;
+    seen.add(n);
+    finalList.push(n);
+  });
+  if (finalList.length === 0) { alert('En az bir KDV oranı kalmalı.'); return; }
+  finalList.sort((a, b) => b - a);
+  data.taxRateOptions = finalList;
+  save();
+  renderTaxRateSelects();
+  document.getElementById('taxRateManageModalOverlay').style.display = 'none';
+});
 
 document.getElementById('taxRate').addEventListener('change', () => {
   document.getElementById('taxRateCustom').style.display = document.getElementById('taxRate').value === 'custom' ? '' : 'none';
