@@ -489,6 +489,23 @@
       <button id="newVehBtn" class="primary-btn">+ Yeni araç</button>
     </div>
     <div id="vehList"></div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 8px;">
+      <p style="font-weight:600; font-size:15px; margin:0;">Yağ / Tekerlek / Bakım takibi</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <select id="maintFilterType">
+          <option value="">Tüm türler</option>
+          <option value="yag">🛢️ Yağ değişimi</option>
+          <option value="tekerlek">🛞 Tekerlek / lastik</option>
+          <option value="bakim">🔧 Bakım</option>
+        </select>
+        <select id="maintFilterVeh"></select>
+        <button id="newMaintBtn" class="primary-btn">+ Kayıt ekle</button>
+      </div>
+    </div>
+    <div class="summary" id="maintSummary"></div>
+    <div class="list-wrap" id="maintList" style="margin-bottom:20px;"></div>
+
     <p style="font-weight:600; font-size:15px; margin-bottom:8px;">Son KM karşılaştırması</p>
     <div class="list-wrap" id="fuelCompare" style="padding:14px 16px;"></div>
   </div>
@@ -812,6 +829,39 @@
     <div class="actions">
       <button id="remEditCancel">Vazgeç</button>
       <button id="remEditSave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="maintModalOverlay">
+  <div class="modal-box" style="width:460px; max-width:92vw;">
+    <h3 id="maintModalTitle">Bakım kaydı ekle</h3>
+    <div class="field-group">
+      <label style="font-size:12px; color:#5B6B82;">Araç</label>
+      <select id="maintVeh"></select>
+      <label style="font-size:12px; color:#5B6B82;">Tür</label>
+      <select id="maintType">
+        <option value="yag">🛢️ Yağ değişimi</option>
+        <option value="tekerlek">🛞 Tekerlek / lastik</option>
+        <option value="bakim">🔧 Bakım</option>
+      </select>
+      <label style="font-size:12px; color:#5B6B82;">Tarih</label>
+      <input type="date" id="maintDate" />
+      <label style="font-size:12px; color:#5B6B82;">Tutar (TL)</label>
+      <input type="number" id="maintAmount" placeholder="Tutar (TL)" min="0" step="0.01" />
+      <label style="font-size:12px; color:#5B6B82;">Araç km (opsiyonel)</label>
+      <input type="number" id="maintKm" placeholder="Km" min="0" step="1" />
+      <label style="font-size:12px; color:#5B6B82;">Açıklama (ör. 15W-40 yağ + filtre, ön lastik takımı, periyodik bakım)</label>
+      <input type="text" id="maintNote" placeholder="Açıklama (opsiyonel)" />
+      <label style="font-size:12px; color:#5B6B82;">Durum</label>
+      <select id="maintStatus">
+        <option value="done">Yapıldı (hatırlatma yok)</option>
+        <option value="planned">Planlandı — tarihi yaklaşınca hatırlatmalarda göster</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button id="maintModalCancel">Vazgeç</button>
+      <button id="maintModalSave" class="primary-btn">Kaydet</button>
     </div>
   </div>
 </div>
@@ -1227,6 +1277,11 @@ let currentAccId = null;
 let editingAccId = null;
 let activeTab = 'hepsi';
 let activeView = 'cariler';
+const MAINT_TYPES = {
+  yag: { label: 'Yağ değişimi', icon: '🛢️' },
+  tekerlek: { label: 'Tekerlek / lastik', icon: '🛞' },
+  bakim: { label: 'Bakım', icon: '🔧' }
+};
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -1701,6 +1756,12 @@ function vehicleVirtualReminders() {
     if (v.kaskoTarihi) out.push({ id: 'vveh_' + v.id + '_kasko', date: v.kaskoTarihi, desc: `${v.name} — Kasko${v.kaskoFirma ? ' (' + v.kaskoFirma + ')' : ''}`, vehicleId: v.id, virtual: true });
     if (v.urunKaskoTarihi) out.push({ id: 'vveh_' + v.id + '_urunkasko', date: v.urunKaskoTarihi, desc: `${v.name} — Ürün kaskosu${v.urunKaskoFirma ? ' (' + v.urunKaskoFirma + ')' : ''}`, vehicleId: v.id, virtual: true });
   });
+  maintList().forEach(m => {
+    if (m.status !== 'planned' || !m.date) return;
+    const v = data.vehicles.find(x => x.id === m.vehicleId);
+    if (!v) return;
+    out.push({ id: 'vmnt_' + m.id, date: m.date, desc: `${v.name} — ${MAINT_TYPES[m.type] ? MAINT_TYPES[m.type].label : 'Bakım'}${m.note ? ': ' + m.note : ''}`, amount: m.amount || 0, vehicleId: v.id, maintId: m.id, maintType: m.type, virtual: true });
+  });
   return out;
 }
 
@@ -1772,13 +1833,15 @@ function renderReminders() {
     const overdue = !r.done && r.date <= t;
     const dueSoon = !r.done && r.date <= soonCutoffStr;
     const rightActions = r.virtual
-      ? (r.isDriver
+      ? (r.maintId
+          ? `<button class="doneMaintFromRemBtn" data-id="${r.maintId}">Yapıldı</button><button class="editMaintFromRemBtn" data-id="${r.maintId}">Düzenle</button>`
+          : r.isDriver
           ? `<button class="editDrvFromRemBtn" data-id="${r.driverId}">Şoförü düzenle</button>`
           : `<button class="editVehFromRemBtn" data-id="${r.vehicleId}">Aracı düzenle</button>`)
       : `<button class="editRemBtn" data-id="${r.id}">Düzenle</button><button class="delRemBtn" data-id="${r.id}">Sil</button>`;
     return `<div class="rem-row ${overdue ? 'overdue' : ''} ${r.done ? 'done' : ''}">
       <div class="rem-left">
-        ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : '🚗'}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
+        ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : (r.maintId ? (MAINT_TYPES[r.maintType] ? MAINT_TYPES[r.maintType].icon : '🔧') : '🚗')}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
         <div>
           <span class="rem-date" style="${dueSoon ? 'color:#C43D33; font-weight:700;' : ''}">${fmtDate(r.date)}</span>
           <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(r.desc)}${(r.recurrence && r.recurrence !== 'none' && r.recurCount !== null && r.recurCount !== undefined) ? ` <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(kalan tekrar: ${r.recurCount})</span>` : ''}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
@@ -1830,6 +1893,22 @@ function nextRecurDate(dateStr, recurrence) {
   });
   list.querySelectorAll('.editRemBtn').forEach(btn => {
     btn.addEventListener('click', () => openRemEdit(btn.dataset.id));
+  });
+  list.querySelectorAll('.doneMaintFromRemBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = maintList().find(x => x.id === btn.dataset.id);
+      if (!m) return;
+      m.status = 'done';
+      save();
+      renderMaintenance();
+      renderReminders();
+    });
+  });
+  list.querySelectorAll('.editMaintFromRemBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelector('.navBtn[data-view="araclar"]').click();
+      openMaintModal(btn.dataset.id);
+    });
   });
   list.querySelectorAll('.editVehFromRemBtn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -5174,7 +5253,145 @@ function lastFuelPercentOf(vehicleId) {
   return logs[logs.length - 1].percent;
 }
 
+// ---- Yağ / Tekerlek / Bakım takibi ----
+let editingMaintId = null;
+
+function maintList() {
+  if (!Array.isArray(data.maintenance)) data.maintenance = [];
+  return data.maintenance;
+}
+
+function fillMaintVehSelect(selectId, withAll) {
+  const sel = document.getElementById(selectId);
+  const prev = sel.value;
+  sel.innerHTML = (withAll ? '<option value="">Tüm araçlar</option>' : '') +
+    data.vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+  if (prev && data.vehicles.some(v => v.id === prev)) sel.value = prev;
+}
+
+function renderMaintenance() {
+  fillMaintVehSelect('maintFilterVeh', true);
+  const fType = document.getElementById('maintFilterType').value;
+  const fVeh = document.getElementById('maintFilterVeh').value;
+  let rows = maintList().filter(m => data.vehicles.some(v => v.id === m.vehicleId));
+  if (fType) rows = rows.filter(m => m.type === fType);
+  if (fVeh) rows = rows.filter(m => m.vehicleId === fVeh);
+  rows = rows.slice().sort((a, b) => b.date.localeCompare(a.date));
+
+  const t = todayStr();
+  const sum = (type) => rows.filter(m => m.type === type && m.status !== 'planned').reduce((s, m) => s + (Number(m.amount) || 0), 0);
+  const plannedCount = rows.filter(m => m.status === 'planned').length;
+  document.getElementById('maintSummary').innerHTML = `
+    <div class="card"><p class="label">🛢️ Yağ (yapılan)</p><p class="value">${fmt(sum('yag'))}</p></div>
+    <div class="card"><p class="label">🛞 Tekerlek (yapılan)</p><p class="value">${fmt(sum('tekerlek'))}</p></div>
+    <div class="card"><p class="label">🔧 Bakım (yapılan)</p><p class="value">${fmt(sum('bakim'))}</p></div>
+    <div class="card"><p class="label">Planlı / bekleyen</p><p class="value">${plannedCount}</p></div>`;
+
+  const list = document.getElementById('maintList');
+  if (rows.length === 0) {
+    list.innerHTML = `<div class="empty">Henüz yağ / tekerlek / bakım kaydı yok.</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(m => {
+    const v = data.vehicles.find(x => x.id === m.vehicleId);
+    const ty = MAINT_TYPES[m.type] || MAINT_TYPES.bakim;
+    const planned = m.status === 'planned';
+    const overdue = planned && m.date <= t;
+    return `<div class="rem-row ${overdue ? 'overdue' : ''}">
+      <div class="fuel-card-body">
+        <div class="fuel-card-top">
+          <span class="rem-desc" style="font-weight:600;">${ty.icon} ${escapeHtml(v ? v.name : '—')} — ${ty.label}${planned ? ' <span style="font-size:11px; font-weight:600; color:#C97814; background:#FDF1DF; border-radius:8px; padding:1px 7px; margin-left:4px;">Planlı</span>' : ''}</span>
+          <span class="rem-date" style="${overdue ? 'color:#C43D33; font-weight:700;' : ''}">${fmtDate(m.date)}</span>
+        </div>
+        <div class="fuel-metrics">
+          <div><span class="fm-lbl">Tutar</span><span class="fm-val">${m.amount ? fmt(m.amount) : '—'}</span></div>
+          <div><span class="fm-lbl">Km</span><span class="fm-val">${m.km ? Number(m.km).toLocaleString('tr-TR') + ' km' : '—'}</span></div>
+          <div><span class="fm-lbl">Açıklama</span><span class="fm-val" style="font-weight:500;">${m.note ? escapeHtml(m.note) : '—'}</span></div>
+        </div>
+      </div>
+      <div class="rem-actions">
+        ${planned ? `<button class="maintDoneBtn" data-id="${m.id}">Yapıldı</button>` : ''}
+        <button class="maintEditBtn" data-id="${m.id}">Düzenle</button>
+        <button class="maintDelBtn" data-id="${m.id}">Sil</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openMaintModal(id) {
+  if (data.vehicles.length === 0) { alert('Önce en az bir araç eklemelisiniz.'); return; }
+  editingMaintId = id || null;
+  fillMaintVehSelect('maintVeh', false);
+  const m = id ? maintList().find(x => x.id === id) : null;
+  document.getElementById('maintModalTitle').textContent = m ? 'Kaydı düzenle' : 'Bakım kaydı ekle';
+  const fv = document.getElementById('maintFilterVeh').value;
+  document.getElementById('maintVeh').value = m ? m.vehicleId : (fv || data.vehicles[0].id);
+  document.getElementById('maintType').value = m ? m.type : (document.getElementById('maintFilterType').value || 'yag');
+  document.getElementById('maintDate').value = m ? m.date : todayStr();
+  document.getElementById('maintAmount').value = m && m.amount ? m.amount : '';
+  document.getElementById('maintKm').value = m && m.km ? m.km : '';
+  document.getElementById('maintNote').value = m ? (m.note || '') : '';
+  document.getElementById('maintStatus').value = m ? (m.status || 'done') : 'done';
+  document.getElementById('maintModalOverlay').style.display = 'flex';
+}
+
+document.getElementById('newMaintBtn').addEventListener('click', () => openMaintModal(null));
+document.getElementById('maintModalCancel').addEventListener('click', () => {
+  document.getElementById('maintModalOverlay').style.display = 'none';
+});
+document.getElementById('maintFilterType').addEventListener('change', renderMaintenance);
+document.getElementById('maintFilterVeh').addEventListener('change', renderMaintenance);
+
+document.getElementById('maintModalSave').addEventListener('click', () => {
+  const vehicleId = document.getElementById('maintVeh').value;
+  const date = document.getElementById('maintDate').value;
+  if (!vehicleId) { alert('Lütfen araç seçin.'); return; }
+  if (!date) { alert('Lütfen tarih girin.'); return; }
+  const rec = {
+    id: editingMaintId || ('mnt_' + Date.now()),
+    vehicleId,
+    type: document.getElementById('maintType').value,
+    date,
+    amount: parseFloat(document.getElementById('maintAmount').value) || 0,
+    km: parseFloat(document.getElementById('maintKm').value) || null,
+    note: document.getElementById('maintNote').value.trim(),
+    status: document.getElementById('maintStatus').value
+  };
+  const list = maintList();
+  if (editingMaintId) {
+    const idx = list.findIndex(x => x.id === editingMaintId);
+    if (idx >= 0) list[idx] = rec; else list.push(rec);
+  } else {
+    list.push(rec);
+  }
+  if (!save()) return;
+  document.getElementById('maintModalOverlay').style.display = 'none';
+  renderMaintenance();
+  renderReminders();
+});
+
+document.getElementById('maintList').addEventListener('click', (e) => {
+  const edit = e.target.closest('.maintEditBtn');
+  if (edit) { openMaintModal(edit.dataset.id); return; }
+  const done = e.target.closest('.maintDoneBtn');
+  if (done) {
+    const m = maintList().find(x => x.id === done.dataset.id);
+    if (m) { m.status = 'done'; save(); renderMaintenance(); renderReminders(); }
+    return;
+  }
+  const del = e.target.closest('.maintDelBtn');
+  if (del) {
+    showConfirm('Bu kaydı silmek istediğinize emin misiniz?', () => {
+      data.maintenance = maintList().filter(x => x.id !== del.dataset.id);
+      save();
+      renderMaintenance();
+      renderReminders();
+    });
+  }
+});
+
 function renderVehicles() {
+  try { renderMaintenance(); } catch (e) { console.error('renderMaintenance hatası', e); }
   const compare = document.getElementById('fuelCompare');
   const withKm = data.vehicles.map(v => ({ id: v.id, name: v.name, km: lastKmOf(v.id) }));
   const sorted = withKm.slice().sort((a,b) => (b.km||0) - (a.km||0));
@@ -5229,6 +5446,7 @@ function renderVehicles() {
     btn.addEventListener('click', () => {
       showConfirm('Bu aracı silmek istediğinize emin misiniz?', () => {
         data.vehicles = data.vehicles.filter(v => v.id !== btn.dataset.id);
+        data.maintenance = maintList().filter(m => m.vehicleId !== btn.dataset.id);
         save();
         renderVehicles();
         renderReminders();
