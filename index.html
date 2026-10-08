@@ -492,7 +492,7 @@
   </div>
 
   <div id="bakimView" style="display:none;">
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Araçlarınızın bakım kayıtlarını tarih, tutar, bakım km'si, sonraki bakım km'si, yapılan işler ve yapan firma bilgisiyle takip edin. Durumu <b>"Planlandı"</b> olan kayıtlar, tarihi yaklaşınca (45 gün kala) Hatırlatıcılar ekranında görünür.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Araçlarınızın bakım kayıtlarını tarih, tutar, bakım km'si, sonraki bakım km'si, yapılan işler ve yapan firma bilgisiyle takip edin. Durumu <b>"Planlandı"</b> olan kayıtlar, tarihi yaklaşınca (45 gün kala) Hatırlatıcılar ekranında görünür. Ayrıca aracın güncel km'si, kayıttaki <b>bakım yapılacak km</b>'ye 1000 km veya daha az kaldığında da Hatırlatıcılar ekranında görünür (güncel km, yakıt kayıtlarından ve bakım kayıtlarından alınır).</p>
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 8px;">
       <p style="font-weight:600; font-size:15px; margin:0;">Kayıtlar</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1787,6 +1787,22 @@ function vehicleVirtualReminders() {
     if (!v) return;
     out.push({ id: 'vmnt_' + m.id, date: m.date, desc: `${v.name} — Bakım${(m.work || m.note) ? ': ' + (m.work || m.note) : ''}${m.firm ? ' (' + m.firm + ')' : ''}${m.nextKm ? ' · Hedef km: ' + Number(m.nextKm).toLocaleString('tr-TR') : ''}`, amount: m.amount || 0, vehicleId: v.id, maintId: m.id, maintType: 'bakim', virtual: true });
   });
+  // KM bazlı bakım hatırlatıcısı: her araç için, sonraki bakım km'si girilmiş en son kayda bakılır;
+  // güncel km, hedef km'ye 1000 km veya daha az kaldıysa (ya da geçildiyse) hatırlatıcılarda gösterilir.
+  data.vehicles.forEach(v => {
+    const recs = maintList().filter(m => m.vehicleId === v.id && m.nextKm)
+      .slice().sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+    if (recs.length === 0) return;
+    const m = recs[0];
+    const kms = [lastKmOf(v.id)].concat(maintList().filter(x => x.vehicleId === v.id && x.km).map(x => x.km)).filter(Boolean);
+    if (kms.length === 0) return;
+    const cur = Math.max.apply(null, kms);
+    const remaining = m.nextKm - cur;
+    if (remaining > 1000) return;
+    const nf = (n) => Number(n).toLocaleString('tr-TR');
+    const status = remaining > 0 ? `bakıma ${nf(remaining)} km kaldı` : `bakım km'si ${nf(-remaining)} km geçti`;
+    out.push({ id: 'vmkm_' + m.id, date: todayStr(), kmBased: true, desc: `${v.name} — Bakım: ${status} (Güncel km: ${nf(cur)} · Bakım km: ${nf(m.nextKm)})${m.work ? ' · Son yapılan: ' + m.work : ''}`, vehicleId: v.id, maintId: m.id, virtual: true });
+  });
   return out;
 }
 
@@ -1858,7 +1874,9 @@ function renderReminders() {
     const overdue = !r.done && r.date <= t;
     const dueSoon = !r.done && r.date <= soonCutoffStr;
     const rightActions = r.virtual
-      ? (r.maintId
+      ? (r.kmBased
+          ? `<button class="editMaintFromRemBtn" data-id="${r.maintId}">Düzenle</button>`
+          : r.maintId
           ? `<button class="doneMaintFromRemBtn" data-id="${r.maintId}">Yapıldı</button><button class="editMaintFromRemBtn" data-id="${r.maintId}">Düzenle</button>`
           : r.isDriver
           ? `<button class="editDrvFromRemBtn" data-id="${r.driverId}">Şoförü düzenle</button>`
@@ -1868,7 +1886,7 @@ function renderReminders() {
       <div class="rem-left">
         ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : (r.maintId ? '🔧' : '🚗')}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
         <div>
-          <span class="rem-date" style="${dueSoon ? 'color:#C43D33; font-weight:700;' : ''}">${fmtDate(r.date)}</span>
+          <span class="rem-date" style="${dueSoon ? 'color:#C43D33; font-weight:700;' : ''}">${r.kmBased ? 'KM' : fmtDate(r.date)}</span>
           <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(r.desc)}${(r.recurrence && r.recurrence !== 'none' && r.recurCount !== null && r.recurCount !== undefined) ? ` <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(kalan tekrar: ${r.recurCount})</span>` : ''}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
         </div>
       </div>
@@ -3047,7 +3065,7 @@ document.getElementById('remExcelBtn').addEventListener('click', () => {
     if (r.virtual) durum = 'Bilgi (araç/şoför tarihi)';
     else durum = r.done ? 'Tamamlandı' : 'Bekliyor';
     rows.push([
-      fmtDate(r.date),
+      r.kmBased ? 'KM' : fmtDate(r.date),
       r.desc,
       acc ? acc.name : '',
       r.amount || '',
