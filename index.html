@@ -3899,46 +3899,21 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
     return;
   }
 
-  // 1) Özet: şoför başına toplam sefer sayısı
-  const summary = [['Şoför Sefer Raporu'], ['Tarih aralığı: ' + rangeLabel], [],
-    ['Şoför', 'Toplam Sefer (Adet)', 'Toplam Tutar (TL)']];
-  perDriver.forEach(x => summary.push([x.driver.name, x.count, x.total]));
-  summary.push(['GENEL TOPLAM', perDriver.reduce((s, x) => s + x.count, 0), perDriver.reduce((s, x) => s + x.total, 0)]);
-
-  // 2) Detay: şoför başına gittiği yerler ve kaç kez gittiği
-  const detail = [['Şoför', 'Gidilen Yer (Sefer Adı)', 'Adet', 'Toplam Tutar (TL)']];
+  // Tek sayfa: her şoför için ad + toplam sefer, altında gittiği yerler ve kaç kez gittiği
+  const rows = [['Şoför Sefer Raporu — ' + rangeLabel], []];
   perDriver.forEach(x => {
     if (x.count === 0) return;
+    rows.push([x.driver.name.toLocaleUpperCase('tr-TR'), x.count]);
     Object.keys(x.byPlace).sort((a, b) => x.byPlace[b].count - x.byPlace[a].count).forEach(place => {
-      detail.push([x.driver.name, place, x.byPlace[place].count, x.byPlace[place].total]);
+      rows.push([place, x.byPlace[place].count]);
     });
-    detail.push([x.driver.name + ' - TOPLAM', '', x.count, x.total]);
+    rows.push([]);
   });
 
-  // 3) Karşılaştırma: satırlar yerler, sütunlar şoförler (birden fazla şoför seçildiyse)
-  const active = perDriver.filter(x => x.count > 0);
-  let matrix = null;
-  if (active.length > 1) {
-    const places = Array.from(new Set(active.flatMap(x => Object.keys(x.byPlace))));
-    const placeTotal = (pl) => active.reduce((s, x) => s + (x.byPlace[pl] ? x.byPlace[pl].count : 0), 0);
-    places.sort((a, b) => placeTotal(b) - placeTotal(a));
-    matrix = [['Gidilen Yer'].concat(active.map(x => x.driver.name), ['TOPLAM'])];
-    places.forEach(pl => matrix.push([pl].concat(active.map(x => x.byPlace[pl] ? x.byPlace[pl].count : 0), [placeTotal(pl)])));
-    matrix.push(['TOPLAM'].concat(active.map(x => x.count), [active.reduce((s, x) => s + x.count, 0)]));
-  }
-
   const wb = XLSX.utils.book_new();
-  const wsSum = XLSX.utils.aoa_to_sheet(summary);
-  wsSum['!cols'] = [{ wch: 26 }, { wch: 20 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, wsSum, 'Özet');
-  const wsDet = XLSX.utils.aoa_to_sheet(detail);
-  wsDet['!cols'] = [{ wch: 26 }, { wch: 30 }, { wch: 10 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, wsDet, 'Yer Bazında Detay');
-  if (matrix) {
-    const wsMat = XLSX.utils.aoa_to_sheet(matrix);
-    wsMat['!cols'] = [{ wch: 30 }].concat(active.map(() => ({ wch: 14 })), [{ wch: 10 }]);
-    XLSX.utils.book_append_sheet(wb, wsMat, 'Şoför Karşılaştırma');
-  }
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 34 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Şoför Sefer Raporu');
   XLSX.writeFile(wb, 'sofor-sefer-raporu-' + todayStr() + '.xlsx');
 
   document.getElementById('driverExcelModalOverlay').style.display = 'none';
