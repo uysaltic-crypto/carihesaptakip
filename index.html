@@ -1097,6 +1097,11 @@
       <button id="driverExcelQuickClear" style="font-size:12px; padding:5px 10px;">Temizle</button>
     </div>
 
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Sıralama</p>
+    <select id="driverExcelSort" style="width:100%; margin-bottom:6px;">
+      <option value="count">En çok gidilenden başla</option>
+      <option value="alpha">Alfabetik (A-Z)</option>
+    </select>
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Şoförler</p>
     <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #E7EAF0; margin-bottom:6px; font-weight:600;">
       <input type="checkbox" id="driverExcelSelectAll" checked />
@@ -1125,6 +1130,11 @@
       <button id="placeExcelQuickMonth" style="font-size:12px; padding:5px 10px;">Son 30 gün</button>
       <button id="placeExcelQuickClear" style="font-size:12px; padding:5px 10px;">Temizle</button>
     </div>
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Sıralama</p>
+    <select id="placeExcelSort" style="width:100%; margin-bottom:6px;">
+      <option value="count">En çok gidilenden başla</option>
+      <option value="alpha">Alfabetik (A-Z)</option>
+    </select>
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Şoförler</p>
     <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #E7EAF0; margin-bottom:6px; font-weight:600;">
       <input type="checkbox" id="placeExcelSelectAll" checked />
@@ -3852,6 +3862,7 @@ document.getElementById('driverExcelBtn').addEventListener('click', () => {
   document.getElementById('driverExcelSelectAll').checked = true;
   document.getElementById('driverExcelDateFrom').value = '';
   document.getElementById('driverExcelDateTo').value = '';
+  document.getElementById('driverExcelSort').value = 'count';
   if (data.drivers.length === 0) {
     box.innerHTML = `<div class="empty">Henüz şoför eklenmedi.</div>`;
   } else {
@@ -3901,6 +3912,7 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
   const dateFrom = document.getElementById('driverExcelDateFrom').value;
   const dateTo = document.getElementById('driverExcelDateTo').value;
 
+  const sortAlpha = document.getElementById('driverExcelSort').value === 'alpha';
   const rangeLabel = (dateFrom || dateTo)
     ? ((dateFrom ? fmtDate(dateFrom) : 'başlangıç') + ' – ' + (dateTo ? fmtDate(dateTo) : 'bugün'))
     : 'Tüm tarihler';
@@ -3932,7 +3944,7 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
   perDriver.forEach(x => {
     if (x.count === 0) return;
     rows.push([x.driver.name.toLocaleUpperCase('tr-TR'), x.count]);
-    Object.keys(x.byPlace).sort((a, b) => x.byPlace[b].count - x.byPlace[a].count).forEach(place => {
+    Object.keys(x.byPlace).sort((a, b) => sortAlpha ? a.localeCompare(b, 'tr') : (x.byPlace[b].count - x.byPlace[a].count || a.localeCompare(b, 'tr'))).forEach(place => {
       rows.push([place, x.byPlace[place].count]);
     });
     rows.push([]);
@@ -3959,6 +3971,7 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
     $('placeExcelSelectAll').checked = true;
     $('placeExcelDateFrom').value = '';
     $('placeExcelDateTo').value = '';
+    $('placeExcelSort').value = 'count';
     if (data.drivers.length === 0) {
       box.innerHTML = `<div class="empty">Henüz şoför eklenmedi.</div>`;
     } else {
@@ -4006,7 +4019,7 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
       ? ((dateFrom ? fmtDate(dateFrom) : 'başlangıç') + ' – ' + (dateTo ? fmtDate(dateTo) : 'bugün'))
       : 'Tüm tarihler';
     const rows = [['Gidilen Yerler Raporu — ' + rangeLabel], [], ['Gidilen Yer', 'Toplam Sefer (Adet)']];
-    Object.keys(byPlace).sort((a, b) => byPlace[b] - byPlace[a] || a.localeCompare(b, 'tr'))
+    Object.keys(byPlace).sort((a, b) => $('placeExcelSort').value === 'alpha' ? a.localeCompare(b, 'tr') : (byPlace[b] - byPlace[a] || a.localeCompare(b, 'tr')))
       .forEach(pl => rows.push([pl, byPlace[pl]]));
     rows.push(['TOPLAM', trips.length]);
     const wb = XLSX.utils.book_new();
