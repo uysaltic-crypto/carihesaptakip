@@ -492,7 +492,7 @@
   </div>
 
   <div id="bakimView" style="display:none;">
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Araçlarınızın yağ değişimi, tekerlek/lastik ve bakım kayıtlarını tarih ve tutarıyla takip edin. Durumu <b>"Planlandı"</b> olan kayıtlar, tarihi yaklaşınca (45 gün kala) Hatırlatıcılar ekranında görünür.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Araçlarınızın bakım kayıtlarını tarih, tutar, bakım km'si, sonraki bakım km'si, yapılan işler ve yapan firma bilgisiyle takip edin. Durumu <b>"Planlandı"</b> olan kayıtlar, tarihi yaklaşınca (45 gün kala) Hatırlatıcılar ekranında görünür.</p>
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 8px;">
       <p style="font-weight:600; font-size:15px; margin:0;">Kayıtlar</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1084,6 +1084,7 @@
 <div class="modal-overlay" id="driverExcelModalOverlay">
   <div class="modal-box" style="width:420px; max-height:85vh; overflow-y:auto;">
     <h3>Şoför sefer raporu</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 6px;">Seçtiğiniz şoförlerin, seçtiğiniz tarih aralığında hangi yere kaç kez gittiğini ve toplam sefer sayısını Excel olarak verir.</p>
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Tarih aralığı (opsiyonel — boş bırakılırsa tüm geçmiş)</p>
     <div style="display:flex; gap:8px; margin-bottom:6px;">
       <input type="date" id="driverExcelDateFrom" style="flex:1;" />
@@ -1112,6 +1113,7 @@
 <div class="modal-overlay" id="excelModalOverlay">
   <div class="modal-box" style="width:420px; max-height:85vh; overflow-y:auto;">
     <h3>Excel raporu ayarları</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 6px;">Seçtiğiniz şoförlerin, seçtiğiniz tarih aralığında hangi yere kaç kez gittiğini ve toplam sefer sayısını Excel olarak verir.</p>
     <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Tarih aralığı (opsiyonel — boş bırakılırsa tüm geçmiş)</p>
     <div style="display:flex; gap:8px; margin-bottom:6px;">
       <input type="date" id="excelDateFrom" style="flex:1;" />
@@ -1265,12 +1267,6 @@ let currentAccId = null;
 let editingAccId = null;
 let activeTab = 'hepsi';
 let activeView = 'cariler';
-const MAINT_TYPES = {
-  yag: { label: 'Yağ değişimi', icon: '🛢️' },
-  tekerlek: { label: 'Tekerlek / lastik', icon: '🛞' },
-  bakim: { label: 'Bakım', icon: '🔧' }
-};
-
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -1832,7 +1828,7 @@ function renderReminders() {
       : `<button class="editRemBtn" data-id="${r.id}">Düzenle</button><button class="delRemBtn" data-id="${r.id}">Sil</button>`;
     return `<div class="rem-row ${overdue ? 'overdue' : ''} ${r.done ? 'done' : ''}">
       <div class="rem-left">
-        ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : (r.maintId ? (MAINT_TYPES[r.maintType] ? MAINT_TYPES[r.maintType].icon : '🔧') : '🚗')}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
+        ${r.virtual ? `<span style="width:16px; text-align:center;">${r.isDriver ? '👤' : (r.maintId ? '🔧' : '🚗')}</span>` : `<input type="checkbox" class="remCheck" data-id="${r.id}" ${r.done ? 'checked' : ''} />`}
         <div>
           <span class="rem-date" style="${dueSoon ? 'color:#C43D33; font-weight:700;' : ''}">${fmtDate(r.date)}</span>
           <p class="rem-desc ${r.done ? 'done-text' : ''}" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(r.desc)}${(r.recurrence && r.recurrence !== 'none' && r.recurCount !== null && r.recurCount !== undefined) ? ` <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(kalan tekrar: ${r.recurCount})</span>` : ''}${acc ? `<span class="rem-acc" style="${dueSoon ? 'color:#C43D33;' : ''}">${escapeHtml(acc.name)}</span>` : ''}</p>
@@ -3877,40 +3873,72 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
   const dateFrom = document.getElementById('driverExcelDateFrom').value;
   const dateTo = document.getElementById('driverExcelDateTo').value;
 
-  const rows = [['Şoför', 'Sefer Adı', 'Adet', 'Toplam Tutar (TL)']];
-  let anyData = false;
+  const rangeLabel = (dateFrom || dateTo)
+    ? ((dateFrom ? fmtDate(dateFrom) : 'başlangıç') + ' – ' + (dateTo ? fmtDate(dateTo) : 'bugün'))
+    : 'Tüm tarihler';
+  const drivers = selectedIds.map(id => data.drivers.find(d => d.id === id)).filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 
-  selectedIds.forEach(did => {
-    const driver = data.drivers.find(d => d.id === did);
-    let trips = data.trips.filter(t => t.driverId === did);
+  // Her şoför için seçilen aralıktaki seferleri yer (sefer adı) bazında say
+  const perDriver = drivers.map(driver => {
+    let trips = data.trips.filter(t => t.driverId === driver.id);
     if (dateFrom) trips = trips.filter(t => t.date >= dateFrom);
     if (dateTo) trips = trips.filter(t => t.date <= dateTo);
-    if (trips.length === 0) return;
-    anyData = true;
-    const byDesc = {};
+    const byPlace = {};
     trips.forEach(t => {
       const key = t.desc || '(isimsiz sefer)';
-      if (!byDesc[key]) byDesc[key] = { count: 0, total: 0 };
-      byDesc[key].count += 1;
-      byDesc[key].total += (t.price || 0);
+      if (!byPlace[key]) byPlace[key] = { count: 0, total: 0 };
+      byPlace[key].count += 1;
+      byPlace[key].total += (t.price || 0);
     });
-    Object.keys(byDesc).sort((a,b) => byDesc[b].count - byDesc[a].count).forEach(desc => {
-      rows.push([driver.name, desc, byDesc[desc].count, byDesc[desc].total]);
-    });
-    const totalCount = trips.length;
-    const totalAmount = trips.reduce((s,t) => s + (t.price||0), 0);
-    rows.push([driver.name + ' - TOPLAM', '', totalCount, totalAmount]);
+    return { driver, count: trips.length, total: trips.reduce((s, t) => s + (t.price || 0), 0), byPlace };
   });
 
-  if (!anyData) {
+  if (perDriver.every(x => x.count === 0)) {
     alert('Seçilen şoför(ler) ve tarih aralığında sefer kaydı bulunamadı.');
     return;
   }
 
+  // 1) Özet: şoför başına toplam sefer sayısı
+  const summary = [['Şoför Sefer Raporu'], ['Tarih aralığı: ' + rangeLabel], [],
+    ['Şoför', 'Toplam Sefer (Adet)', 'Toplam Tutar (TL)']];
+  perDriver.forEach(x => summary.push([x.driver.name, x.count, x.total]));
+  summary.push(['GENEL TOPLAM', perDriver.reduce((s, x) => s + x.count, 0), perDriver.reduce((s, x) => s + x.total, 0)]);
+
+  // 2) Detay: şoför başına gittiği yerler ve kaç kez gittiği
+  const detail = [['Şoför', 'Gidilen Yer (Sefer Adı)', 'Adet', 'Toplam Tutar (TL)']];
+  perDriver.forEach(x => {
+    if (x.count === 0) return;
+    Object.keys(x.byPlace).sort((a, b) => x.byPlace[b].count - x.byPlace[a].count).forEach(place => {
+      detail.push([x.driver.name, place, x.byPlace[place].count, x.byPlace[place].total]);
+    });
+    detail.push([x.driver.name + ' - TOPLAM', '', x.count, x.total]);
+  });
+
+  // 3) Karşılaştırma: satırlar yerler, sütunlar şoförler (birden fazla şoför seçildiyse)
+  const active = perDriver.filter(x => x.count > 0);
+  let matrix = null;
+  if (active.length > 1) {
+    const places = Array.from(new Set(active.flatMap(x => Object.keys(x.byPlace))));
+    const placeTotal = (pl) => active.reduce((s, x) => s + (x.byPlace[pl] ? x.byPlace[pl].count : 0), 0);
+    places.sort((a, b) => placeTotal(b) - placeTotal(a));
+    matrix = [['Gidilen Yer'].concat(active.map(x => x.driver.name), ['TOPLAM'])];
+    places.forEach(pl => matrix.push([pl].concat(active.map(x => x.byPlace[pl] ? x.byPlace[pl].count : 0), [placeTotal(pl)])));
+    matrix.push(['TOPLAM'].concat(active.map(x => x.count), [active.reduce((s, x) => s + x.count, 0)]));
+  }
+
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 20 }, { wch: 26 }, { wch: 10 }, { wch: 16 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Şoför Sefer Raporu');
+  const wsSum = XLSX.utils.aoa_to_sheet(summary);
+  wsSum['!cols'] = [{ wch: 26 }, { wch: 20 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsSum, 'Özet');
+  const wsDet = XLSX.utils.aoa_to_sheet(detail);
+  wsDet['!cols'] = [{ wch: 26 }, { wch: 30 }, { wch: 10 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, wsDet, 'Yer Bazında Detay');
+  if (matrix) {
+    const wsMat = XLSX.utils.aoa_to_sheet(matrix);
+    wsMat['!cols'] = [{ wch: 30 }].concat(active.map(() => ({ wch: 14 })), [{ wch: 10 }]);
+    XLSX.utils.book_append_sheet(wb, wsMat, 'Şoför Karşılaştırma');
+  }
   XLSX.writeFile(wb, 'sofor-sefer-raporu-' + todayStr() + '.xlsx');
 
   document.getElementById('driverExcelModalOverlay').style.display = 'none';
@@ -5245,7 +5273,7 @@ function lastFuelPercentOf(vehicleId) {
   return logs[logs.length - 1].percent;
 }
 
-// ---- Yağ / Tekerlek / Bakım takibi ----
+// ---- Bakım takibi ----
 let editingMaintId = null;
 
 function maintList() {
