@@ -534,6 +534,7 @@
     <div class="toolbar">
       <button id="newDriverBtn" class="primary-btn">+ Yeni şoför</button>
       <button id="driverExcelBtn">📊 Excel raporu al</button>
+      <button id="placeExcelBtn">📍 Gidilen yerler raporu (Excel)</button>
       <button id="hakedisPdfBtn">🧾 Hakediş raporu (PDF)</button>
     </div>
     <div id="driverList"></div>
@@ -1106,6 +1107,33 @@
     <div class="actions">
       <button id="driverExcelModalCancel">Vazgeç</button>
       <button id="driverExcelModalDownload" class="primary-btn">İndir</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="placeExcelModalOverlay">
+  <div class="modal-box" style="width:420px; max-height:85vh; overflow-y:auto;">
+    <h3>Gidilen yerler raporu</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 6px;">Seçtiğiniz şoförlerin, seçtiğiniz tarih aralığında gittikleri yerlerin toplamını (hangi yere toplam kaç sefer yapıldığını) Excel olarak verir.</p>
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Tarih aralığı (opsiyonel — boş bırakılırsa tüm geçmiş)</p>
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+      <input type="date" id="placeExcelDateFrom" style="flex:1;" />
+      <input type="date" id="placeExcelDateTo" style="flex:1;" />
+    </div>
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button id="placeExcelQuickWeek" style="font-size:12px; padding:5px 10px;">Son 7 gün</button>
+      <button id="placeExcelQuickMonth" style="font-size:12px; padding:5px 10px;">Son 30 gün</button>
+      <button id="placeExcelQuickClear" style="font-size:12px; padding:5px 10px;">Temizle</button>
+    </div>
+    <p style="font-weight:600; font-size:13px; margin:12px 0 6px;">Şoförler</p>
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0 8px; border-bottom:1px solid #E7EAF0; margin-bottom:6px; font-weight:600;">
+      <input type="checkbox" id="placeExcelSelectAll" checked />
+      Tümünü seç
+    </label>
+    <div class="field-group" id="placeExcelCheckList" style="max-height:220px; overflow-y:auto;"></div>
+    <div class="actions">
+      <button id="placeExcelModalCancel">Vazgeç</button>
+      <button id="placeExcelModalDownload" class="primary-btn">İndir</button>
     </div>
   </div>
 </div>
@@ -3918,6 +3946,77 @@ document.getElementById('driverExcelModalDownload').addEventListener('click', ()
 
   document.getElementById('driverExcelModalOverlay').style.display = 'none';
 });
+
+// ---- Gidilen yerler raporu (Excel) ----
+(function () {
+  const $ = (id) => document.getElementById(id);
+  function syncAll() {
+    const all = document.querySelectorAll('.placeExcelCheck');
+    $('placeExcelSelectAll').checked = all.length > 0 && document.querySelectorAll('.placeExcelCheck:checked').length === all.length;
+  }
+  $('placeExcelBtn').addEventListener('click', () => {
+    const box = $('placeExcelCheckList');
+    $('placeExcelSelectAll').checked = true;
+    $('placeExcelDateFrom').value = '';
+    $('placeExcelDateTo').value = '';
+    if (data.drivers.length === 0) {
+      box.innerHTML = `<div class="empty">Henüz şoför eklenmedi.</div>`;
+    } else {
+      box.innerHTML = data.drivers.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr')).map(d => `
+        <label style="display:flex; align-items:center; gap:8px; font-size:14px; padding:4px 0;">
+          <input type="checkbox" class="placeExcelCheck" value="${d.id}" checked />
+          ${escapeHtml(d.name)}
+        </label>
+      `).join('');
+      box.querySelectorAll('.placeExcelCheck').forEach(c => c.addEventListener('change', syncAll));
+    }
+    $('placeExcelModalOverlay').style.display = 'flex';
+  });
+  $('placeExcelSelectAll').addEventListener('change', (e) => {
+    document.querySelectorAll('.placeExcelCheck').forEach(c => { c.checked = e.target.checked; });
+  });
+  $('placeExcelModalCancel').addEventListener('click', () => { $('placeExcelModalOverlay').style.display = 'none'; });
+  function quick(days) {
+    const to = new Date(todayStr() + 'T00:00:00');
+    const from = new Date(to); from.setDate(from.getDate() - days);
+    $('placeExcelDateFrom').value = from.toISOString().slice(0,10);
+    $('placeExcelDateTo').value = todayStr();
+  }
+  $('placeExcelQuickWeek').addEventListener('click', () => quick(7));
+  $('placeExcelQuickMonth').addEventListener('click', () => quick(30));
+  $('placeExcelQuickClear').addEventListener('click', () => {
+    $('placeExcelDateFrom').value = '';
+    $('placeExcelDateTo').value = '';
+  });
+  $('placeExcelModalDownload').addEventListener('click', () => {
+    const ids = Array.from(document.querySelectorAll('.placeExcelCheck:checked')).map(c => c.value);
+    if (ids.length === 0) { alert('Lütfen en az bir şoför seçin.'); return; }
+    const dateFrom = $('placeExcelDateFrom').value;
+    const dateTo = $('placeExcelDateTo').value;
+    let trips = data.trips.filter(t => ids.includes(t.driverId));
+    if (dateFrom) trips = trips.filter(t => t.date >= dateFrom);
+    if (dateTo) trips = trips.filter(t => t.date <= dateTo);
+    if (trips.length === 0) { alert('Seçilen şoför(ler) ve tarih aralığında sefer kaydı bulunamadı.'); return; }
+    const byPlace = {};
+    trips.forEach(t => {
+      const key = t.desc || '(isimsiz sefer)';
+      byPlace[key] = (byPlace[key] || 0) + 1;
+    });
+    const rangeLabel = (dateFrom || dateTo)
+      ? ((dateFrom ? fmtDate(dateFrom) : 'başlangıç') + ' – ' + (dateTo ? fmtDate(dateTo) : 'bugün'))
+      : 'Tüm tarihler';
+    const rows = [['Gidilen Yerler Raporu — ' + rangeLabel], [], ['Gidilen Yer', 'Toplam Sefer (Adet)']];
+    Object.keys(byPlace).sort((a, b) => byPlace[b] - byPlace[a] || a.localeCompare(b, 'tr'))
+      .forEach(pl => rows.push([pl, byPlace[pl]]));
+    rows.push(['TOPLAM', trips.length]);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 34 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Gidilen Yerler');
+    XLSX.writeFile(wb, 'gidilen-yerler-raporu-' + todayStr() + '.xlsx');
+    $('placeExcelModalOverlay').style.display = 'none';
+  });
+})();
 
 // ---- Hakediş raporu (PDF) ----
 // Seçilen tarih aralığında en az bir seferi olan şoförleri, o aralıktaki sefer kayıtlarına göre
