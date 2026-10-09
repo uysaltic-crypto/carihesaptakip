@@ -524,7 +524,23 @@
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
       <p style="font-weight:600; font-size:15px; margin:0;">Araç bazlı yakıt geçmişi</p>
-      <input type="text" id="fuelLogFilterVeh" list="fuelLogFilterVehDatalist" placeholder="Araç ara ve seçin (tümü için boş bırakın)..." autocomplete="off" /><datalist id="fuelLogFilterVehDatalist"></datalist>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+        <select id="fuelLogSort" title="Sıralama">
+          <option value="date_desc">Tarih: yeniden eskiye</option>
+          <option value="date_asc">Tarih: eskiden yeniye</option>
+          <option value="veh_asc">Araç: A-Z</option>
+          <option value="veh_desc">Araç: Z-A</option>
+          <option value="km_desc">Gidilen km: çoktan aza</option>
+          <option value="km_asc">Gidilen km: azdan çoğa</option>
+          <option value="perkm_desc">1 km'de yakıt: çoktan aza</option>
+          <option value="perkm_asc">1 km'de yakıt: azdan çoğa</option>
+          <option value="liters_desc">Litre: çoktan aza</option>
+          <option value="liters_asc">Litre: azdan çoğa</option>
+          <option value="amount_desc">Tutar: çoktan aza</option>
+          <option value="amount_asc">Tutar: azdan çoğa</option>
+        </select>
+        <input type="text" id="fuelLogFilterVeh" list="fuelLogFilterVehDatalist" placeholder="Araç ara ve seçin (tümü için boş bırakın)..." autocomplete="off" /><datalist id="fuelLogFilterVehDatalist"></datalist>
+      </div>
     </div>
     <div class="summary" id="vehicleFuelStats" style="display:none;"></div>
     <div class="list-wrap" id="fuelLogList" style="margin-bottom:20px;"></div>
@@ -5280,9 +5296,8 @@ function renderFuelLogs() {
     list.innerHTML = `<div class="empty">Henüz yakıt girişi yok.</div>`;
     return;
   }
-  list.innerHTML = logs.map(l => {
+  const rows = logs.map(l => {
     const v = data.vehicles.find(x => x.id === l.vehicleId);
-    const unitPrice = (l.amount && l.liters) ? (l.amount / l.liters) : null;
     let gidilenKm = null;
     let perKmRow = null;
     if (l.km) {
@@ -5293,6 +5308,26 @@ function renderFuelLogs() {
         if (gidilenKm > 0 && l.liters) perKmRow = l.liters / gidilenKm;
       }
     }
+    return { l, v, gidilenKm, perKmRow };
+  });
+  const sortMode = (document.getElementById('fuelLogSort') || {}).value || 'date_desc';
+  const [sortKey, sortDir] = sortMode.split('_');
+  const mult = sortDir === 'asc' ? 1 : -1;
+  const numOf = (r) => ({ km: r.gidilenKm, perkm: r.perKmRow, liters: r.l.liters, amount: r.l.amount })[sortKey];
+  rows.sort((a, b) => {
+    if (sortKey === 'date') return mult * ((a.l.date || '').localeCompare(b.l.date || '') || (a.l.km || 0) - (b.l.km || 0));
+    if (sortKey === 'veh') {
+      return mult * ((a.v ? a.v.name : '').localeCompare(b.v ? b.v.name : '', 'tr') || (b.l.date || '').localeCompare(a.l.date || ''));
+    }
+    // sayısal: değeri olmayanlar (—) her zaman en sona
+    const x = numOf(a), y = numOf(b);
+    const xm = (x === null || x === undefined), ym = (y === null || y === undefined);
+    if (xm && ym) return 0;
+    if (xm) return 1;
+    if (ym) return -1;
+    return mult * (x - y);
+  });
+  list.innerHTML = rows.map(({ l, v, gidilenKm, perKmRow }) => {
     return `<div class="rem-row">
       <div class="fuel-card-body">
         <div class="fuel-card-top">
@@ -5312,6 +5347,8 @@ function renderFuelLogs() {
     </div>`;
   }).join('');
 }
+
+document.getElementById('fuelLogSort').addEventListener('change', renderFuelLogs);
 
 document.getElementById('fuelLogList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('.delFuelLogBtn');
