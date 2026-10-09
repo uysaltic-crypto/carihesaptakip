@@ -111,6 +111,7 @@
   .acc-row:hover { background: var(--surface-alt); }
   .acc-row .name { font-weight: 500; font-size: 14px; margin: 0; }
   .acc-row .type { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+  .acc-row .note { font-size: 12px; color: #5B6B82; margin: 3px 0 0; white-space: pre-wrap; }
   .acc-row .bal { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
   .pos { color: var(--success); }
   .neg { color: var(--danger); }
@@ -320,6 +321,8 @@
       min-width: 0; flex: 1 1 auto;
     }
     .acc-row .type { font-size: 10.5px; margin: 0; white-space: nowrap; flex-shrink: 0; }
+    .acc-row > div:first-child { flex-wrap: wrap; }
+    .acc-row .note { flex: 1 1 100%; font-size: 11px; margin: 1px 0 0; }
     .acc-row .bal { font-size: 12.5px; white-space: nowrap; flex-shrink: 0; }
 
     .modal-box {
@@ -788,6 +791,7 @@
       <input id="modalTax" placeholder="Vergi no (opsiyonel)" />
       <input id="modalIban" placeholder="IBAN (opsiyonel)" />
       <input id="modalBanka" placeholder="Banka adı (opsiyonel)" />
+      <input id="modalNote" placeholder="Açıklama (opsiyonel — cariler listesinde görünür)" />
     </div>
     <div class="actions">
       <button id="modalCancel">Vazgeç</button>
@@ -2075,7 +2079,7 @@ document.querySelectorAll('.tabBtn').forEach(b => {
 
 function renderList() {
   const q = (document.getElementById('searchInput').value || '').toLowerCase();
-  let accs = data.accounts.filter(a => a.name.toLowerCase().includes(q));
+  let accs = data.accounts.filter(a => a.name.toLowerCase().includes(q) || (a.note || '').toLowerCase().includes(q));
   if (activeTab !== 'hepsi') accs = accs.filter(a => a.type === activeTab);
   accs = accs.slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
 
@@ -2104,6 +2108,7 @@ function renderList() {
       <div>
         <p class="name">${escapeHtml(a.name)}</p>
         <p class="type">${a.type === 'musteri' ? 'Müşteri' : (a.type === 'tedarikci' ? 'Tedarikçi' : (a.type === 'sofor' ? 'Şoför' : 'Ortak'))}</p>
+        ${a.note ? `<p class="note">${escapeHtml(a.note)}</p>` : ''}
       </div>
       <p class="bal ${cls}">${fmt(b)}</p>
     </div>`;
@@ -2687,6 +2692,7 @@ document.getElementById('newAccBtn').addEventListener('click', () => {
   document.getElementById('modalTax').value = '';
   document.getElementById('modalIban').value = '';
   document.getElementById('modalBanka').value = '';
+  document.getElementById('modalNote').value = '';
   document.getElementById('modalOverlay').style.display = 'flex';
 });
 
@@ -2700,6 +2706,7 @@ document.getElementById('editAccBtn').addEventListener('click', () => {
   document.getElementById('modalTax').value = acc.taxNo || '';
   document.getElementById('modalIban').value = acc.iban || '';
   document.getElementById('modalBanka').value = acc.banka || '';
+  document.getElementById('modalNote').value = acc.note || '';
   document.getElementById('modalOverlay').style.display = 'flex';
 });
 
@@ -2717,7 +2724,8 @@ document.getElementById('modalSave').addEventListener('click', () => {
     phone: document.getElementById('modalPhone').value.trim(),
     taxNo: document.getElementById('modalTax').value.trim(),
     iban: document.getElementById('modalIban').value.trim(),
-    banka: document.getElementById('modalBanka').value.trim()
+    banka: document.getElementById('modalBanka').value.trim(),
+    note: document.getElementById('modalNote').value.trim()
   };
   if (editingAccId) {
     const idx = data.accounts.findIndex(a => a.id === editingAccId);
