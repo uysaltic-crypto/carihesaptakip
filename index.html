@@ -539,6 +539,11 @@
           <option value="amount_desc">Tutar: çoktan aza</option>
           <option value="amount_asc">Tutar: azdan çoğa</option>
         </select>
+        <span style="font-size:12.5px; color:#5B6B82;">Tarih:</span>
+        <input type="date" id="fuelLogDateFrom" title="Başlangıç tarihi" />
+        <span style="font-size:12.5px; color:#5B6B82;">–</span>
+        <input type="date" id="fuelLogDateTo" title="Bitiş tarihi" />
+        <button id="fuelLogDateClear" style="font-size:12px; padding:5px 10px;">Tarihi temizle</button>
         <input type="text" id="fuelLogFilterVeh" list="fuelLogFilterVehDatalist" placeholder="Araç ara ve seçin (tümü için boş bırakın)..." autocomplete="off" /><datalist id="fuelLogFilterVehDatalist"></datalist>
       </div>
     </div>
@@ -5292,8 +5297,13 @@ function renderFuelLogs() {
   const list = document.getElementById('fuelLogList');
   let logs = data.fuelLogs.slice().sort((a,b) => b.date.localeCompare(a.date));
   if (filterVehicleId) logs = logs.filter(l => l.vehicleId === filterVehicleId);
+  const dFrom = document.getElementById('fuelLogDateFrom').value;
+  const dTo = document.getElementById('fuelLogDateTo').value;
+  const hasDateFilter = !!(dFrom || dTo);
+  if (dFrom) logs = logs.filter(l => l.date >= dFrom);
+  if (dTo) logs = logs.filter(l => l.date <= dTo);
   if (logs.length === 0) {
-    list.innerHTML = `<div class="empty">Henüz yakıt girişi yok.</div>`;
+    list.innerHTML = `<div class="empty">${hasDateFilter ? 'Seçilen tarih aralığında yakıt girişi yok.' : 'Henüz yakıt girişi yok.'}</div>`;
     return;
   }
   const rows = logs.map(l => {
@@ -5349,6 +5359,13 @@ function renderFuelLogs() {
 }
 
 document.getElementById('fuelLogSort').addEventListener('change', renderFuelLogs);
+document.getElementById('fuelLogDateFrom').addEventListener('change', renderFuelLogs);
+document.getElementById('fuelLogDateTo').addEventListener('change', renderFuelLogs);
+document.getElementById('fuelLogDateClear').addEventListener('click', () => {
+  document.getElementById('fuelLogDateFrom').value = '';
+  document.getElementById('fuelLogDateTo').value = '';
+  renderFuelLogs();
+});
 
 document.getElementById('fuelLogList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('.delFuelLogBtn');
