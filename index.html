@@ -6279,12 +6279,15 @@ const KASA_ACCTS = {
   banka: { label: 'Banka', bal: 'Banka bakiyesi' },
   kart:  { label: 'Kredi Kartı', bal: 'Kredi kartı bakiyesi' }
 };
+// Ödeme şekli Havale/EFT veya Kredi Kartı olan hareketler her zaman Banka / Kredi Kartı hesabına gider, Kasa (Nakit)'e girmez.
 // Hesap alanı olmayan eski kayıtlar ödeme şekline göre yerleştirilir:
 // boş/Nakit → Kasa, Kredi Kartı → Kredi Kartı, diğerleri (Havale/EFT, Çek, Senet...) → Banka.
 function kasaAcctOf(e) {
   const pm = (e.paymentMethod || '').trim().toLocaleLowerCase('tr-TR');
   // Havale/EFT hangi sekmeden girilirse girilsin Kasa (Nakit) bakiyesinden düşmez; Banka'ya yazılır.
   if (pm.indexOf('havale') !== -1 || pm.indexOf('eft') !== -1) return 'banka';
+  // Kredi kartı ödemesi hangi sekmeden girilirse girilsin Kasa (Nakit) bakiyesinden düşmez; Kredi Kartı hesabına yazılır.
+  if (pm.indexOf('kredi') !== -1 || pm.indexOf('kart') !== -1) return 'kart';
   if (e.kasaAccount && KASA_ACCTS[e.kasaAccount]) return e.kasaAccount;
   if (!pm || pm === 'nakit') return 'nakit';
   if (pm.indexOf('kredi') !== -1 || pm.indexOf('kart') !== -1) return 'kart';
