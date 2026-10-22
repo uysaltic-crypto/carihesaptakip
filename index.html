@@ -925,7 +925,7 @@
       <label style="font-size:12px; color:#5B6B82;">Muayene tarihi</label>
       <input type="date" id="vehMuayene" />
       <label style="font-size:12px; color:#5B6B82;">Ruhsat görseli</label>
-      <input type="file" id="vehRuhsatPolicyFile" accept="image/*" />
+      <input type="file" id="vehRuhsatPolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="vehRuhsatPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehRuhsatPolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -934,7 +934,7 @@
       <input type="date" id="vehTrafikTarih" />
       <input id="vehTrafikFirma" placeholder="Trafik sigortasını yapan firma" />
       <label style="font-size:12px; color:#5B6B82;">Trafik sigortası poliçe görseli</label>
-      <input type="file" id="vehTrafikPolicyFile" accept="image/*" />
+      <input type="file" id="vehTrafikPolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="vehTrafikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehTrafikPolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -943,7 +943,7 @@
       <input type="date" id="vehKaskoTarih" />
       <input id="vehKaskoFirma" placeholder="Kaskoyu yapan firma" />
       <label style="font-size:12px; color:#5B6B82;">Kasko poliçe görseli</label>
-      <input type="file" id="vehKaskoPolicyFile" accept="image/*" />
+      <input type="file" id="vehKaskoPolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="vehKaskoPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehKaskoPolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -952,7 +952,7 @@
       <input type="date" id="vehUrunKaskoTarih" />
       <input id="vehUrunKaskoFirma" placeholder="Ürün kaskosunu yapan firma" />
       <label style="font-size:12px; color:#5B6B82;">Ürün kaskosu poliçe görseli</label>
-      <input type="file" id="vehUrunKaskoPolicyFile" accept="image/*" />
+      <input type="file" id="vehUrunKaskoPolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="vehUrunKaskoPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="vehUrunKaskoPolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -1289,7 +1289,7 @@
       <label style="font-size:12px; color:#5B6B82;">Ehliyet süresi</label>
       <input type="date" id="driverLicenseExpiry" />
       <label style="font-size:12px; color:#5B6B82;">Ehliyet görseli</label>
-      <input type="file" id="driverLicensePolicyFile" accept="image/*" />
+      <input type="file" id="driverLicensePolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="driverLicensePolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="driverLicensePolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -1297,7 +1297,7 @@
       <label style="font-size:12px; color:#5B6B82;">Sürücü kartı süresi</label>
       <input type="date" id="driverCardExpiry" />
       <label style="font-size:12px; color:#5B6B82;">Sürücü kartı görseli</label>
-      <input type="file" id="driverCardPolicyFile" accept="image/*" />
+      <input type="file" id="driverCardPolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="driverCardPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="driverCardPolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -1305,7 +1305,7 @@
       <label style="font-size:12px; color:#5B6B82;">Psikoteknik süresi</label>
       <input type="date" id="driverPsikoteknikExpiry" />
       <label style="font-size:12px; color:#5B6B82;">Psikoteknik görseli</label>
-      <input type="file" id="driverPsikoteknikPolicyFile" accept="image/*" />
+      <input type="file" id="driverPsikoteknikPolicyFile" accept="image/*,application/pdf,.pdf" />
       <div style="display:flex; align-items:center; gap:8px;">
         <img id="driverPsikoteknikPolicyPreview" style="display:none; max-width:120px; max-height:80px; border-radius:6px; border:1px solid #D7DCE5;" />
         <button type="button" id="driverPsikoteknikPolicyRemove" style="display:none;">Görseli kaldır</button>
@@ -3503,6 +3503,7 @@ function extOfFile(file) {
   if (t === 'image/png') return 'png';
   if (t === 'image/webp') return 'webp';
   if (t === 'image/heic') return 'heic';
+  if (t === 'application/pdf') return 'pdf';
   const m = /\.([a-z0-9]+)$/i.exec(file.name || '');
   return m ? m[1].toLowerCase() : 'jpg';
 }
@@ -5312,7 +5313,48 @@ document.getElementById('driverModalSave').addEventListener('click', async () =>
 let editingVehId = null;
 let tempPolicyImages = { trafik: null, kasko: null, urunKasko: null, ruhsat: null };
 
+let _pdfjsPromise = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (_pdfjsPromise) return _pdfjsPromise;
+  _pdfjsPromise = new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    sc.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve(window.pdfjsLib);
+    };
+    sc.onerror = () => { _pdfjsPromise = null; reject(new Error('PDF okuyucu yüklenemedi (internet bağlantısını kontrol edin)')); };
+    document.head.appendChild(sc);
+  });
+  return _pdfjsPromise;
+}
+
+// PDF'in ilk sayfasını küçük JPEG önizlemeye çevirir
+async function pdfToThumb(file, maxDim, quality) {
+  const pdfjs = await loadPdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const base = page.getViewport({ scale: 1 });
+  const scale = maxDim / Math.max(base.width, base.height);
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(vp.width);
+  canvas.height = Math.round(vp.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 function compressImage(file, maxDim, quality) {
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+    return pdfToThumb(file, maxDim, quality).catch((e) => {
+      throw new Error(e && e.message && /PDF okuyucu/.test(e.message) ? e.message : 'PDF okunamadı (şifreli veya bozuk olabilir)');
+    });
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -5351,7 +5393,7 @@ function setupPolicyImageInput(fileInputId, previewId, removeId, key, target) {
       document.getElementById(removeId).style.display = 'inline-block';
     }).catch((err) => {
       console.error('Görsel sıkıştırma hatası', err);
-      alert('Görsel yüklenemedi, lütfen başka bir görsel deneyin.');
+      alert((err && err.message ? err.message + '\n\n' : '') + 'Görsel yüklenemedi, lütfen başka bir dosya deneyin.');
     });
     e.target.value = '';
   });
