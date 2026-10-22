@@ -344,6 +344,7 @@
 </style>
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <body>
 <div class="container">
@@ -723,6 +724,7 @@
     </div>
     <div class="toolbar" style="justify-content:flex-end;">
       <button id="taxRateManageBtn">⚙ KDV oranlarını düzenle</button>
+      <button id="taxImportBtn">📥 Faturaları içeri aktar (XML/ZIP)</button>
       <button id="taxExcelBtn">📊 Excel raporu al</button>
     </div>
     <div class="list-wrap" id="taxList"></div>
@@ -746,6 +748,34 @@
       <button id="addKasaBtn" class="primary-btn">+ Ekle</button>
     </div>
     <div class="list-wrap" id="kasaList"></div>
+  </div>
+</div>
+
+<input type="file" id="invImportFile" accept=".xml,.zip,application/xml,text/xml,application/zip" multiple style="display:none;" />
+<div class="modal-overlay" id="invImportModalOverlay">
+  <div class="modal-box" style="width:980px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+    <h3>Faturaları içeri aktar (XML / ZIP)</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 10px;">Luca e-Belge Portal'da faturaları seçip <b>"İndir(Xml)"</b> ile indirin; inen XML dosyalarını veya ZIP'i buraya seçin (birden fazla dosya seçebilirsiniz). Program matrah ve KDV'yi faturanın içinden okur, Vergi Takibi'ne ekler. Daha önce eklenmiş faturalar (fatura no / ETTN) tekrar eklenmez. Eklemeden önce aşağıda önizleme görürsünüz.</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+      <select id="invImportDir">
+        <option value="satis">Satış faturaları (benim kestiklerim)</option>
+        <option value="alis">Alış faturaları (bana gelenler)</option>
+      </select>
+      <button type="button" id="invImportPickBtn">📁 Dosya seç / ekle</button>
+      <span id="invImportFileInfo" style="font-size:12.5px; color:#5B6B82;"></span>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:10px;">
+      <input type="checkbox" id="invImportCariTx" />
+      Seçilen carilere hareket de işle (satış → carinin borcuna, alış → alacağına). Carisinde aynı fatura no'lu hareket varsa tekrar eklenmez.
+    </label>
+    <div id="invImportSummary" style="font-size:13px; margin-bottom:8px;"></div>
+    <div style="overflow-x:auto;">
+      <div class="list-wrap" id="invImportList" style="max-height:46vh; overflow-y:auto; min-width:860px;"></div>
+    </div>
+    <div class="actions">
+      <button id="invImportCancel">Vazgeç</button>
+      <button id="invImportConfirm" class="primary-btn" disabled>İçeri aktar</button>
+    </div>
   </div>
 </div>
 
@@ -1084,6 +1114,10 @@
     <h3>Depolama Yönetimi</h3>
     <p id="storageUsageText" style="font-size:13px; color:#3A4657; margin:8px 0 14px;"></p>
     <div id="storageImageList"></div>
+    <div style="margin:12px 0 4px;">
+      <button id="storageMigrateBtn" class="primary-btn">☁️ Mevcut görselleri Drive'a taşı</button>
+      <p style="font-size:11.5px; color:#5B6B82; margin:6px 0 0;">Drive'a taşınan görsellerin tam boyutlu hali "Cari Hesap Görselleri" klasörüne yüklenir; programda sadece küçük önizleme kalır.</p>
+    </div>
     <div class="actions">
       <button id="storageModalClose">Kapat</button>
     </div>
@@ -1103,6 +1137,7 @@
 <div class="modal-overlay" id="imgPreviewOverlay" style="background:rgba(0,0,0,0.75);">
   <div style="max-width:92vw; max-height:92vh; display:flex; flex-direction:column; align-items:center; gap:10px;">
     <img id="imgPreviewImg" style="max-width:92vw; max-height:80vh; border-radius:8px; box-shadow:0 4px 24px rgba(0,0,0,0.4);" />
+    <a id="imgPreviewDriveLink" href="#" target="_blank" rel="noopener" style="display:none; color:#fff; font-size:13px; text-decoration:underline;">☁️ Tam boyutlu görseli Drive'da aç</a>
     <button id="imgPreviewClose">Kapat</button>
   </div>
 </div>
@@ -2355,6 +2390,7 @@ function upsertCariTxFromTaxEntry(entry) {
   removeLinkedCariTx(entry.linkedTxId);
   entry.linkedTxId = null;
   if (entry.fromTxId) return;
+  if (entry.noCariTx) return;
   if (!entry.accountId) return;
   const acc = data.accounts.find(a => a.id === entry.accountId);
   if (!acc) { entry.accountId = null; return; }
@@ -3144,7 +3180,7 @@ function renderStoragePanel() {
         <img src="${(f.owner === 'vehicle' ? data.vehicles.find(v=>v.id===f.ownerId) : data.drivers.find(d=>d.id===f.ownerId))[f.key]}" style="width:44px; height:32px; object-fit:cover; border-radius:4px; border:1px solid #D7DCE5;" />
         <div>
           <p class="name">${escapeHtml(f.ownerName)}</p>
-          <p class="type">${f.label} · ~${Math.round(f.size/1024).toLocaleString('tr-TR')} KB</p>
+          <p class="type">${f.label} · ~${Math.round(f.size/1024).toLocaleString('tr-TR')} KB${(f.owner === 'vehicle' ? data.vehicles.find(v=>v.id===f.ownerId) : data.drivers.find(d=>d.id===f.ownerId))[f.key.replace('Img','DriveId')] ? ' · ☁️ Drive\'da' : ''}</p>
         </div>
       </div>
       <button class="storageRemoveBtn" data-idx="${idx}">Kaldır</button>
@@ -3155,7 +3191,12 @@ function renderStoragePanel() {
       const f = fields[parseInt(btn.dataset.idx)];
       showConfirm(`${f.ownerName} — ${f.label} kaldırılsın mı?`, () => {
         const owner = f.owner === 'vehicle' ? data.vehicles.find(v => v.id === f.ownerId) : data.drivers.find(d => d.id === f.ownerId);
-        if (owner) owner[f.key] = null;
+        if (owner) {
+          const did = owner[f.key.replace('Img','DriveId')];
+          owner[f.key] = null;
+          owner[f.key.replace('Img','DriveId')] = null;
+          if (did) gdriveDeleteFile(did);
+        }
         save();
         renderStoragePanel();
         renderVehicles();
@@ -3170,6 +3211,8 @@ document.getElementById('storageBtn').addEventListener('click', () => {
   document.getElementById('storageModalOverlay').style.display = 'flex';
 });
 
+document.getElementById('storageMigrateBtn').addEventListener('click', (e) => migrateImagesToDrive(e.currentTarget));
+
 document.getElementById('storageModalClose').addEventListener('click', () => {
   document.getElementById('storageModalOverlay').style.display = 'none';
 });
@@ -3177,7 +3220,23 @@ document.getElementById('storageModalClose').addEventListener('click', () => {
 document.addEventListener('click', (e) => {
   const thumb = e.target.closest('.policy-thumb');
   if (thumb) {
-    document.getElementById('imgPreviewImg').src = thumb.dataset.img;
+    const prevImg = document.getElementById('imgPreviewImg');
+    const prevLink = document.getElementById('imgPreviewDriveLink');
+    prevImg.src = thumb.dataset.img;
+    const driveId = thumb.dataset.drive;
+    if (driveId) {
+      prevLink.href = driveViewUrl(driveId);
+      prevLink.style.display = 'inline-block';
+      // Drive bağlantısı açıksa tam boyutlu görseli arka planda yükleyip değiştir
+      if (gdriveAccessToken && Date.now() < gdriveTokenExpiry) {
+        fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(driveId) + '?alt=media', { headers: { Authorization: 'Bearer ' + gdriveAccessToken } })
+          .then(r => r.ok ? r.blob() : Promise.reject(new Error('HTTP ' + r.status)))
+          .then(b => { if (document.getElementById('imgPreviewOverlay').style.display === 'flex' && prevLink.href === driveViewUrl(driveId)) prevImg.src = URL.createObjectURL(b); })
+          .catch(() => {});
+      }
+    } else {
+      prevLink.style.display = 'none';
+    }
     document.getElementById('imgPreviewOverlay').style.display = 'flex';
     return;
   }
@@ -3213,6 +3272,8 @@ const GDRIVE_FILENAME = 'cari-hesap-yedek.json';
 let gdriveTokenClient = null;
 let gdriveAccessToken = null;
 let gdriveFileId = null;
+let gdriveTokenExpiry = 0;
+let gdriveImgFolderId = null;
 
 function gdriveGetClientId() {
   return localStorage.getItem('gdrive-client-id') || '';
@@ -3302,6 +3363,7 @@ document.getElementById('gdriveConnectBtn').addEventListener('click', () => {
     callback: (resp) => {
       if (resp && resp.access_token) {
         gdriveAccessToken = resp.access_token;
+        gdriveTokenExpiry = Date.now() + ((resp.expires_in || 3600) - 60) * 1000;
         gdriveRefreshUI();
         gdriveSetStatus('Bağlandı! Şimdi yedekleyebilir veya geri yükleyebilirsiniz.');
       } else {
@@ -3381,6 +3443,200 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
     }
   });
 });
+
+
+// ---- Drive'a görsel yükleme (tam boyutlu görsel Drive'da, programda küçük önizleme) ----
+const IMG_FOLDER_NAME = 'Cari Hesap Görselleri';
+const IMG_LABELS = { trafik: 'Trafik poliçesi', kasko: 'Kasko poliçesi', urunKasko: 'Ürün kaskosu', ruhsat: 'Ruhsat', ehliyet: 'Ehliyet', surucuKarti: 'Sürücü kartı', psikoteknik: 'Psikoteknik' };
+const THUMB_MAX_DIM = 320;
+const THUMB_QUALITY = 0.6;
+
+// Mutlaka bir tıklama (kullanıcı işlemi) içinde, başka bir await'ten ÖNCE çağrılmalı; yoksa tarayıcı Google penceresini engeller.
+function gdriveEnsureToken() {
+  return new Promise((resolve, reject) => {
+    if (gdriveAccessToken && Date.now() < gdriveTokenExpiry) return resolve(gdriveAccessToken);
+    const clientId = gdriveGetClientId();
+    if (!clientId) return reject(new Error('no-client-id'));
+    if (typeof google === 'undefined' || !google.accounts) return reject(new Error('Google kütüphanesi yüklenemedi'));
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: GDRIVE_SCOPE,
+      callback: (resp) => {
+        if (resp && resp.access_token) {
+          gdriveAccessToken = resp.access_token;
+          gdriveTokenExpiry = Date.now() + ((resp.expires_in || 3600) - 60) * 1000;
+          gdriveRefreshUI();
+          resolve(gdriveAccessToken);
+        } else reject(new Error((resp && resp.error) || 'Bağlantı başarısız'));
+      },
+      error_callback: (err) => reject(new Error((err && err.type) || 'Bağlantı hatası'))
+    });
+    tc.requestAccessToken();
+  });
+}
+
+async function gdriveEnsureImgFolder() {
+  if (gdriveImgFolderId) return gdriveImgFolderId;
+  const auth = { Authorization: 'Bearer ' + gdriveAccessToken };
+  const q = encodeURIComponent("name='" + IMG_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&spaces=drive&fields=files(id)', { headers: auth });
+  if (!res.ok) throw new Error('Klasör aranamadı (HTTP ' + res.status + ')');
+  const json = await res.json();
+  if (json.files && json.files.length > 0) { gdriveImgFolderId = json.files[0].id; return gdriveImgFolderId; }
+  const cr = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, auth),
+    body: JSON.stringify({ name: IMG_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  if (!cr.ok) throw new Error('Klasör oluşturulamadı (HTTP ' + cr.status + ')');
+  gdriveImgFolderId = (await cr.json()).id;
+  return gdriveImgFolderId;
+}
+
+function safeFileName(str) {
+  return String(str || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extOfFile(file) {
+  const t = (file.type || '').toLowerCase();
+  if (t === 'image/jpeg') return 'jpg';
+  if (t === 'image/png') return 'png';
+  if (t === 'image/webp') return 'webp';
+  if (t === 'image/heic') return 'heic';
+  const m = /\.([a-z0-9]+)$/i.exec(file.name || '');
+  return m ? m[1].toLowerCase() : 'jpg';
+}
+
+// file: File veya Blob. Başarılı olursa Drive dosya ID'sini döner.
+async function gdriveUploadImage(file, fileName, isRetry) {
+  const folderId = await gdriveEnsureImgFolder();
+  const boundary = 'img_boundary_' + Date.now();
+  const meta = { name: fileName, parents: [folderId] };
+  const body = new Blob([
+    '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n' +
+    '--' + boundary + '\r\nContent-Type: ' + (file.type || 'application/octet-stream') + '\r\n\r\n',
+    file,
+    '\r\n--' + boundary + '--'
+  ]);
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + gdriveAccessToken, 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body
+  });
+  if (res.status === 404 && !isRetry) { // klasör Drive'dan silinmiş olabilir
+    gdriveImgFolderId = null;
+    return gdriveUploadImage(file, fileName, true);
+  }
+  if (!res.ok) throw new Error('Yükleme başarısız (HTTP ' + res.status + ')');
+  return (await res.json()).id;
+}
+
+async function gdriveDeleteFile(fileId) {
+  if (!fileId || !gdriveAccessToken || Date.now() >= gdriveTokenExpiry) return;
+  try {
+    await fetch('https://www.googleapis.com/drive/v3/files/' + fileId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + gdriveAccessToken } });
+  } catch (e) { console.error('Drive dosyası silinemedi', e); }
+}
+
+function driveViewUrl(fileId) {
+  return 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/view';
+}
+
+function shrinkDataUrl(dataUrl, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('Görsel okunamadı'));
+    img.src = dataUrl;
+  });
+}
+
+// Kaydet düğmesine basıldığında çağrılır: bekleyen orijinal dosyaları Drive'a yükler,
+// değiştirilen/kaldırılan eski Drive dosyalarını temizler. false dönerse kayıt iptal edilir.
+async function commitPendingImages(target, keys, ownerName) {
+  const pending = keys.filter(k => target[k + '__file']);
+  if (pending.length > 0) {
+    let driveOk = true;
+    try { await gdriveEnsureToken(); }
+    catch (e) {
+      driveOk = false;
+      const why = e.message === 'no-client-id' ? 'Google Drive bağlantısı henüz kurulmamış (☁️ Google Drive düğmesinden Client ID girmeniz gerekir).' : 'Google Drive bağlantısı kurulamadı: ' + e.message;
+      if (!confirm(why + '\n\nSadece küçük önizleme kaydedilsin mi? (Tam boyutlu görsel Drive\'a yüklenmeyecek)')) return false;
+    }
+    for (const k of pending) {
+      if (driveOk) {
+        try {
+          const file = target[k + '__file'];
+          const fname = safeFileName(ownerName + ' - ' + IMG_LABELS[k] + ' - ' + todayStr()) + '.' + extOfFile(file);
+          target[k + '__drive'] = await gdriveUploadImage(file, fname);
+          target[k + '__file'] = null;
+          continue;
+        } catch (e) {
+          console.error('Drive yükleme hatası', e);
+          if (!confirm(IMG_LABELS[k] + ' Drive\'a yüklenemedi: ' + e.message + '\n\nSadece küçük önizleme kaydedilsin mi?')) return false;
+          driveOk = false;
+        }
+      }
+      target[k + '__drive'] = null; // yeni önizleme eski Drive dosyasıyla eşleşmesin
+      target[k + '__file'] = null;
+    }
+  }
+  for (const k of keys) {
+    const orig = target[k + '__orig'];
+    if (orig && orig !== target[k + '__drive']) await gdriveDeleteFile(orig);
+  }
+  return true;
+}
+
+// Depolama penceresi: mevcut (base64) görselleri Drive'a taşır, yerel kopyayı küçük önizlemeye çevirir.
+async function migrateImagesToDrive(btn) {
+  const jobs = [];
+  data.vehicles.forEach(v => [['trafikPolicyImg','trafik'],['kaskoPolicyImg','kasko'],['urunKaskoPolicyImg','urunKasko'],['ruhsatPolicyImg','ruhsat']].forEach(([key, lk]) => {
+    if (v[key] && !v[key.replace('Img','DriveId')]) jobs.push({ owner: v, ownerName: v.name, key, label: IMG_LABELS[lk] });
+  }));
+  data.drivers.forEach(d => [['licensePolicyImg','ehliyet'],['cardPolicyImg','surucuKarti'],['psikoteknikPolicyImg','psikoteknik']].forEach(([key, lk]) => {
+    if (d[key] && !d[key.replace('Img','DriveId')]) jobs.push({ owner: d, ownerName: d.name, key, label: IMG_LABELS[lk] });
+  }));
+  if (jobs.length === 0) { alert('Drive\'a taşınacak görsel yok (hepsi zaten taşınmış).'); return; }
+  try { await gdriveEnsureToken(); }
+  catch (e) {
+    alert(e.message === 'no-client-id' ? 'Önce ☁️ Google Drive düğmesinden Client ID girip bağlanmanız gerekiyor.' : 'Google Drive bağlantısı kurulamadı: ' + e.message);
+    return;
+  }
+  const oldLabel = btn.textContent;
+  btn.disabled = true;
+  let done = 0, failed = 0;
+  for (const job of jobs) {
+    btn.textContent = 'Taşınıyor... ' + (done + failed + 1) + '/' + jobs.length;
+    try {
+      const blob = await (await fetch(job.owner[job.key])).blob();
+      const id = await gdriveUploadImage(blob, safeFileName(job.ownerName + ' - ' + job.label + ' - ' + todayStr()) + '.jpg');
+      job.owner[job.key.replace('Img','DriveId')] = id;
+      job.owner[job.key] = await shrinkDataUrl(job.owner[job.key], THUMB_MAX_DIM, THUMB_QUALITY);
+      done++;
+      save();
+    } catch (e) {
+      console.error('Taşıma hatası', e);
+      failed++;
+    }
+  }
+  btn.disabled = false;
+  btn.textContent = oldLabel;
+  renderStoragePanel();
+  renderVehicles();
+  renderDrivers();
+  alert(done + ' görsel Drive\'a taşındı' + (failed ? ', ' + failed + ' görsel taşınamadı (tekrar deneyebilirsiniz).' : '.'));
+}
 
 // ---- İrsaliye Takip ----
 let editingIrsId = null;
@@ -4896,6 +5152,9 @@ function resetDriverImagePreviews(d) {
     const [previewId, removeId, dataKey] = map[key];
     const val = d ? (d[dataKey] || null) : null;
     tempDriverImages[key] = val;
+    tempDriverImages[key + '__file'] = null;
+    tempDriverImages[key + '__drive'] = d ? (d[dataKey.replace('Img','DriveId')] || null) : null;
+    tempDriverImages[key + '__orig'] = tempDriverImages[key + '__drive'];
     const preview = document.getElementById(previewId);
     if (val) {
       preview.src = val;
@@ -4924,9 +5183,9 @@ function renderDrivers() {
         <p class="sub">${d.phone ? escapeHtml(d.phone) + ' · ' : ''}${d.licenseNo ? 'Ehliyet: ' + escapeHtml(d.licenseNo) + ' · ' : ''}${veh ? escapeHtml(veh.name) : 'Araç atanmadı'}${d.notes ? ' · ' + escapeHtml(d.notes) : ''}</p>
         <p class="sub">${d.licenseExpiry ? 'Ehliyet süresi: ' + fmtDate(d.licenseExpiry) + ' · ' : ''}${d.cardExpiry ? 'Sürücü kartı: ' + fmtDate(d.cardExpiry) + ' · ' : ''}${d.psikoteknikExpiry ? 'Psikoteknik: ' + fmtDate(d.psikoteknikExpiry) : ''}</p>
         <p class="sub" style="display:flex; align-items:center; gap:8px;">
-          ${d.licensePolicyImg ? `<img class="policy-thumb" data-img="${d.licensePolicyImg}" src="${d.licensePolicyImg}" title="Ehliyet görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
-          ${d.cardPolicyImg ? `<img class="policy-thumb" data-img="${d.cardPolicyImg}" src="${d.cardPolicyImg}" title="Sürücü kartı görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
-          ${d.psikoteknikPolicyImg ? `<img class="policy-thumb" data-img="${d.psikoteknikPolicyImg}" src="${d.psikoteknikPolicyImg}" title="Psikoteknik görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
+          ${d.licensePolicyImg ? `<img class="policy-thumb" data-img="${d.licensePolicyImg}" data-drive="${d.licensePolicyDriveId || ''}" src="${d.licensePolicyImg}" title="Ehliyet görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
+          ${d.cardPolicyImg ? `<img class="policy-thumb" data-img="${d.cardPolicyImg}" data-drive="${d.cardPolicyDriveId || ''}" src="${d.cardPolicyImg}" title="Sürücü kartı görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
+          ${d.psikoteknikPolicyImg ? `<img class="policy-thumb" data-img="${d.psikoteknikPolicyImg}" data-drive="${d.psikoteknikPolicyDriveId || ''}" src="${d.psikoteknikPolicyImg}" title="Psikoteknik görseli" style="max-width:44px; max-height:32px; border-radius:4px; border:1px solid #D7DCE5; cursor:pointer;" />` : ''}
         </p>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
@@ -4997,9 +5256,17 @@ document.getElementById('driverModalCancel').addEventListener('click', () => {
   document.getElementById('driverModalOverlay').style.display = 'none';
 });
 
-document.getElementById('driverModalSave').addEventListener('click', () => {
+document.getElementById('driverModalSave').addEventListener('click', async () => {
   const name = document.getElementById('driverName').value.trim();
   if (!name) return;
+  const saveBtn = document.getElementById('driverModalSave');
+  const saveLabel = saveBtn.textContent;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Kaydediliyor...';
+  let proceed = false;
+  try { proceed = await commitPendingImages(tempDriverImages, ['ehliyet','surucuKarti','psikoteknik'], name); }
+  finally { saveBtn.disabled = false; saveBtn.textContent = saveLabel; }
+  if (!proceed) return;
   let accountId = editingDriverId ? (data.drivers.find(d => d.id === editingDriverId) || {}).accountId : null;
   if (!accountId) {
     accountId = 'acc_' + Date.now();
@@ -5020,6 +5287,9 @@ document.getElementById('driverModalSave').addEventListener('click', () => {
     licensePolicyImg: tempDriverImages.ehliyet,
     cardPolicyImg: tempDriverImages.surucuKarti,
     psikoteknikPolicyImg: tempDriverImages.psikoteknik,
+    licensePolicyDriveId: tempDriverImages.ehliyet__drive || null,
+    cardPolicyDriveId: tempDriverImages.surucuKarti__drive || null,
+    psikoteknikPolicyDriveId: tempDriverImages.psikoteknik__drive || null,
     vehicleId: document.getElementById('driverVeh').value || null,
     notes: document.getElementById('driverNotes').value.trim(),
     category: document.getElementById('driverCategory').value,
@@ -5072,8 +5342,9 @@ function setupPolicyImageInput(fileInputId, previewId, removeId, key, target) {
   document.getElementById(fileInputId).addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    compressImage(file, 700, 0.55).then((dataUrl) => {
+    compressImage(file, THUMB_MAX_DIM, THUMB_QUALITY).then((dataUrl) => {
       target[key] = dataUrl;
+      target[key + '__file'] = file; // orijinal dosya, Kaydet'e basılınca Drive'a yüklenir
       const preview = document.getElementById(previewId);
       preview.src = dataUrl;
       preview.style.display = 'inline-block';
@@ -5086,6 +5357,8 @@ function setupPolicyImageInput(fileInputId, previewId, removeId, key, target) {
   });
   document.getElementById(removeId).addEventListener('click', () => {
     target[key] = null;
+    target[key + '__file'] = null;
+    target[key + '__drive'] = null;
     document.getElementById(previewId).style.display = 'none';
     document.getElementById(previewId).src = '';
     document.getElementById(removeId).style.display = 'none';
@@ -5102,6 +5375,9 @@ function resetPolicyImagePreviews(veh) {
     const [previewId, removeId, dataKey] = map[key];
     const val = veh ? (veh[dataKey] || null) : null;
     tempPolicyImages[key] = val;
+    tempPolicyImages[key + '__file'] = null;
+    tempPolicyImages[key + '__drive'] = veh ? (veh[dataKey.replace('Img','DriveId')] || null) : null;
+    tempPolicyImages[key + '__orig'] = tempPolicyImages[key + '__drive'];
     const preview = document.getElementById(previewId);
     if (val) {
       preview.src = val;
@@ -5618,16 +5894,16 @@ function renderVehicles() {
         <div class="item"><p class="lbl">Ana km</p><p class="val">${v.baseKm ? v.baseKm.toLocaleString('tr-TR') + ' km' : '—'}</p></div>
         <div class="item"><p class="lbl">Son km</p><p class="val">${lastKmOf(v.id) ? lastKmOf(v.id).toLocaleString('tr-TR') + ' km' : '—'}</p></div>
         <div class="item"><p class="lbl">Muayene tarihi</p><p class="val">${v.muayeneTarihi ? fmtDate(v.muayeneTarihi) : '—'}</p></div>
-        <div class="item"><p class="lbl">Ruhsat görseli</p><p class="val">${v.ruhsatPolicyImg ? `<img class="policy-thumb" data-img="${v.ruhsatPolicyImg}" src="${v.ruhsatPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Ruhsat görseli</p><p class="val">${v.ruhsatPolicyImg ? `<img class="policy-thumb" data-img="${v.ruhsatPolicyImg}" data-drive="${v.ruhsatPolicyDriveId || ''}" src="${v.ruhsatPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
         <div class="item"><p class="lbl">Trafik sigortası tarihi</p><p class="val">${v.trafikTarihi ? fmtDate(v.trafikTarihi) : '—'}</p></div>
         <div class="item"><p class="lbl">Trafik sigortası firması</p><p class="val">${v.trafikFirma ? escapeHtml(v.trafikFirma) : '—'}</p></div>
-        <div class="item"><p class="lbl">Trafik poliçesi</p><p class="val">${v.trafikPolicyImg ? `<img class="policy-thumb" data-img="${v.trafikPolicyImg}" src="${v.trafikPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Trafik poliçesi</p><p class="val">${v.trafikPolicyImg ? `<img class="policy-thumb" data-img="${v.trafikPolicyImg}" data-drive="${v.trafikPolicyDriveId || ''}" src="${v.trafikPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
         <div class="item"><p class="lbl">Kasko tarihi</p><p class="val">${v.kaskoTarihi ? fmtDate(v.kaskoTarihi) : '—'}</p></div>
         <div class="item"><p class="lbl">Kasko firması</p><p class="val">${v.kaskoFirma ? escapeHtml(v.kaskoFirma) : '—'}</p></div>
-        <div class="item"><p class="lbl">Kasko poliçesi</p><p class="val">${v.kaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.kaskoPolicyImg}" src="${v.kaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Kasko poliçesi</p><p class="val">${v.kaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.kaskoPolicyImg}" data-drive="${v.kaskoPolicyDriveId || ''}" src="${v.kaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
         <div class="item"><p class="lbl">Ürün kaskosu tarihi</p><p class="val">${v.urunKaskoTarihi ? fmtDate(v.urunKaskoTarihi) : '—'}</p></div>
         <div class="item"><p class="lbl">Ürün kaskosu firması</p><p class="val">${v.urunKaskoFirma ? escapeHtml(v.urunKaskoFirma) : '—'}</p></div>
-        <div class="item"><p class="lbl">Ürün kaskosu poliçesi</p><p class="val">${v.urunKaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.urunKaskoPolicyImg}" src="${v.urunKaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
+        <div class="item"><p class="lbl">Ürün kaskosu poliçesi</p><p class="val">${v.urunKaskoPolicyImg ? `<img class="policy-thumb" data-img="${v.urunKaskoPolicyImg}" data-drive="${v.urunKaskoPolicyDriveId || ''}" src="${v.urunKaskoPolicyImg}" style="max-width:50px; max-height:36px; border-radius:4px; border:1px solid #D7DCE5; vertical-align:middle; cursor:pointer;" />` : '—'}</p></div>
       </div>
     </div>
   `).join('');
@@ -5686,9 +5962,17 @@ document.getElementById('vehModalCancel').addEventListener('click', () => {
   document.getElementById('vehModalOverlay').style.display = 'none';
 });
 
-document.getElementById('vehModalSave').addEventListener('click', () => {
+document.getElementById('vehModalSave').addEventListener('click', async () => {
   const name = document.getElementById('vehName').value.trim();
   if (!name) return;
+  const saveBtn = document.getElementById('vehModalSave');
+  const saveLabel = saveBtn.textContent;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Kaydediliyor...';
+  let proceed = false;
+  try { proceed = await commitPendingImages(tempPolicyImages, ['trafik','kasko','urunKasko','ruhsat'], name); }
+  finally { saveBtn.disabled = false; saveBtn.textContent = saveLabel; }
+  if (!proceed) return;
   const veh = {
     id: editingVehId || 'veh_' + Date.now(),
     name,
@@ -5704,7 +5988,11 @@ document.getElementById('vehModalSave').addEventListener('click', () => {
     trafikPolicyImg: tempPolicyImages.trafik,
     ruhsatPolicyImg: tempPolicyImages.ruhsat,
     kaskoPolicyImg: tempPolicyImages.kasko,
-    urunKaskoPolicyImg: tempPolicyImages.urunKasko
+    urunKaskoPolicyImg: tempPolicyImages.urunKasko,
+    trafikPolicyDriveId: tempPolicyImages.trafik__drive || null,
+    ruhsatPolicyDriveId: tempPolicyImages.ruhsat__drive || null,
+    kaskoPolicyDriveId: tempPolicyImages.kasko__drive || null,
+    urunKaskoPolicyDriveId: tempPolicyImages.urunKasko__drive || null
   };
   if (editingVehId) {
     const idx = data.vehicles.findIndex(v => v.id === editingVehId);
@@ -6234,6 +6522,7 @@ document.getElementById('taxEditSave').addEventListener('click', () => {
   const e = data.taxEntries.find(x => x.id === editingTaxEntryId);
   const prevAccountId = e.accountId;
   e.date = date; e.type = type; e.desc = desc; e.irsaliyeNo = irsaliyeNo; e.accountId = accountId; e.amount = amount; e.vatRate = vatRate;
+  if (accountId !== prevAccountId) e.noCariTx = false;
   upsertCariTxFromTaxEntry(e);
   save();
   document.getElementById('taxEditModalOverlay').style.display = 'none';
@@ -6266,6 +6555,314 @@ document.getElementById('taxExcelBtn').addEventListener('click', () => {
   wsSummary['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Aylık Özet');
   XLSX.writeFile(wb, 'kdv-takip-' + todayStr() + '.xlsx');
+});
+
+// ---- Fatura XML / ZIP içeri aktarma (Vergi Takibi) ----
+let invImportItems = [];
+let invImportMeta = { notInvoice: 0, errors: [] };
+
+// INV-PARSE-START
+function invNorm(s) {
+  return String(s || '').toLocaleLowerCase('tr-TR')
+    .replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function invNoNorm(s) { return String(s || '').trim().toUpperCase().replace(/\s+/g, ''); }
+
+// UBL-TR fatura XML'ini okur. kind: 'invoice' | 'notinvoice' | 'error'
+function invParseXml(text, fileName) {
+  const doc = new DOMParser().parseFromString(String(text).replace(/^﻿/, ''), 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length > 0) return { kind: 'error', fileName, error: 'XML okunamadı' };
+  const root = doc.documentElement;
+  if (!root || root.localName !== 'Invoice') return { kind: 'notinvoice', fileName };
+  const kids = (el, ln) => el ? Array.from(el.children).filter(c => c.localName === ln) : [];
+  const kid = (el, ln) => kids(el, ln)[0] || null;
+  const txt = (el) => el ? (el.textContent || '').trim() : '';
+  const num = (el) => { const v = parseFloat(txt(el)); return isNaN(v) ? 0 : v; };
+  const party = (holderName) => {
+    const p = kid(kid(root, holderName), 'Party');
+    if (!p) return { name: '', id: '' };
+    let name = txt(kid(kid(p, 'PartyName'), 'Name'));
+    if (!name) {
+      const person = kid(p, 'Person');
+      if (person) name = (txt(kid(person, 'FirstName')) + ' ' + txt(kid(person, 'FamilyName'))).trim();
+    }
+    let id = '';
+    kids(p, 'PartyIdentification').forEach(pi => {
+      const idEl = kid(pi, 'ID');
+      const scheme = idEl ? (idEl.getAttribute('schemeID') || '').toUpperCase() : '';
+      if (idEl && (scheme === 'VKN' || scheme === 'TCKN') && !id) id = txt(idEl);
+    });
+    return { name, id };
+  };
+  const invoiceNo = txt(kid(root, 'ID'));
+  const ettn = txt(kid(root, 'UUID'));
+  const date = txt(kid(root, 'IssueDate'));
+  const typeCode = txt(kid(root, 'InvoiceTypeCode')).toUpperCase();
+  const profile = txt(kid(root, 'ProfileID'));
+  const currency = (txt(kid(root, 'DocumentCurrencyCode')) || 'TRY').toUpperCase();
+  const notes = [];
+
+  const rawLines = [];
+  let otherTax = false;
+  kids(root, 'TaxTotal').forEach(tt => kids(tt, 'TaxSubtotal').forEach(ts => {
+    const scheme = kid(kid(ts, 'TaxCategory'), 'TaxScheme');
+    const code = txt(kid(scheme, 'TaxTypeCode'));
+    const nm = txt(kid(scheme, 'Name')).toUpperCase();
+    const isKdv = code === '0015' || nm.indexOf('KDV') !== -1 || nm.indexOf('KATMA') !== -1;
+    if (isKdv) rawLines.push({ amount: num(kid(ts, 'TaxableAmount')), rate: num(kid(ts, 'Percent')) });
+    else otherTax = true;
+  }));
+  const byRate = {};
+  rawLines.forEach(l => {
+    const k = String(l.rate);
+    if (!byRate[k]) byRate[k] = { amount: 0, rate: l.rate };
+    byRate[k].amount += l.amount;
+  });
+  let lines = Object.keys(byRate).map(k => byRate[k]).sort((a, b) => b.rate - a.rate);
+  if (lines.length === 0) {
+    const mon = kid(root, 'LegalMonetaryTotal');
+    const base = num(kid(mon, 'TaxExclusiveAmount')) || num(kid(mon, 'LineExtensionAmount'));
+    if (base) { lines = [{ amount: base, rate: 0 }]; notes.push('KDV satırı bulunamadı, %0 varsayıldı'); }
+  }
+  if (kids(root, 'WithholdingTaxTotal').length > 0) notes.push('Tevkifatlı fatura — tutarları kontrol edin');
+  if (otherTax) notes.push('KDV dışı vergi içeriyor (ör. ÖTV/stopaj) — dikkate alınmadı');
+
+  let skipReason = '';
+  if (typeCode.indexOf('IADE') !== -1) skipReason = 'İade faturası — elle girin';
+  else if (currency !== 'TRY' && currency !== 'TRL') skipReason = 'Döviz faturası (' + currency + ') — elle girin';
+  else if (lines.length === 0 || !date || !invoiceNo) skipReason = 'Fatura bilgisi eksik';
+
+  return { kind: 'invoice', fileName, invoiceNo, ettn, date, typeCode, profile, currency,
+    supplier: party('AccountingSupplierParty'), customer: party('AccountingCustomerParty'),
+    lines, notes, skipReason };
+}
+// INV-PARSE-END
+
+function invCounterpart(item, dir) { return dir === 'satis' ? item.customer : item.supplier; }
+
+// Vergi/TC no veya birebir (Türkçe karakter/büyük-küçük harf farkı gözetmeyen) isim eşleşmesi
+function invDefaultChoice(item, dir) {
+  const cp = invCounterpart(item, dir);
+  if (cp.id) {
+    const byTax = data.accounts.find(a => String(a.taxNo || '').replace(/\s+/g, '') === cp.id);
+    if (byTax) return byTax.id;
+  }
+  if (cp.name) {
+    const key = invNorm(cp.name);
+    const byName = data.accounts.find(a => invNorm(a.name) === key);
+    if (byName) return byName.id;
+    return '__new__';
+  }
+  return '__none__';
+}
+
+async function invReadFiles(fileList) {
+  const items = [];
+  let notInvoice = 0;
+  const errors = [];
+  const handle = (r) => {
+    if (r.kind === 'invoice') items.push(r);
+    else if (r.kind === 'notinvoice') notInvoice++;
+    else errors.push(r.fileName + ': ' + r.error);
+  };
+  for (const f of fileList) {
+    const lower = f.name.toLowerCase();
+    try {
+      if (lower.endsWith('.zip')) {
+        if (typeof JSZip === 'undefined') { errors.push(f.name + ': ZIP kütüphanesi yüklenemedi (internet bağlantısını kontrol edin)'); continue; }
+        const zip = await JSZip.loadAsync(f);
+        const names = Object.keys(zip.files).filter(n => !zip.files[n].dir && n.toLowerCase().endsWith('.xml'));
+        for (const n of names) handle(invParseXml(await zip.files[n].async('string'), n));
+      } else if (lower.endsWith('.xml')) {
+        handle(invParseXml(await f.text(), f.name));
+      }
+    } catch (e) {
+      console.error('Fatura dosyası okunamadı', f.name, e);
+      errors.push(f.name + ': okunamadı');
+    }
+  }
+  return { items, notInvoice, errors };
+}
+
+function renderInvImport() {
+  const dir = document.getElementById('invImportDir').value;
+  const doCari = document.getElementById('invImportCariTx').checked;
+  const existingTax = data.taxEntries || [];
+  const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  const seen = new Set();
+  let nNew = 0, nDup = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
+
+  const rows = invImportItems.map((item, i) => {
+    const cp = invCounterpart(item, dir);
+    let st;
+    if (item.skipReason) {
+      st = { kind: 'skip', label: item.skipReason };
+    } else {
+      const noKey = invNoNorm(item.invoiceNo);
+      const ettnKey = (item.ettn || '').toLowerCase();
+      const key = ettnKey || (dir + '|' + noKey);
+      const dupExisting = existingTax.some(e => e.type === dir &&
+        ((ettnKey && e.ettn && e.ettn.toLowerCase() === ettnKey) || (noKey && invNoNorm(e.irsaliyeNo) === noKey)));
+      if (dupExisting) st = { kind: 'dup', label: "Vergi Takibi'nde zaten var" };
+      else if (seen.has(key)) st = { kind: 'dup', label: 'Aynı fatura listede tekrar var' };
+      else { st = { kind: 'new', label: 'Yeni' }; seen.add(key); }
+    }
+    item._status = st;
+    if (st.kind === 'new') {
+      nNew++;
+      item.lines.forEach(l => { sumMatrah += l.amount; sumKdv += l.amount * l.rate / 100; });
+    } else if (st.kind === 'dup') nDup++; else nSkip++;
+
+    const matrah = item.lines.reduce((s, l) => s + l.amount, 0);
+    const kdv = item.lines.reduce((s, l) => s + l.amount * l.rate / 100, 0);
+    const rates = item.lines.map(l => '%' + l.rate).join(', ');
+    const color = st.kind === 'new' ? '#1D8A5B' : (st.kind === 'dup' ? '#8B99AD' : '#C43D33');
+
+    let accCell = '<span style="color:#8B99AD;">—</span>';
+    let extra = '';
+    if (st.kind === 'new') {
+      accCell = `<select class="invAccSel" data-i="${i}" style="width:100%; font-size:12px; padding:5px 6px;">
+        <option value="__new__" ${item.choice === '__new__' ? 'selected' : ''}>+ Yeni cari aç${cp.name ? ': ' + escapeHtml(cp.name) : ''}</option>
+        <option value="__none__" ${item.choice === '__none__' ? 'selected' : ''}>Cari ilişkisi kurma</option>
+        ${accSorted.map(a => `<option value="${a.id}" ${item.choice === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
+      </select>`;
+      if (doCari && item.choice !== '__new__' && item.choice !== '__none__') {
+        const has = (data.transactions[item.choice] || []).some(t => invNoNorm(t.irsaliyeNo) && invNoNorm(t.irsaliyeNo) === invNoNorm(item.invoiceNo));
+        if (has) extra = '<div style="font-size:11px; color:#A3660F;">Carisinde aynı fatura no var — cari hareketi eklenmeyecek</div>';
+      }
+    }
+    const noteHtml = item.notes.length ? `<div style="font-size:11px; color:#A3660F;">${item.notes.map(escapeHtml).join(' · ')}</div>` : '';
+    return `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; border-bottom:1px solid #E7EAF0; font-size:12.5px; align-items:start; ${st.kind === 'new' ? '' : 'opacity:.6;'}">
+      <span>${item.date ? fmtDate(item.date) : '—'}</span>
+      <span><b>${escapeHtml(item.invoiceNo || '—')}</b>${noteHtml}</span>
+      <span>${escapeHtml(cp.name || '(adsız)')}${cp.id ? `<div style="font-size:11px; color:#8B99AD;">${escapeHtml(cp.id)}</div>` : ''}</span>
+      <span>${accCell}${extra}</span>
+      <span style="text-align:right;">${fmt(matrah)}<div style="font-size:11px; color:#8B99AD;">${escapeHtml(rates)}</div></span>
+      <span style="text-align:right;">${fmt(kdv)}</span>
+      <span style="color:${color}; font-weight:600;">${escapeHtml(st.label)}</span>
+    </div>`;
+  });
+
+  const header = `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; font-size:11px; font-weight:600; color:#5B6B82; position:sticky; top:0;">
+    <span>Tarih</span><span>Fatura no</span><span>Faturadaki ad</span><span>İlişkilendirilecek cari</span><span style="text-align:right;">Matrah</span><span style="text-align:right;">KDV</span><span>Durum</span></div>`;
+  document.getElementById('invImportList').innerHTML = invImportItems.length === 0
+    ? '<div class="empty">Henüz dosya seçilmedi.</div>'
+    : header + rows.join('');
+
+  let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nDup} zaten var · ${nSkip} atlandı`;
+  if (nNew > 0) sum += ` · Eklenecek matrah: <b>${fmt(sumMatrah)}</b>, KDV: <b>${fmt(sumKdv)}</b>`;
+  if (invImportMeta.notInvoice > 0) sum += `<div style="font-size:12px; color:#8B99AD;">${invImportMeta.notInvoice} dosya fatura olmadığı için (ör. uygulama yanıtı) yok sayıldı.</div>`;
+  if (invImportMeta.errors.length > 0) sum += `<div style="font-size:12px; color:#C43D33;">${invImportMeta.errors.map(escapeHtml).join('<br>')}</div>`;
+  document.getElementById('invImportSummary').innerHTML = sum;
+  const btn = document.getElementById('invImportConfirm');
+  btn.disabled = nNew === 0;
+  btn.textContent = nNew > 0 ? nNew + ' faturayı içeri aktar' : 'İçeri aktar';
+}
+
+document.getElementById('taxImportBtn').addEventListener('click', () => {
+  invImportItems = [];
+  invImportMeta = { notInvoice: 0, errors: [] };
+  document.getElementById('invImportCariTx').checked = false;
+  document.getElementById('invImportFileInfo').textContent = '';
+  renderInvImport();
+  document.getElementById('invImportModalOverlay').style.display = 'flex';
+  document.getElementById('invImportFile').click();
+});
+document.getElementById('invImportPickBtn').addEventListener('click', () => document.getElementById('invImportFile').click());
+document.getElementById('invImportCancel').addEventListener('click', () => {
+  document.getElementById('invImportModalOverlay').style.display = 'none';
+  invImportItems = [];
+});
+document.getElementById('invImportFile').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length === 0) return;
+  const info = document.getElementById('invImportFileInfo');
+  info.textContent = 'Okunuyor...';
+  const res = await invReadFiles(files);
+  const dir = document.getElementById('invImportDir').value;
+  res.items.forEach(it => { it.choice = invDefaultChoice(it, dir); });
+  invImportItems = invImportItems.concat(res.items);
+  invImportMeta.notInvoice += res.notInvoice;
+  invImportMeta.errors = invImportMeta.errors.concat(res.errors);
+  info.textContent = files.length + ' dosya okundu';
+  renderInvImport();
+});
+document.getElementById('invImportDir').addEventListener('change', () => {
+  const dir = document.getElementById('invImportDir').value;
+  invImportItems.forEach(it => { it.choice = invDefaultChoice(it, dir); });
+  renderInvImport();
+});
+document.getElementById('invImportCariTx').addEventListener('change', renderInvImport);
+document.getElementById('invImportList').addEventListener('change', (e) => {
+  const sel = e.target.closest('.invAccSel');
+  if (!sel) return;
+  invImportItems[Number(sel.dataset.i)].choice = sel.value;
+  renderInvImport();
+});
+
+document.getElementById('invImportConfirm').addEventListener('click', () => {
+  const dir = document.getElementById('invImportDir').value;
+  const doCari = document.getElementById('invImportCariTx').checked;
+  const newOnes = invImportItems.filter(it => it._status && it._status.kind === 'new');
+  if (newOnes.length === 0) return;
+  if (!data.taxEntries) data.taxEntries = [];
+  const createdAccs = {};
+  const stamp = Date.now();
+  let seq = 0, addedEntries = 0, createdCount = 0, cariCount = 0;
+  newOnes.forEach(item => {
+    const cp = invCounterpart(item, dir);
+    let accId = null;
+    if (item.choice === '__new__') {
+      if (cp.name) {
+        const key = cp.id || invNorm(cp.name);
+        if (!createdAccs[key]) {
+          const acc = { id: 'acc_' + stamp + '_' + (seq++), name: cp.name, type: dir === 'satis' ? 'musteri' : 'tedarikci', phone: '', taxNo: cp.id || '', iban: '', banka: '', note: '' };
+          data.accounts.push(acc);
+          data.transactions[acc.id] = [];
+          createdAccs[key] = acc.id;
+          createdCount++;
+        }
+        accId = createdAccs[key];
+      }
+    } else if (item.choice !== '__none__') {
+      accId = item.choice;
+    }
+    const cariHas = !!accId && (data.transactions[accId] || []).some(t => invNoNorm(t.irsaliyeNo) && invNoNorm(t.irsaliyeNo) === invNoNorm(item.invoiceNo));
+    item.lines.forEach(line => {
+      const entry = {
+        id: 'taxe_' + stamp + '_' + (seq++),
+        date: item.date,
+        type: dir,
+        desc: item.lines.length > 1 ? 'e-Fatura (%' + line.rate + ' KDV kalemi)' : 'e-Fatura',
+        irsaliyeNo: item.invoiceNo,
+        accountId: accId,
+        amount: Number(line.amount.toFixed(2)),
+        vatRate: line.rate,
+        linkedTxId: null,
+        ettn: item.ettn || '',
+        imported: true
+      };
+      data.taxEntries.push(entry);
+      if (accId && doCari && !cariHas) {
+        upsertCariTxFromTaxEntry(entry);
+        if (entry.linkedTxId) cariCount++;
+      } else if (accId) {
+        entry.noCariTx = true; // cari hareketi istenmedi veya zaten var; düzenlemede kopyası oluşmasın
+      }
+      addedEntries++;
+    });
+  });
+  save();
+  document.getElementById('invImportModalOverlay').style.display = 'none';
+  invImportItems = [];
+  renderVergiTakibi();
+  renderList();
+  if (currentAccId) refreshDetail();
+  alert(newOnes.length + ' fatura içeri aktarıldı (' + addedEntries + ' KDV kaydı)' +
+    (createdCount ? '\n' + createdCount + ' yeni cari açıldı' : '') +
+    (cariCount ? '\n' + cariCount + ' cari hareketi işlendi' : '') + '.');
 });
 
 // ---- Kasa (nakit/banka takibi) ----
