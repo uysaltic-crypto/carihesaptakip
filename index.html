@@ -697,7 +697,7 @@
   </div>
 
   <div id="hareketkontrolView" style="display:none;">
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir. Aynı numaralı kayıtların KDV oranları farklıysa (ör. %20 ve %10) bunlar mükerrer sayılmaz.</p>
     <div class="summary" id="hkSummaryCards"></div>
     <div class="toolbar">
       <input id="hkSearch" placeholder="Cari adı veya irsaliye no ile ara..." style="flex:1;" />
@@ -6167,16 +6167,47 @@ document.getElementById('fkOnlyMismatch').addEventListener('change', renderFiyat
 // ---- Hareket Kontrolü (mükerrer/tekrar eden cari hareketleri) ----
 // Aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları gruplar.
 // İrsaliye no'su olmayan hareketler (irsNo alanı boş olanlar) bu taramaya dahil edilmez.
+// Bir cari hareketinin KDV oranını döndürür (bilinmiyorsa null).
+// Vergi Takibi'ne aktarılmış / Vergi Takibi'nden gelen hareketlerde oran, ilgili vergi kaydından okunur.
+function hkRateOf(t) {
+  let entry = null;
+  if (t.taxEntryId) entry = (data.taxEntries || []).find(e => e.id === t.taxEntryId);
+  else if (t.fromTaxEntryId) entry = (data.taxEntries || []).find(e => e.id === t.fromTaxEntryId);
+  if (entry && entry.vatRate !== undefined && entry.vatRate !== null && entry.vatRate !== '') return Number(entry.vatRate) || 0;
+  if (t.fromTaxEntryId || t.kdvTransfer) return Number(t.kdvRate) || 0;
+  return null;
+}
+
 function computeHareketKontrol() {
   const results = [];
   data.accounts.forEach(acc => {
     const txs = data.transactions[acc.id] || [];
-    const groups = {};
+    const byNo = {};
     txs.forEach(t => {
       const no = String(t.irsaliyeNo || '').trim();
       if (!no) return;
       const key = irsKeyOf(no);
-      (groups[key] = groups[key] || []).push(t);
+      (byNo[key] = byNo[key] || []).push(t);
+    });
+    // Aynı numaralı kayıtlar FARKLI KDV oranlarıyla girilmişse (ör. aynı faturanın %20 ve %10 satırları)
+    // bunlar mükerrer sayılmaz: yalnızca aynı numara + aynı KDV oranına sahip kayıtlar gruplanır.
+    // KDV oranı bilinmeyen (Vergi Takibi'ne aktarılmamış) kayıtlar, numarada tek bir bilinen oran varsa o oranla,
+    // hiç oran yoksa kendi aralarında karşılaştırılır; birden fazla farklı oran varsa dikkate alınmaz.
+    const groups = {};
+    Object.keys(byNo).forEach(key => {
+      const list = byNo[key];
+      const rates = new Set();
+      list.forEach(t => { const r = hkRateOf(t); if (r !== null) rates.add(r); });
+      list.forEach(t => {
+        const r = hkRateOf(t);
+        let rk;
+        if (r !== null) rk = String(r);
+        else if (rates.size === 0) rk = '?';
+        else if (rates.size === 1) rk = String([...rates][0]);
+        else return; // birden fazla farklı oran var, oranı bilinmeyen kayıt atlanır
+        const gk = key + '|' + rk;
+        (groups[gk] = groups[gk] || []).push(t);
+      });
     });
     const dupGroups = Object.values(groups)
       .filter(g => g.length > 1)
