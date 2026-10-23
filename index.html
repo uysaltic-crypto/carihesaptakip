@@ -769,6 +769,9 @@
       <input type="checkbox" id="invImportCariTx" />
       Seçilen carilere hareket de işle (satış → carinin borcuna, alış → alacağına). Carisinde aynı fatura no'lu hareket varsa tekrar eklenmez.
     </label>
+    <div style="margin-bottom:10px;">
+      <button type="button" id="invFixCariBtn" title="Daha önce içeri aktarılmış faturalardan carisinde hareketi olmayanları bulup carilerine işler">🔧 Cariye işlenmemiş faturaları tamamla</button>
+    </div>
     <div id="invImportSummary" style="font-size:13px; margin-bottom:8px;"></div>
     <div style="overflow-x:auto;">
       <div class="list-wrap" id="invImportList" style="max-height:46vh; overflow-y:auto; min-width:860px;"></div>
@@ -6870,7 +6873,7 @@ document.getElementById('taxImportBtn').addEventListener('click', () => {
   invImportItems = [];
   invImportMeta = { notInvoice: 0, errors: [] };
   document.getElementById('invImportDir').value = 'auto';
-  document.getElementById('invImportCariTx').checked = false;
+  document.getElementById('invImportCariTx').checked = true;
   document.getElementById('invImportFileInfo').textContent = '';
   renderInvImport();
   document.getElementById('invImportModalOverlay').style.display = 'flex';
@@ -6905,6 +6908,51 @@ document.getElementById('invImportList').addEventListener('change', (e) => {
   if (!sel) return;
   invImportItems[Number(sel.dataset.i)].choice = sel.value;
   renderInvImport();
+});
+
+// İçeri aktarılmış (imported) vergi kayıtlarından, bağlı carisinde o fatura no'suyla hiç hareketi olmayanları bulup
+// cari hareketini oluşturur. Aynı faturanın birden fazla KDV kalemi varsa hepsi birlikte işlenir.
+// Cari ilişkisi (accountId) olmayan kayıtlar işlenemez; sayısı döndürülür.
+function invFixMissingCariTx() {
+  const groups = {};
+  let noAccount = 0;
+  (data.taxEntries || []).forEach(e => {
+    if (!e.imported || e.fromTxId || !e.irsaliyeNo) return;
+    if (!e.accountId) { noAccount++; return; }
+    if (!data.accounts.find(a => a.id === e.accountId)) return;
+    const k = e.accountId + '|' + invNoNorm(e.irsaliyeNo);
+    (groups[k] = groups[k] || []).push(e);
+  });
+  let fixedInvoices = 0, createdTx = 0;
+  Object.keys(groups).forEach(k => {
+    const list = groups[k];
+    const accId = list[0].accountId;
+    const no = invNoNorm(list[0].irsaliyeNo);
+    const txs = data.transactions[accId] || [];
+    const has = txs.some(t => invNoNorm(t.irsaliyeNo) === no);
+    if (has) return;
+    list.forEach(e => {
+      e.noCariTx = false;
+      upsertCariTxFromTaxEntry(e);
+      if (e.linkedTxId) createdTx++;
+    });
+    fixedInvoices++;
+  });
+  return { fixedInvoices, createdTx, noAccount };
+}
+
+document.getElementById('invFixCariBtn').addEventListener('click', () => {
+  const r = invFixMissingCariTx();
+  if (r.createdTx > 0) {
+    save();
+    renderVergiTakibi();
+    renderList();
+    if (currentAccId) refreshDetail();
+  }
+  alert((r.createdTx > 0
+    ? r.fixedInvoices + ' faturanın cari hareketi eksikti, ' + r.createdTx + ' hareket carilerine işlendi.'
+    : 'Tüm içeri aktarılmış faturalar carilerinde kayıtlı görünüyor.') +
+    (r.noAccount > 0 ? '\n\n' + r.noAccount + ' fatura kaydının cari ilişkisi yok; bunları Vergi Takibi ekranında bir cariye bağlayın.' : ''));
 });
 
 document.getElementById('invImportConfirm').addEventListener('click', () => {
@@ -6965,6 +7013,8 @@ document.getElementById('invImportConfirm').addEventListener('click', () => {
       addedEntries++;
     });
   });
+  let fixedExtra = 0;
+  if (doCari) fixedExtra = invFixMissingCariTx().createdTx;
   save();
   document.getElementById('invImportModalOverlay').style.display = 'none';
   invImportItems = [];
@@ -6973,7 +7023,8 @@ document.getElementById('invImportConfirm').addEventListener('click', () => {
   if (currentAccId) refreshDetail();
   alert(newOnes.length + ' fatura içeri aktarıldı (' + addedEntries + ' KDV kaydı)' +
     (createdCount ? '\n' + createdCount + ' yeni cari açıldı' : '') +
-    (cariCount ? '\n' + cariCount + ' cari hareketi işlendi' : '') + '.');
+    (cariCount ? '\n' + cariCount + ' cari hareketi işlendi' : '') +
+    (fixedExtra ? '\n' + fixedExtra + ' eski fatura için eksik cari hareketi tamamlandı' : '') + '.');
 });
 
 // ---- Kasa (nakit/banka takibi) ----
