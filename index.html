@@ -2991,7 +2991,7 @@ document.getElementById('excelQuickClear').addEventListener('click', () => {
 // değerlerini hesaplar. Hem Excel hem PDF indirme butonları bu fonksiyonu kullanır.
 // Hesaplama için bir önceki dolum referans alınır; bu referans aralığın dışında kalsa bile
 // kullanılır, aksi halde aralığın ilk girişi hesaplanamadan düşer.
-function computeFuelComparisonRows(selectedIds, dateFrom, dateTo) {
+function computeFuelComparisonRows(selectedIds, dateFrom, dateTo, decimals = 2) {
   const summaryRows = selectedIds.map(vid => {
     const veh = data.vehicles.find(v => v.id === vid);
     const fullSeries = data.fuelLogs.filter(l => l.vehicleId === vid && l.km).slice().sort((a,b) => (a.km||0) - (b.km||0));
@@ -3001,7 +3001,7 @@ function computeFuelComparisonRows(selectedIds, dateFrom, dateTo) {
       const inRange = (!dateFrom || entry.date >= dateFrom) && (!dateTo || entry.date <= dateTo);
       if (!inRange) continue;
       const segKm = entry.km - fullSeries[i-1].km;
-      if (segKm > 0 && entry.liters) perEntryValues.push(Number((entry.liters / segKm).toFixed(2)));
+      if (segKm > 0 && entry.liters) perEntryValues.push(Number((entry.liters / segKm).toFixed(decimals)));
     }
     const avg = perEntryValues.length ? perEntryValues.reduce((s,v) => s+v, 0) / perEntryValues.length : null;
     return { name: veh ? veh.name : '', values: perEntryValues, avg };
@@ -3055,14 +3055,14 @@ document.getElementById('excelModalDownloadPdf').addEventListener('click', () =>
   const dateFrom = document.getElementById('excelDateFrom').value;
   const dateTo = document.getElementById('excelDateTo').value;
 
-  const { summaryRows, maxValuesLen, title } = computeFuelComparisonRows(selectedIds, dateFrom, dateTo);
+  const { summaryRows, maxValuesLen, title } = computeFuelComparisonRows(selectedIds, dateFrom, dateTo, 3);
 
   if (summaryRows.length === 0) {
     alert('Seçilen araç(lar) ve tarih aralığında karşılaştırma için yeterli veri (en az 2 km bilgili yakıt girişi) bulunamadı.');
     return;
   }
 
-  const numCol = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const numCol = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
   const headerCells = ['', 'Ortalama'];
   for (let i = 0; i < maxValuesLen; i++) headerCells.push('');
