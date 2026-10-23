@@ -758,6 +758,7 @@
     <p style="font-size:12.5px; color:#5B6B82; margin:0 0 10px;">Luca e-Belge Portal'da faturaları seçip <b>"İndir(Xml)"</b> ile indirin; inen XML dosyalarını veya ZIP'i buraya seçin (birden fazla dosya seçebilirsiniz). Program matrah ve KDV'yi faturanın içinden okur, Vergi Takibi'ne ekler. Daha önce eklenmiş faturalar (fatura no / ETTN) tekrar eklenmez. Eklemeden önce aşağıda önizleme görürsünüz.</p>
     <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
       <select id="invImportDir">
+        <option value="auto">Otomatik (faturadan tanı: gelen = alış, kesilen = satış)</option>
         <option value="satis">Satış faturaları (benim kestiklerim)</option>
         <option value="alis">Alış faturaları (bana gelenler)</option>
       </select>
@@ -6712,10 +6713,37 @@ function invParseXml(text, fileName) {
 }
 // INV-PARSE-END
 
-function invCounterpart(item, dir) { return dir === 'satis' ? item.customer : item.supplier; }
+function invCounterpart(item, dir) { return dir === 'satis' ? item.customer : (dir === 'alis' ? item.supplier : { name: '', id: '' }); }
+
+// Kendi firmamızın VKN/TCKN'leri: daha önce içeri aktarmalardan öğrenilenler + mevcut listede en çok geçen numara.
+function invOwnIds() {
+  const own = new Set((data.ownTaxNos || []).map(String));
+  const n = invImportItems.length;
+  if (n >= 2) {
+    const cnt = {};
+    invImportItems.forEach(it => {
+      new Set([it.supplier.id, it.customer.id].filter(Boolean)).forEach(id => { cnt[id] = (cnt[id] || 0) + 1; });
+    });
+    let best = null;
+    Object.keys(cnt).forEach(id => { if (!best || cnt[id] > cnt[best]) best = id; });
+    if (best && cnt[best] >= 2 && cnt[best] >= n * 0.6) own.add(best);
+  }
+  return own;
+}
+// Faturanın yönü: seçim açıkça Alış/Satış ise o; "Otomatik" ise taraflardan biri bizim firmamızsa ona göre
+// (alıcı biziz → alış, satıcı biziz → satış); bilinmiyorsa dosya adındaki ipucu (GelenFatura / GidenFatura).
+function invDirOf(item) {
+  const sel = document.getElementById('invImportDir').value;
+  if (sel === 'satis' || sel === 'alis') return sel;
+  const own = invOwnIds();
+  if (item.customer.id && own.has(item.customer.id)) return 'alis';
+  if (item.supplier.id && own.has(item.supplier.id)) return 'satis';
+  return item.hint || null;
+}
 
 // Vergi/TC no veya birebir (Türkçe karakter/büyük-küçük harf farkı gözetmeyen) isim eşleşmesi
 function invDefaultChoice(item, dir) {
+  if (!dir) return '__none__';
   const cp = invCounterpart(item, dir);
   if (cp.id) {
     const byTax = data.accounts.find(a => String(a.taxNo || '').replace(/\s+/g, '') === cp.id);
@@ -6746,9 +6774,12 @@ async function invReadFiles(fileList) {
         if (typeof JSZip === 'undefined') { errors.push(f.name + ': ZIP kütüphanesi yüklenemedi (internet bağlantısını kontrol edin)'); continue; }
         const zip = await JSZip.loadAsync(f);
         const names = Object.keys(zip.files).filter(n => !zip.files[n].dir && n.toLowerCase().endsWith('.xml'));
-        for (const n of names) handle(invParseXml(await zip.files[n].async('string'), n));
+        const zhint = /gelen/i.test(f.name) ? 'alis' : (/giden/i.test(f.name) ? 'satis' : '');
+        for (const n of names) { const r = invParseXml(await zip.files[n].async('string'), n); if (r.kind === 'invoice' && zhint) r.hint = zhint; handle(r); }
       } else if (lower.endsWith('.xml')) {
-        handle(invParseXml(await f.text(), f.name));
+        const r1 = invParseXml(await f.text(), f.name);
+        if (r1.kind === 'invoice') { if (/gelen/i.test(f.name)) r1.hint = 'alis'; else if (/giden/i.test(f.name)) r1.hint = 'satis'; }
+        handle(r1);
       }
     } catch (e) {
       console.error('Fatura dosyası okunamadı', f.name, e);
@@ -6759,7 +6790,6 @@ async function invReadFiles(fileList) {
 }
 
 function renderInvImport() {
-  const dir = document.getElementById('invImportDir').value;
   const doCari = document.getElementById('invImportCariTx').checked;
   const existingTax = data.taxEntries || [];
   const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
@@ -6767,10 +6797,13 @@ function renderInvImport() {
   let nNew = 0, nDup = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
 
   const rows = invImportItems.map((item, i) => {
+    const dir = invDirOf(item);
     const cp = invCounterpart(item, dir);
     let st;
     if (item.skipReason) {
       st = { kind: 'skip', label: item.skipReason };
+    } else if (!dir) {
+      st = { kind: 'skip', label: 'Yön belirlenemedi — yukarıdan Alış/Satış seçin' };
     } else {
       const noKey = invNoNorm(item.invoiceNo);
       const ettnKey = (item.ettn || '').toLowerCase();
@@ -6779,7 +6812,7 @@ function renderInvImport() {
         ((ettnKey && e.ettn && e.ettn.toLowerCase() === ettnKey) || (noKey && invNoNorm(e.irsaliyeNo) === noKey)));
       if (dupExisting) st = { kind: 'dup', label: "Vergi Takibi'nde zaten var" };
       else if (seen.has(key)) st = { kind: 'dup', label: 'Aynı fatura listede tekrar var' };
-      else { st = { kind: 'new', label: 'Yeni' }; seen.add(key); }
+      else { st = { kind: 'new', label: dir === 'alis' ? 'Yeni · Alış' : 'Yeni · Satış' }; seen.add(key); }
     }
     item._status = st;
     if (st.kind === 'new') {
@@ -6836,6 +6869,7 @@ function renderInvImport() {
 document.getElementById('taxImportBtn').addEventListener('click', () => {
   invImportItems = [];
   invImportMeta = { notInvoice: 0, errors: [] };
+  document.getElementById('invImportDir').value = 'auto';
   document.getElementById('invImportCariTx').checked = false;
   document.getElementById('invImportFileInfo').textContent = '';
   renderInvImport();
@@ -6854,17 +6888,15 @@ document.getElementById('invImportFile').addEventListener('change', async (e) =>
   const info = document.getElementById('invImportFileInfo');
   info.textContent = 'Okunuyor...';
   const res = await invReadFiles(files);
-  const dir = document.getElementById('invImportDir').value;
-  res.items.forEach(it => { it.choice = invDefaultChoice(it, dir); });
   invImportItems = invImportItems.concat(res.items);
+  res.items.forEach(it => { it.choice = invDefaultChoice(it, invDirOf(it)); });
   invImportMeta.notInvoice += res.notInvoice;
   invImportMeta.errors = invImportMeta.errors.concat(res.errors);
   info.textContent = files.length + ' dosya okundu';
   renderInvImport();
 });
 document.getElementById('invImportDir').addEventListener('change', () => {
-  const dir = document.getElementById('invImportDir').value;
-  invImportItems.forEach(it => { it.choice = invDefaultChoice(it, dir); });
+  invImportItems.forEach(it => { it.choice = invDefaultChoice(it, invDirOf(it)); });
   renderInvImport();
 });
 document.getElementById('invImportCariTx').addEventListener('change', renderInvImport);
@@ -6876,7 +6908,6 @@ document.getElementById('invImportList').addEventListener('change', (e) => {
 });
 
 document.getElementById('invImportConfirm').addEventListener('click', () => {
-  const dir = document.getElementById('invImportDir').value;
   const doCari = document.getElementById('invImportCariTx').checked;
   const newOnes = invImportItems.filter(it => it._status && it._status.kind === 'new');
   if (newOnes.length === 0) return;
@@ -6885,7 +6916,14 @@ document.getElementById('invImportConfirm').addEventListener('click', () => {
   const stamp = Date.now();
   let seq = 0, addedEntries = 0, createdCount = 0, cariCount = 0;
   newOnes.forEach(item => {
+    const dir = invDirOf(item);
     const cp = invCounterpart(item, dir);
+    // Kendi firmamızın VKN'sini öğren (alışta alıcı, satışta satıcı biziz) — sonraki aktarmalarda yön otomatik bulunur
+    const myId = dir === 'alis' ? item.customer.id : item.supplier.id;
+    if (myId) {
+      if (!data.ownTaxNos) data.ownTaxNos = [];
+      if (data.ownTaxNos.indexOf(myId) === -1) data.ownTaxNos.push(myId);
+    }
     let accId = null;
     if (item.choice === '__new__') {
       if (cp.name) {
