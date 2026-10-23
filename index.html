@@ -783,6 +783,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="invAssignModalOverlay">
+  <div class="modal-box" style="width:760px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+    <h3>Cariye bağlanmamış faturalar</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 10px;">Aşağıdaki faturalar bir cariye bağlı olmadığı için cari hesaba işlenemedi. Her firma için <b>yeni cari açmak</b> mı yoksa <b>mevcut bir cariye işlemek</b> mi istediğinizi seçin. Seçim yapmadıklarınız şimdilik atlanır.</p>
+    <div id="invAssignList" style="display:flex; flex-direction:column; gap:10px;"></div>
+    <div class="actions">
+      <button id="invAssignCancel">Vazgeç</button>
+      <button id="invAssignConfirm" class="primary-btn">Seçilenleri işle</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="kasaEditModalOverlay">
   <div class="modal-box">
     <h3>Kasa hareketini düzenle</h3>
@@ -6756,9 +6768,14 @@ function invDefaultChoice(item, dir) {
     const key = invNorm(cp.name);
     const byName = data.accounts.find(a => invNorm(a.name) === key);
     if (byName) return byName.id;
-    return '__new__';
+    return '__ask__'; // eşleşen cari yok: kullanıcıya sorulacak (yeni cari mi, hangi cariye mi)
   }
   return '__none__';
+}
+
+function invCpKey(item, dir) {
+  const cp = invCounterpart(item, dir);
+  return cp.id || invNorm(cp.name) || '';
 }
 
 async function invReadFiles(fileList) {
@@ -6797,7 +6814,7 @@ function renderInvImport() {
   const existingTax = data.taxEntries || [];
   const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   const seen = new Set();
-  let nNew = 0, nDup = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
+  let nNew = 0, nDup = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0, nAsk = 0;
 
   const rows = invImportItems.map((item, i) => {
     const dir = invDirOf(item);
@@ -6831,12 +6848,15 @@ function renderInvImport() {
     let accCell = '<span style="color:#8B99AD;">—</span>';
     let extra = '';
     if (st.kind === 'new') {
-      accCell = `<select class="invAccSel" data-i="${i}" style="width:100%; font-size:12px; padding:5px 6px;">
+      const asking = item.choice === '__ask__';
+      if (asking) nAsk++;
+      accCell = `<select class="invAccSel" data-i="${i}" style="width:100%; font-size:12px; padding:5px 6px; ${asking ? 'border-color:#C43D33; background:#FDEDEA;' : ''}">
+        ${asking ? '<option value="__ask__" selected>❓ Seçin: yeni cari mi, hangi cariye?</option>' : ''}
         <option value="__new__" ${item.choice === '__new__' ? 'selected' : ''}>+ Yeni cari aç${cp.name ? ': ' + escapeHtml(cp.name) : ''}</option>
         <option value="__none__" ${item.choice === '__none__' ? 'selected' : ''}>Cari ilişkisi kurma</option>
         ${accSorted.map(a => `<option value="${a.id}" ${item.choice === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
       </select>`;
-      if (doCari && item.choice !== '__new__' && item.choice !== '__none__') {
+      if (doCari && item.choice !== '__new__' && item.choice !== '__none__' && item.choice !== '__ask__') {
         const has = (data.transactions[item.choice] || []).some(t => invNoNorm(t.irsaliyeNo) && invNoNorm(t.irsaliyeNo) === invNoNorm(item.invoiceNo));
         if (has) extra = '<div style="font-size:11px; color:#A3660F;">Carisinde aynı fatura no var — cari hareketi eklenmeyecek</div>';
       }
@@ -6863,6 +6883,7 @@ function renderInvImport() {
   if (nNew > 0) sum += ` · Eklenecek matrah: <b>${fmt(sumMatrah)}</b>, KDV: <b>${fmt(sumKdv)}</b>`;
   if (invImportMeta.notInvoice > 0) sum += `<div style="font-size:12px; color:#8B99AD;">${invImportMeta.notInvoice} dosya fatura olmadığı için (ör. uygulama yanıtı) yok sayıldı.</div>`;
   if (invImportMeta.errors.length > 0) sum += `<div style="font-size:12px; color:#C43D33;">${invImportMeta.errors.map(escapeHtml).join('<br>')}</div>`;
+  if (nAsk > 0) sum += `<div style="font-size:12.5px; color:#C43D33; font-weight:600;">❓ ${nAsk} faturada firma carilerinizde bulunamadı. Kırmızı kutulardan "yeni cari aç" veya mevcut bir cariyi seçin (aynı firmanın diğer faturaları otomatik aynı seçimi alır).</div>`;
   document.getElementById('invImportSummary').innerHTML = sum;
   const btn = document.getElementById('invImportConfirm');
   btn.disabled = nNew === 0;
@@ -6906,7 +6927,16 @@ document.getElementById('invImportCariTx').addEventListener('change', renderInvI
 document.getElementById('invImportList').addEventListener('change', (e) => {
   const sel = e.target.closest('.invAccSel');
   if (!sel) return;
-  invImportItems[Number(sel.dataset.i)].choice = sel.value;
+  const target = invImportItems[Number(sel.dataset.i)];
+  target.choice = sel.value;
+  // Aynı firmaya ait, henüz cevaplanmamış diğer faturalara da aynı seçimi uygula
+  const tdir = invDirOf(target);
+  const tkey = invCpKey(target, tdir);
+  if (tkey && sel.value !== '__ask__') {
+    invImportItems.forEach(it => {
+      if (it !== target && it.choice === '__ask__' && invDirOf(it) === tdir && invCpKey(it, tdir) === tkey) it.choice = sel.value;
+    });
+  }
   renderInvImport();
 });
 
@@ -6941,6 +6971,84 @@ function invFixMissingCariTx() {
   return { fixedInvoices, createdTx, noAccount };
 }
 
+let invAssignGroups = [];
+
+function invCollectOrphans() {
+  const map = {};
+  (data.taxEntries || []).forEach(e => {
+    if (!e.imported || e.fromTxId || !e.irsaliyeNo || e.accountId) return;
+    const key = e.cpId || invNorm(e.cpName) || ('no:' + invNoNorm(e.irsaliyeNo));
+    if (!map[key]) map[key] = { key, name: e.cpName || '', taxNo: e.cpId || '', type: e.type, entries: [] };
+    map[key].entries.push(e);
+  });
+  return Object.values(map);
+}
+
+function invAssignSuggest(g) {
+  if (g.taxNo) {
+    const a = data.accounts.find(x => String(x.taxNo || '').replace(/\s+/g, '') === g.taxNo);
+    if (a) return a.id;
+  }
+  if (g.name) {
+    const a = data.accounts.find(x => invNorm(x.name) === invNorm(g.name));
+    if (a) return a.id;
+  }
+  return '';
+}
+
+function renderInvAssign() {
+  const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  document.getElementById('invAssignList').innerHTML = invAssignGroups.map((g, i) => {
+    const total = g.entries.reduce((s, e) => s + e.amount * (1 + (Number(e.vatRate) || 0) / 100), 0);
+    const nos = Array.from(new Set(g.entries.map(e => e.irsaliyeNo)));
+    const unanswered = !g.choice;
+    return `<div style="border:1px solid ${unanswered ? '#C43D33' : '#E7EAF0'}; border-radius:10px; padding:10px 12px; ${unanswered ? 'background:#FFF8F7;' : ''}">
+      <div style="font-weight:600; font-size:13.5px;">${g.name ? escapeHtml(g.name) : 'Firma bilgisi kayıtlı değil'}${g.taxNo ? ` <span style="font-weight:400; color:#8B99AD; font-size:12px;">(${escapeHtml(g.taxNo)})</span>` : ''}</div>
+      <div style="font-size:12px; color:#5B6B82; margin:2px 0 8px;">${g.type === 'satis' ? 'Satış' : 'Alış'} · ${nos.length} fatura (${escapeHtml(nos.slice(0, 4).join(', '))}${nos.length > 4 ? ' ...' : ''}) · Toplam ${fmt(total)}</div>
+      <select class="invAssignSel" data-i="${i}" style="width:100%;">
+        <option value="" ${!g.choice ? 'selected' : ''}>❓ Seçin: yeni cari mi, hangi cariye?</option>
+        ${g.name ? `<option value="__new__" ${g.choice === '__new__' ? 'selected' : ''}>+ Yeni cari aç: ${escapeHtml(g.name)}</option>` : ''}
+        <option value="__skip__" ${g.choice === '__skip__' ? 'selected' : ''}>Şimdilik atla</option>
+        ${accSorted.map(a => `<option value="${a.id}" ${g.choice === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('invAssignList').addEventListener('change', (e) => {
+  const sel = e.target.closest('.invAssignSel');
+  if (!sel) return;
+  invAssignGroups[Number(sel.dataset.i)].choice = sel.value;
+  renderInvAssign();
+});
+document.getElementById('invAssignCancel').addEventListener('click', () => {
+  document.getElementById('invAssignModalOverlay').style.display = 'none';
+});
+document.getElementById('invAssignConfirm').addEventListener('click', () => {
+  let newAccs = 0, linked = 0;
+  const stamp = Date.now();
+  invAssignGroups.forEach((g, gi) => {
+    if (!g.choice || g.choice === '__skip__') return;
+    let accId = g.choice;
+    if (g.choice === '__new__') {
+      const acc = { id: 'acc_' + stamp + '_' + gi, name: g.name, type: g.type === 'satis' ? 'musteri' : 'tedarikci', phone: '', taxNo: g.taxNo || '', iban: '', banka: '', note: '' };
+      data.accounts.push(acc);
+      data.transactions[acc.id] = [];
+      accId = acc.id;
+      newAccs++;
+    }
+    g.entries.forEach(e => { e.accountId = accId; e.noCariTx = false; });
+    linked += g.entries.length;
+  });
+  const r = invFixMissingCariTx();
+  save();
+  document.getElementById('invAssignModalOverlay').style.display = 'none';
+  renderVergiTakibi();
+  renderList();
+  if (currentAccId) refreshDetail();
+  alert(linked + ' fatura kaydı bir cariye bağlandı' + (newAccs ? ' (' + newAccs + ' yeni cari açıldı)' : '') + '; ' + r.createdTx + ' cari hareketi işlendi.');
+});
+
 document.getElementById('invFixCariBtn').addEventListener('click', () => {
   const r = invFixMissingCariTx();
   if (r.createdTx > 0) {
@@ -6949,16 +7057,29 @@ document.getElementById('invFixCariBtn').addEventListener('click', () => {
     renderList();
     if (currentAccId) refreshDetail();
   }
-  alert((r.createdTx > 0
+  const orphans = invCollectOrphans();
+  if (orphans.length > 0) {
+    invAssignGroups = orphans.map(g => Object.assign(g, { choice: invAssignSuggest(g) }));
+    renderInvAssign();
+    document.getElementById('invAssignModalOverlay').style.display = 'flex';
+    if (r.createdTx > 0) alert(r.fixedInvoices + ' faturanın cari hareketi eksikti, ' + r.createdTx + ' hareket işlendi. Şimdi cariye bağlı olmayan faturalar için seçim yapın.');
+    return;
+  }
+  alert(r.createdTx > 0
     ? r.fixedInvoices + ' faturanın cari hareketi eksikti, ' + r.createdTx + ' hareket carilerine işlendi.'
-    : 'Tüm içeri aktarılmış faturalar carilerinde kayıtlı görünüyor.') +
-    (r.noAccount > 0 ? '\n\n' + r.noAccount + ' fatura kaydının cari ilişkisi yok; bunları Vergi Takibi ekranında bir cariye bağlayın.' : ''));
+    : 'Tüm içeri aktarılmış faturalar carilerinde kayıtlı görünüyor.');
 });
 
 document.getElementById('invImportConfirm').addEventListener('click', () => {
   const doCari = document.getElementById('invImportCariTx').checked;
   const newOnes = invImportItems.filter(it => it._status && it._status.kind === 'new');
   if (newOnes.length === 0) return;
+  const unanswered = newOnes.filter(it => it.choice === '__ask__');
+  if (unanswered.length > 0) {
+    const names = Array.from(new Set(unanswered.map(it => invCounterpart(it, invDirOf(it)).name || '(adsız)')));
+    alert('Şu firmalar için cari seçimi yapılmadı:\n\n• ' + names.join('\n• ') + '\n\nHer biri için listeden "+ Yeni cari aç" veya mevcut bir cari seçin (ya da "Cari ilişkisi kurma").');
+    return;
+  }
   if (!data.taxEntries) data.taxEntries = [];
   const createdAccs = {};
   const stamp = Date.now();
@@ -7001,6 +7122,8 @@ document.getElementById('invImportConfirm').addEventListener('click', () => {
         vatRate: line.rate,
         linkedTxId: null,
         ettn: item.ettn || '',
+        cpName: cp.name || '',
+        cpId: cp.id || '',
         imported: true
       };
       data.taxEntries.push(entry);
