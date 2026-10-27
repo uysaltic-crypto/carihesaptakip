@@ -6361,7 +6361,11 @@ function computeHareketKontrol() {
     txs.forEach(t => {
       const no = String(t.irsaliyeNo || '').trim();
       if (!no) return;
-      const key = irsKeyOf(no);
+      // Aynı fatura numarasında KDV oranı farklı olan hareketler (karma oranlı fatura satırları) mükerrer sayılmaz.
+      let rate = null;
+      if (t.taxEntryId) { const te = (data.taxEntries || []).find(e => e.id === t.taxEntryId); if (te && te.vatRate != null) rate = Number(te.vatRate); }
+      else if (t.kdvTransfer && t.kdvRate != null) rate = Number(t.kdvRate);
+      const key = irsKeyOf(no) + '|' + (rate === null ? '' : rate);
       (groups[key] = groups[key] || []).push(t);
     });
     const dupGroups = Object.values(groups)
