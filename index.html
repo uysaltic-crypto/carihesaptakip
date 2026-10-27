@@ -2509,6 +2509,78 @@ function readInvPay(p) {
   });
 });
 
+// ---- Cari ekranından fatura ödemesi (Vergi Takibi'nde fatura aramadan) ----
+// Vergi Takibi'nden otomatik gelen (🔒) fatura hareketlerinin yanındaki 💳 düğmesi bu pencereyi açar.
+let cariPayCtx = null;
+function cariPayInfoOf(t) {
+  const e = (data.taxEntries || []).find(x => x.id === t.fromTaxEntryId);
+  if (!e) return null;
+  const total = Number((e.amount * (1 + (e.vatRate || 0) / 100)).toFixed(2));
+  const dir = e.type === 'satis' ? 'tahsilat' : 'odeme';
+  const pays = invPaymentsOf({ taxEntryId: e.id, txId: t.id });
+  return { e, total, dir, pays, paid: invPaidSum(pays) };
+}
+function txPayBadge(t) {
+  const i = cariPayInfoOf(t);
+  if (!i || !i.pays.length) return '';
+  return i.paid >= i.total - 0.005
+    ? ` <span style="color:#1D8A5B; font-weight:600; font-size:11px;">✅ ${i.dir === 'tahsilat' ? 'Tahsil edildi' : 'Ödendi'}</span>`
+    : ` <span style="color:#A3660F; font-weight:600; font-size:11px;">◐ Kısmi: ${fmt(i.paid)} / ${fmt(i.total)}</span>`;
+}
+(function () {
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay'; ov.id = 'cariPayModalOverlay';
+  ov.innerHTML = `<div class="modal-box" style="max-height:90vh; overflow-y:auto;">
+    <h3>Fatura ödemesi</h3>
+    <div class="field-group">
+      <div id="cariPayTitle" style="font-size:13px; font-weight:600;"></div>
+      ${buildInvPayBox('cp')}
+    </div>
+    <div class="actions">
+      <button id="cariPayCancel">Vazgeç</button>
+      <button id="cariPaySave" class="primary-btn">Kaydet</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('cpPayAcct').addEventListener('change', (ev) => {
+    const isCari = ev.target.value === 'cari';
+    document.getElementById('cpPayCariRow').style.display = isCari ? 'flex' : 'none';
+    document.getElementById('cpPayMethod').style.display = isCari ? 'none' : '';
+  });
+  document.getElementById('cariPayCancel').addEventListener('click', () => { ov.style.display = 'none'; });
+  document.getElementById('cariPaySave').addEventListener('click', () => {
+    if (!cariPayCtx) return;
+    const t = (data.transactions[currentAccId] || []).find(x => x.id === cariPayCtx.txId);
+    const i = t ? cariPayInfoOf(t) : null;
+    if (!i) { ov.style.display = 'none'; return; }
+    const pay = readInvPay('cp');
+    if (!pay) return;
+    createInvoicePayment({
+      date: pay.date, type: i.dir, desc: invPayDesc(i.dir, i.e.irsaliyeNo), amount: pay.amount,
+      kasaAccount: pay.kasaAccount, paymentMethod: pay.paymentMethod, cariAccountId: pay.cariAccountId,
+      accountId: i.e.type === 'masraf' ? null : currentAccId, taxEntryId: i.e.id, srcTxId: t.id
+    });
+    save();
+    ov.style.display = 'none';
+    if (typeof renderKasa === 'function') renderKasa();
+    if (typeof renderVergiTakibi === 'function') renderVergiTakibi();
+    refreshDetail();
+    renderList();
+  });
+})();
+function openCariPayModal(txId) {
+  const t = (data.transactions[currentAccId] || []).find(x => x.id === txId);
+  const i = t ? cariPayInfoOf(t) : null;
+  if (!i) { alert('Bu hareketin bağlı olduğu fatura kaydı bulunamadı.'); return; }
+  cariPayCtx = { txId };
+  document.getElementById('cariPayTitle').textContent = (i.e.irsaliyeNo ? 'Fatura no: ' + i.e.irsaliyeNo + ' · ' : '') + fmtDate(i.e.date) + ' · ' + (i.e.desc || '');
+  initInvPayBox('cp', true, i.total, i.pays, i.dir);
+  document.getElementById('cpPayOn').checked = true;
+  document.getElementById('cpPayOn').parentElement.style.display = 'none';
+  document.getElementById('cpPayBox').style.display = 'flex';
+  document.getElementById('cariPayModalOverlay').style.display = 'flex';
+}
+
 // Kasa hareketi (tahsilat/ödeme) bir cariyle ilişkilendirilmişse, o caride otomatik bir hareket
 // oluşturur/günceller. entry.linkedTxId ile bağlantı korunur; her çağrıda önce eski hareket
 // silinip yeniden oluşturulur (cari değişse veya bağlantı kaldırılsa bile tutarlılık bozulmaz).
@@ -2707,7 +2779,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' + txPayBadge(t) : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2716,7 +2788,9 @@ function renderTx() {
         const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
         return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
       }).join('');
-      const actionsHtml = t.cariPayId
+      const actionsHtml = (t.fromTaxEntryId && !t.cariPayId)
+        ? `<span style="display:inline-flex; align-items:center; white-space:nowrap;"><button class="payTxBtn" data-id="${t.id}" aria-label="Fatura ödemesi" title="Bu faturaya ödeme / tahsilat kaydet" style="font-size:13px; padding:2px 6px;">💳</button><span title="Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın." style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span></span>`
+        : t.cariPayId
         ? `<button class="delTxBtn" data-id="${t.id}" aria-label="Cariden ödemeyi sil" title="Cariden ödeme kaydını siler (karşı carideki hareket de silinir)">&times;</button>`
         : (t.kasaEntryId || t.fromTaxEntryId)
         ? `<span title="${t.kasaEntryId ? 'Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın.' : 'Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın.'}" style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
@@ -2774,6 +2848,8 @@ document.getElementById('txList').addEventListener('click', (e) => {
     renderTx();
     return;
   }
+  const payTxBtn = e.target.closest('.payTxBtn');
+  if (payTxBtn) { openCariPayModal(payTxBtn.dataset.id); return; }
   const delBtn = e.target.closest('.delTxBtn');
   if (delBtn) {
     showConfirm('Bu hareketi silmek istediğinize emin misiniz?', () => {
