@@ -381,6 +381,7 @@
   </div>
 
   <div id="alertBanner" style="display:none;"></div>
+  <div id="autoBackupBanner" style="display:none;"></div>
   <div id="emptyDataBanner" style="display:none;"></div>
 
   <div id="carilerView">
@@ -779,6 +780,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="invDocModalOverlay">
+  <div class="modal-box" style="width:900px; max-width:96vw; max-height:94vh; display:flex; flex-direction:column;">
+    <h3>Fatura görünümü</h3>
+    <p id="invDocNote" style="font-size:12px; color:#A3660F; margin:0 0 8px;"></p>
+    <iframe id="invDocFrame" sandbox="allow-same-origin allow-modals" style="width:100%; height:68vh; border:1px solid #D7DCE5; border-radius:8px; background:#fff;"></iframe>
+    <div class="actions">
+      <button id="invDocPrint">🖨️ Yazdır / PDF kaydet</button>
+      <button id="invDocClose" class="primary-btn">Kapat</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="kasaEditModalOverlay">
   <div class="modal-box">
     <h3>Kasa hareketini düzenle</h3>
@@ -1100,6 +1113,16 @@
         <button id="gdriveConnectBtn">Google ile Bağlan</button>
         <button id="gdriveBackupBtn" class="primary-btn" disabled>Buluta Yedekle</button>
         <button id="gdriveRestoreBtn" disabled>Buluttan Getir</button>
+      </div>
+      <div style="border-top:1px solid #E3E8F0; padding-top:10px; margin:6px 0 12px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;">
+          <input type="checkbox" id="gdriveAutoOn" /> Otomatik yedekle
+        </label>
+        <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-size:13px;">
+          Günlük yedek saati: <input type="time" id="gdriveAutoTime" value="16:00" />
+        </div>
+        <p style="font-size:11.5px; color:#5B6B82; margin:0 0 6px; line-height:1.5;">Program açıldığında günde bir kez, ayrıca bu saatte (sayfa açıksa) yedeklenir. Google izni süresi dolmuşsa ekranın üstünde "Şimdi yedekle" butonu çıkar; basınca yedek alınır. Bu cihazda hiç veri yoksa buluttaki yedeğin üzerine yazmamak için otomatik yedek alınmaz.</p>
+        <p id="gdriveAutoLast" style="font-size:12px; color:#3A4657; margin:0;"></p>
       </div>
       <button id="gdriveChangeClientId" style="font-size:12px;">Client ID'yi değiştir</button>
     </div>
@@ -2635,7 +2658,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' : '') + (txDocKeyOf(t) ? ' <span class="txInvBtn" data-key="' + escapeHtml(txDocKeyOf(t)) + '" title="Faturayı göster" style="font-size:12px; cursor:pointer;">📄</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2692,6 +2715,8 @@ document.getElementById('txList').addEventListener('drop', (e) => {
 });
 
 document.getElementById('txList').addEventListener('click', (e) => {
+  const invEl = e.target.closest('.txInvBtn');
+  if (invEl) { e.stopPropagation(); showInvoiceDoc(invEl.dataset.key); return; }
   const monthHeader = e.target.closest('.txMonthHeader');
   if (monthHeader) {
     const key = monthHeader.dataset.month;
@@ -3518,6 +3543,7 @@ document.getElementById('gdriveBackupBtn').addEventListener('click', () => {
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     gdriveSetStatus('Yedekleme tamamlandı — ' + new Date().toLocaleString('tr-TR'));
+    markBackupDone();
   } catch (e) {
     console.error('Google Drive yedekleme hatası', e);
     gdriveSetStatus('Yedekleme başarısız oldu, lütfen tekrar deneyin.');
@@ -6605,7 +6631,7 @@ function renderVergiTakibi() {
           </div>
         </div>
         <div class="rem-actions">
-          ${actions}
+          ${e.docKey ? `<button class="viewInvDocBtn" data-key="${escapeHtml(e.docKey)}">🧾 Faturayı göster</button>` : ''}${actions}
         </div>
       </div>`;
     }).join('');
@@ -6620,6 +6646,9 @@ function renderVergiTakibi() {
       else collapsedTaxMonths.add(key);
       renderVergiTakibi();
     });
+  });
+  list.querySelectorAll('.viewInvDocBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); showInvoiceDoc(btn.dataset.key); });
   });
   list.querySelectorAll('.editTaxEntryBtn').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); openTaxEntryEdit(btn.dataset.id); });
@@ -6759,6 +6788,26 @@ function invParseXml(text, fileName) {
   if (doc.getElementsByTagName('parsererror').length > 0) return { kind: 'error', fileName, error: 'XML okunamadı' };
   const root = doc.documentElement;
   if (!root || root.localName !== 'Invoice') return { kind: 'notinvoice', fileName };
+  // GİB e-fatura XML'inde faturanın görünümünü çizen XSLT şablonu base64 olarak gömülü gelir.
+  let xsltText = '';
+  let xmlStripped = '';
+  try {
+    Array.from(doc.getElementsByTagName('*')).forEach(el => {
+      if (el.localName !== 'EmbeddedDocumentBinaryObject' || xsltText) return;
+      const fn = el.getAttribute('filename') || '';
+      const mime = (el.getAttribute('mimeCode') || '').toLowerCase();
+      const raw = (el.textContent || '').trim();
+      if (!raw) return;
+      if (!(/\.xslt?$/i.test(fn) || mime.indexOf('xml') !== -1 || mime.indexOf('xsl') !== -1)) return;
+      const bin = atob(raw.replace(/\s+/g, ''));
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      const t = new TextDecoder('utf-8').decode(bytes);
+      if (t.indexOf('stylesheet') === -1) return;
+      xsltText = t;
+      el.textContent = '';
+    });
+    xmlStripped = new XMLSerializer().serializeToString(doc);
+  } catch (e) { console.error('Gömülü şablon okunamadı', e); }
   const kids = (el, ln) => el ? Array.from(el.children).filter(c => c.localName === ln) : [];
   const kid = (el, ln) => kids(el, ln)[0] || null;
   const txt = (el) => el ? (el.textContent || '').trim() : '';
@@ -6819,9 +6868,129 @@ function invParseXml(text, fileName) {
 
   return { kind: 'invoice', fileName, invoiceNo, ettn, date, typeCode, profile, currency,
     supplier: party('AccountingSupplierParty'), customer: party('AccountingCustomerParty'),
-    lines, notes, skipReason };
+    lines, notes, skipReason, xsltText, xmlStripped };
 }
 // INV-PARSE-END
+
+// ---- Fatura görseli: XML içindeki GİB şablonundan (XSLT) üretilir; IndexedDB'de saklanır ----
+function invDbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('cari-hesap-faturalar', 1);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs');
+      if (!db.objectStoreNames.contains('xslts')) db.createObjectStore('xslts');
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function invDbPut(store, key, val) {
+  const db = await invDbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(val, key);
+    tx.oncomplete = () => { db.close(); res(); };
+    tx.onerror = () => { db.close(); rej(tx.error); };
+  });
+}
+async function invDbGet(store, key) {
+  const db = await invDbOpen();
+  return new Promise((res, rej) => {
+    const rq = db.transaction(store, 'readonly').objectStore(store).get(key);
+    rq.onsuccess = () => { db.close(); res(rq.result); };
+    rq.onerror = () => { db.close(); rej(rq.error); };
+  });
+}
+function invDjb(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function invXsltHash(t) { return t.length + '_' + invDjb(t) + '_' + invDjb(t.split('').reverse().join('')); }
+function invDocKeyOf(item, dir) { return (item.ettn || '').toLowerCase() || (dir + '|' + invNoNorm(item.invoiceNo)); }
+
+// Faturanın XML'ini (şablon hariç) ve şablonu (aynı şablon tek kopya) kaydeder. Başarılıysa kayıt anahtarını döner.
+async function invStoreDoc(item, dir) {
+  if (!item.xmlStripped) return null;
+  try {
+    const key = invDocKeyOf(item, dir);
+    let hash = null;
+    if (item.xsltText) {
+      hash = invXsltHash(item.xsltText);
+      const have = await invDbGet('xslts', hash);
+      if (!have) await invDbPut('xslts', hash, item.xsltText);
+    }
+    await invDbPut('docs', key, { xml: item.xmlStripped, xsltHash: hash });
+    return key;
+  } catch (e) {
+    console.error('Fatura görseli kaydedilemedi', e);
+    return null;
+  }
+}
+
+function txDocKeyOf(t) {
+  const id = t.fromTaxEntryId || t.taxEntryId;
+  if (!id) return null;
+  const e = (data.taxEntries || []).find(x => x.id === id);
+  return e && e.docKey ? e.docKey : null;
+}
+
+function invTransform(xmlText, xsltText) {
+  const p = new DOMParser();
+  const xml = p.parseFromString(xmlText, 'application/xml');
+  const xsl = p.parseFromString(xsltText, 'application/xml');
+  if (xml.getElementsByTagName('parsererror').length || xsl.getElementsByTagName('parsererror').length) throw new Error('XML/XSLT okunamadı');
+  const proc = new XSLTProcessor();
+  proc.importStylesheet(xsl);
+  const out = proc.transformToDocument(xml);
+  if (!out || !out.documentElement || out.getElementsByTagName('parsererror').length) throw new Error('Dönüştürme başarısız');
+  return '<!DOCTYPE html>' + out.documentElement.outerHTML;
+}
+
+function invFallbackHtml(xmlText) {
+  const r = invParseXml(xmlText, '');
+  const wrap = (b) => '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;padding:20px;color:#17212F;font-size:13px}table{border-collapse:collapse;margin-top:10px}td,th{border:1px solid #bbb;padding:5px 10px;text-align:right}th{background:#f2f4f8}h2{margin:0 0 8px}</style></head><body>' + b + '</body></html>';
+  if (r.kind !== 'invoice') return wrap('<p>Fatura okunamadı.</p>');
+  let matrah = 0, kdv = 0;
+  const rows = r.lines.map(l => {
+    const k = l.amount * l.rate / 100; matrah += l.amount; kdv += k;
+    return '<tr><td>%' + l.rate + '</td><td>' + fmt(l.amount) + '</td><td>' + fmt(k) + '</td><td>' + fmt(l.amount + k) + '</td></tr>';
+  }).join('');
+  return wrap('<h2>Fatura ' + escapeHtml(r.invoiceNo) + '</h2>' +
+    '<p>Tarih: ' + (r.date ? fmtDate(r.date) : '—') + '<br>ETTN: ' + escapeHtml(r.ettn || '—') + '</p>' +
+    '<p><b>Satıcı:</b> ' + escapeHtml(r.supplier.name) + ' (' + escapeHtml(r.supplier.id) + ')<br><b>Alıcı:</b> ' + escapeHtml(r.customer.name) + ' (' + escapeHtml(r.customer.id) + ')</p>' +
+    '<table><tr><th>KDV oranı</th><th>Matrah</th><th>KDV</th><th>Toplam</th></tr>' + rows +
+    '<tr><th>Toplam</th><th>' + fmt(matrah) + '</th><th>' + fmt(kdv) + '</th><th>' + fmt(matrah + kdv) + '</th></tr></table>');
+}
+
+async function showInvoiceDoc(key) {
+  const frame = document.getElementById('invDocFrame');
+  const note = document.getElementById('invDocNote');
+  const msg = (t) => '<p style="font-family:Arial,sans-serif;padding:20px;color:#3A4657;">' + t + '</p>';
+  note.textContent = '';
+  frame.srcdoc = msg('Yükleniyor...');
+  document.getElementById('invDocModalOverlay').style.display = 'flex';
+  let doc = null;
+  try { doc = await invDbGet('docs', key); } catch (e) { console.error(e); }
+  if (!doc) {
+    frame.srcdoc = msg('Bu faturanın görseli bu cihazda kayıtlı değil. Fatura XML\'ini Vergi Takibi → "Faturaları içeri aktar" ile yeniden seçin; görsel mevcut kayda eklenir.');
+    return;
+  }
+  let html = null;
+  if (doc.xsltHash) {
+    try {
+      const xslt = await invDbGet('xslts', doc.xsltHash);
+      if (xslt) html = invTransform(doc.xml, xslt);
+    } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
+  }
+  if (!html) {
+    html = invFallbackHtml(doc.xml);
+    note.textContent = 'Bu XML içinde fatura şablonu bulunamadı veya uygulanamadı; özet görünüm gösteriliyor.';
+  }
+  frame.srcdoc = html;
+}
+document.getElementById('invDocClose').addEventListener('click', () => { document.getElementById('invDocModalOverlay').style.display = 'none'; });
+document.getElementById('invDocPrint').addEventListener('click', () => {
+  const w = document.getElementById('invDocFrame').contentWindow;
+  w.focus(); w.print();
+});
 
 function invCounterpart(item, dir) { return dir === 'satis' ? item.customer : item.supplier; }
 
@@ -6875,7 +7044,7 @@ function renderInvImport() {
   const existingTax = data.taxEntries || [];
   const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   const seen = new Set();
-  let nNew = 0, nDup = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
+  let nNew = 0, nDup = 0, nAttach = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
 
   const rows = invImportItems.map((item, i) => {
     const cp = invCounterpart(item, dir);
@@ -6886,9 +7055,14 @@ function renderInvImport() {
       const noKey = invNoNorm(item.invoiceNo);
       const ettnKey = (item.ettn || '').toLowerCase();
       const key = ettnKey || (dir + '|' + noKey);
-      const dupExisting = existingTax.some(e => e.type === dir &&
+      const dupEntries = existingTax.filter(e => e.type === dir &&
         ((ettnKey && e.ettn && e.ettn.toLowerCase() === ettnKey) || (noKey && invNoNorm(e.irsaliyeNo) === noKey)));
-      if (dupExisting) st = { kind: 'dup', label: "Vergi Takibi'nde zaten var" };
+      item._dupEntries = dupEntries;
+      if (dupEntries.length > 0) {
+        st = (item.xmlStripped && dupEntries.some(e => !e.docKey))
+          ? { kind: 'attach', label: 'Zaten var — fatura görseli eklenecek' }
+          : { kind: 'dup', label: "Vergi Takibi'nde zaten var" };
+      }
       else if (seen.has(key)) st = { kind: 'dup', label: 'Aynı fatura listede tekrar var' };
       else { st = { kind: 'new', label: 'Yeni' }; seen.add(key); }
     }
@@ -6896,12 +7070,12 @@ function renderInvImport() {
     if (st.kind === 'new') {
       nNew++;
       item.lines.forEach(l => { sumMatrah += l.amount; sumKdv += l.amount * l.rate / 100; });
-    } else if (st.kind === 'dup') nDup++; else nSkip++;
+    } else if (st.kind === 'dup') nDup++; else if (st.kind === 'attach') nAttach++; else nSkip++;
 
     const matrah = item.lines.reduce((s, l) => s + l.amount, 0);
     const kdv = item.lines.reduce((s, l) => s + l.amount * l.rate / 100, 0);
     const rates = item.lines.map(l => '%' + l.rate).join(', ');
-    const color = st.kind === 'new' ? '#1D8A5B' : (st.kind === 'dup' ? '#8B99AD' : '#C43D33');
+    const color = st.kind === 'new' ? '#1D8A5B' : (st.kind === 'dup' ? '#8B99AD' : (st.kind === 'attach' ? '#2F6FE0' : '#C43D33'));
 
     let accCell = '<span style="color:#8B99AD;">—</span>';
     let extra = '';
@@ -6917,7 +7091,7 @@ function renderInvImport() {
       }
     }
     const noteHtml = item.notes.length ? `<div style="font-size:11px; color:#A3660F;">${item.notes.map(escapeHtml).join(' · ')}</div>` : '';
-    return `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; border-bottom:1px solid #E7EAF0; font-size:12.5px; align-items:start; ${st.kind === 'new' ? '' : 'opacity:.6;'}">
+    return `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; border-bottom:1px solid #E7EAF0; font-size:12.5px; align-items:start; ${(st.kind === 'new' || st.kind === 'attach') ? '' : 'opacity:.6;'}">
       <span>${item.date ? fmtDate(item.date) : '—'}</span>
       <span><b>${escapeHtml(item.invoiceNo || '—')}</b>${noteHtml}</span>
       <span>${escapeHtml(cp.name || '(adsız)')}${cp.id ? `<div style="font-size:11px; color:#8B99AD;">${escapeHtml(cp.id)}</div>` : ''}</span>
@@ -6934,14 +7108,14 @@ function renderInvImport() {
     ? '<div class="empty">Henüz dosya seçilmedi.</div>'
     : header + rows.join('');
 
-  let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nDup} zaten var · ${nSkip} atlandı`;
+  let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nAttach > 0 ? '<span style="color:#2F6FE0;"><b>' + nAttach + '</b> mevcut kayda görsel eklenecek</span> · ' : ''}${nDup} zaten var · ${nSkip} atlandı`;
   if (nNew > 0) sum += ` · Eklenecek matrah: <b>${fmt(sumMatrah)}</b>, KDV: <b>${fmt(sumKdv)}</b>`;
   if (invImportMeta.notInvoice > 0) sum += `<div style="font-size:12px; color:#8B99AD;">${invImportMeta.notInvoice} dosya fatura olmadığı için (ör. uygulama yanıtı) yok sayıldı.</div>`;
   if (invImportMeta.errors.length > 0) sum += `<div style="font-size:12px; color:#C43D33;">${invImportMeta.errors.map(escapeHtml).join('<br>')}</div>`;
   document.getElementById('invImportSummary').innerHTML = sum;
   const btn = document.getElementById('invImportConfirm');
-  btn.disabled = nNew === 0;
-  btn.textContent = nNew > 0 ? nNew + ' faturayı içeri aktar' : 'İçeri aktar';
+  btn.disabled = nNew + nAttach === 0;
+  btn.textContent = nNew > 0 ? nNew + ' faturayı içeri aktar' : (nAttach > 0 ? nAttach + ' faturaya görsel ekle' : 'İçeri aktar');
 }
 
 document.getElementById('taxImportBtn').addEventListener('click', () => {
@@ -6986,12 +7160,25 @@ document.getElementById('invImportList').addEventListener('change', (e) => {
   renderInvImport();
 });
 
-document.getElementById('invImportConfirm').addEventListener('click', () => {
+document.getElementById('invImportConfirm').addEventListener('click', async () => {
   const dir = document.getElementById('invImportDir').value;
   const doCari = document.getElementById('invImportCariTx').checked;
   const newOnes = invImportItems.filter(it => it._status && it._status.kind === 'new');
-  if (newOnes.length === 0) return;
+  const attachOnes = invImportItems.filter(it => it._status && it._status.kind === 'attach');
+  if (newOnes.length === 0 && attachOnes.length === 0) return;
   if (!data.taxEntries) data.taxEntries = [];
+  const confirmBtn = document.getElementById('invImportConfirm');
+  confirmBtn.disabled = true;
+  const prevBtnText = confirmBtn.textContent;
+  confirmBtn.textContent = 'Kaydediliyor...';
+  for (const item of newOnes.concat(attachOnes)) item._docKey = await invStoreDoc(item, dir);
+  confirmBtn.textContent = prevBtnText;
+  let attachedCount = 0;
+  attachOnes.forEach(item => {
+    if (!item._docKey) return;
+    (item._dupEntries || []).forEach(e => { if (!e.docKey) e.docKey = item._docKey; });
+    attachedCount++;
+  });
   const createdAccs = {};
   const stamp = Date.now();
   let seq = 0, addedEntries = 0, createdCount = 0, cariCount = 0;
@@ -7026,7 +7213,8 @@ document.getElementById('invImportConfirm').addEventListener('click', () => {
         vatRate: line.rate,
         linkedTxId: null,
         ettn: item.ettn || '',
-        imported: true
+        imported: true,
+        docKey: item._docKey || null
       };
       data.taxEntries.push(entry);
       if (accId && doCari && !cariHas) {
@@ -7045,6 +7233,7 @@ document.getElementById('invImportConfirm').addEventListener('click', () => {
   renderList();
   if (currentAccId) refreshDetail();
   alert(newOnes.length + ' fatura içeri aktarıldı (' + addedEntries + ' KDV kaydı)' +
+    (attachedCount ? '\n' + attachedCount + ' mevcut faturaya görsel eklendi' : '') +
     (createdCount ? '\n' + createdCount + ' yeni cari açıldı' : '') +
     (cariCount ? '\n' + cariCount + ' cari hareketi işlendi' : '') + '.');
 });
@@ -7270,6 +7459,145 @@ document.getElementById('kasaEditSave').addEventListener('click', () => {
 
 document.getElementById('kasaPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
 document.getElementById('kasaEditPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
+
+// ---- Otomatik Drive yedeği (açılışta günde bir kez + belirlenen saatte) ----
+// Ayarlar ana veriden ayrı tutulur; yedekten geri yükleme bu ayarları bozmaz.
+const AUTO_BK_KEY = 'gdrive-auto-settings';
+let autoBackupBusy = false;
+let autoBackupDismissedUntil = 0;
+
+function localDateStr(d) {
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function localTimeStr(d) {
+  d = d || new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function autoBackupSettings() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(AUTO_BK_KEY) || '{}') || {}; } catch (e) { s = {}; }
+  if (s.enabled === undefined) s.enabled = true;
+  if (!s.time) s.time = '16:00';
+  return s;
+}
+function saveAutoBackupSettings(s) {
+  try { localStorage.setItem(AUTO_BK_KEY, JSON.stringify(s)); } catch (e) { console.error(e); }
+}
+function markBackupDone() {
+  const s = autoBackupSettings();
+  const now = new Date();
+  s.lastOpenDate = localDateStr(now);
+  if (localTimeStr(now) >= s.time) s.lastTimedDate = localDateStr(now);
+  s.lastBackupAt = now.toISOString();
+  saveAutoBackupSettings(s);
+  renderAutoBackupUI();
+  updateAutoBackupBanner();
+}
+function renderAutoBackupUI() {
+  const s = autoBackupSettings();
+  document.getElementById('gdriveAutoOn').checked = !!s.enabled;
+  document.getElementById('gdriveAutoTime').value = s.time;
+  document.getElementById('gdriveAutoLast').textContent = s.lastBackupAt
+    ? 'Son yedek: ' + new Date(s.lastBackupAt).toLocaleString('tr-TR')
+    : 'Bu cihazdan henüz yedek alınmadı.';
+}
+function gdriveTokenValid() { return !!gdriveAccessToken && Date.now() < gdriveTokenExpiry; }
+
+function autoBackupDue() {
+  const s = autoBackupSettings();
+  if (!s.enabled || !gdriveGetClientId() || isAllDataEmpty()) return false;
+  const now = new Date();
+  const today = localDateStr(now);
+  const openDue = s.lastOpenDate !== today;
+  const timeDue = localTimeStr(now) >= s.time && s.lastTimedDate !== today;
+  return openDue || timeDue;
+}
+
+// Bütün veriyi Drive'daki yedek dosyasının üzerine yazar (gdriveAccessToken geçerli olmalı).
+async function gdriveRunBackup() {
+  const existing = await gdriveFindFile();
+  const metadata = { name: GDRIVE_FILENAME, mimeType: 'application/json' };
+  const boundary = 'gdrive_boundary_' + Date.now();
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(data)}\r\n--${boundary}--`;
+  const url = existing
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart`
+    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+  const res = await fetch(url, {
+    method: existing ? 'PATCH' : 'POST',
+    headers: { Authorization: 'Bearer ' + gdriveAccessToken, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+}
+
+function showAutoBackupBanner(html) {
+  const b = document.getElementById('autoBackupBanner');
+  b.className = 'alert-banner';
+  b.innerHTML = html;
+  b.style.display = 'block';
+}
+
+// fromClick: kullanıcı butona bastıysa Google izni (açılır pencere) istenebilir.
+async function autoBackupRun(fromClick) {
+  if (autoBackupBusy) return;
+  autoBackupBusy = true;
+  const b = document.getElementById('autoBackupBanner');
+  try {
+    if (!gdriveTokenValid()) {
+      if (!fromClick) return;
+      await gdriveEnsureToken();
+    }
+    showAutoBackupBanner('☁️ Drive\'a yedekleniyor...');
+    await gdriveRunBackup();
+    markBackupDone();
+    showAutoBackupBanner('✅ Yedek alındı — ' + new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+    setTimeout(() => { if (autoBackupDue() === false) b.style.display = 'none'; }, 6000);
+  } catch (e) {
+    console.error('Otomatik yedek hatası', e);
+    showAutoBackupBanner('⚠️ Otomatik yedek alınamadı (' + escapeHtml(e && e.message ? e.message : 'bilinmeyen hata') + '). <button id="autoBackupNowBtn" class="primary-btn" style="margin-left:8px; padding:4px 10px; font-size:12px;">Tekrar dene</button>');
+    document.getElementById('autoBackupNowBtn').addEventListener('click', () => autoBackupRun(true));
+  } finally {
+    autoBackupBusy = false;
+  }
+}
+
+function updateAutoBackupBanner() {
+  if (autoBackupBusy) return;
+  const b = document.getElementById('autoBackupBanner');
+  if (!autoBackupDue()) {
+    if (b.textContent.indexOf('Şimdi yedekle') !== -1) b.style.display = 'none';
+    return;
+  }
+  if (gdriveTokenValid()) { autoBackupRun(false); return; }
+  if (Date.now() < autoBackupDismissedUntil) return;
+  showAutoBackupBanner('☁️ Günlük Drive yedeği zamanı geldi. <button id="autoBackupNowBtn" class="primary-btn" style="margin-left:8px; padding:4px 10px; font-size:12px;">Şimdi yedekle</button> <button id="autoBackupLaterBtn" style="padding:4px 10px; font-size:12px;">1 saat sonra hatırlat</button>');
+  document.getElementById('autoBackupNowBtn').addEventListener('click', () => autoBackupRun(true));
+  document.getElementById('autoBackupLaterBtn').addEventListener('click', () => {
+    autoBackupDismissedUntil = Date.now() + 3600 * 1000;
+    b.style.display = 'none';
+  });
+}
+
+document.getElementById('gdriveBtn').addEventListener('click', renderAutoBackupUI);
+document.getElementById('gdriveAutoOn').addEventListener('change', () => {
+  const s = autoBackupSettings();
+  s.enabled = document.getElementById('gdriveAutoOn').checked;
+  saveAutoBackupSettings(s);
+  updateAutoBackupBanner();
+});
+document.getElementById('gdriveAutoTime').addEventListener('change', () => {
+  const s = autoBackupSettings();
+  s.time = document.getElementById('gdriveAutoTime').value || '16:00';
+  if (s.lastTimedDate === localDateStr() && localTimeStr() < s.time) s.lastTimedDate = null;
+  saveAutoBackupSettings(s);
+  updateAutoBackupBanner();
+});
+setInterval(updateAutoBackupBanner, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) updateAutoBackupBanner(); });
+setTimeout(updateAutoBackupBanner, 2500);
 
 </script>
 </body>
