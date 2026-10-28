@@ -272,7 +272,7 @@
     }
     .tx-row > span:empty { display: none; }
     .tx-row .tx-col-irsNo, .tx-row .tx-col-plaka, .tx-row .tx-col-balance,
-    .tx-row .editTxBtn, .tx-row .delTxBtn { display: none; }
+    .tx-row .editTxBtn, .tx-row .delTxBtn, .tx-row .payTaxTxBtn { display: none; }
     .tx-row .tx-col-date { order: 1; flex: 0 0 auto; font-size: 10px; color: var(--muted); white-space: nowrap; }
     .tx-row .tx-col-desc {
       order: 2; flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--ink);
@@ -303,7 +303,7 @@
       border-top: 1px solid var(--line-soft); padding-top: 4px; margin-top: 4px;
     }
     .tx-row.expanded .tx-col-balance::before { content: "Bakiye: "; }
-    .tx-row.expanded .editTxBtn, .tx-row.expanded .delTxBtn { display: inline-block; order: 7; }
+    .tx-row.expanded .editTxBtn, .tx-row.expanded .delTxBtn, .tx-row.expanded .payTaxTxBtn { display: inline-block; order: 7; }
     .tx-row.expanded .editTxBtn { margin-left: auto; }
 
     .summary { grid-template-columns: 1fr 1fr; }
@@ -2667,8 +2667,9 @@ function renderTx() {
         const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
         return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
       }).join('');
+      const payBtnHtml = (t.fromTaxEntryId && !t.kasaEntryId) ? `<button class="payTaxTxBtn" data-id="${t.fromTaxEntryId}" title="Ödeme / tahsilat kaydet" aria-label="Ödeme / tahsilat kaydet" style="color:#17212F;">💳</button>` : '';
       const actionsHtml = (t.kasaEntryId || t.fromTaxEntryId)
-        ? `<span title="${t.kasaEntryId ? 'Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın.' : 'Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın.'}" style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
+        ? payBtnHtml + `<span title="${t.kasaEntryId ? 'Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın.' : 'Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın.'}" style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
         : `<button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#17212F;">✎</button>
         <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>`;
       return `<div class="tx-row" draggable="true" data-id="${t.id}" style="cursor:grab; grid-template-columns:${rowGrid}; ${colorStyle}">
@@ -2715,6 +2716,8 @@ document.getElementById('txList').addEventListener('drop', (e) => {
 });
 
 document.getElementById('txList').addEventListener('click', (e) => {
+  const payTaxBtn = e.target.closest('.payTaxTxBtn');
+  if (payTaxBtn) { e.stopPropagation(); if (data.taxEntries.some(x => x.id === payTaxBtn.dataset.id)) openTaxEntryEdit(payTaxBtn.dataset.id); return; }
   const invEl = e.target.closest('.txInvBtn');
   if (invEl) { e.stopPropagation(); showInvoiceDoc(invEl.dataset.key); return; }
   const monthHeader = e.target.closest('.txMonthHeader');
