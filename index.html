@@ -697,7 +697,7 @@
   </div>
 
   <div id="hareketkontrolView" style="display:none;">
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, aynı cari içinde aynı irsaliye numarasıyla birden fazla hareket girilmiş olan kayıtları (mükerrer kaydı ihtimaline karşı) gruplandırıp gösterir. İrsaliye no'su olmayan hareketler bu taramaya dahil değildir. Aynı numaralı kayıtlarda farklı KDV oranı varsa (ör. %20 ve %10) mükerrer sayılmaz.</p>
     <div class="summary" id="hkSummaryCards"></div>
     <div class="toolbar">
       <input id="hkSearch" placeholder="Cari adı veya irsaliye no ile ara..." style="flex:1;" />
@@ -2353,63 +2353,11 @@ function removeLinkedCariTx(txId) {
 // bağlıysa (masraf hariç) caride de otomatik hareket oluşur. Ödenen tutar, Kasa kayıtlarındaki
 // taxEntryId / srcTxId bağlantısından hesaplanır; Kasa'dan bir kayıt silinirse fatura durumu da güncellenir.
 function invPaymentsOf(ref) {
-  const match = k => (ref.taxEntryId && k.taxEntryId === ref.taxEntryId) || (ref.txId && k.srcTxId === ref.txId);
-  const kasa = (data.kasaEntries || []).filter(match);
-  const cari = (data.cariPayEntries || []).filter(match).map(k => Object.assign({}, k, { viaCari: true }));
-  return kasa.concat(cari);
+  return (data.kasaEntries || []).filter(k =>
+    (ref.taxEntryId && k.taxEntryId === ref.taxEntryId) || (ref.txId && k.srcTxId === ref.txId));
 }
 function invPaidSum(list) { return list.reduce((s, k) => s + (Number(k.amount) || 0), 0); }
-// "Cariden" ödeme: Kasa/Banka'ya hiçbir şey yazılmaz; ödeme seçilen cari hesabın üzerinden yapılmış sayılır.
-// Faturanın kendi carisine normal ödeme/tahsilat hareketi düşer (Ödeme → Borç, Tahsilat → Alacak);
-// ödemeyi üstlenen cariye ters yönde hareket düşer (Ödeme → Alacak: ona borçlandık, Tahsilat → Borç).
-// Aynı cari seçilirse tek hareket oluşur. Her iki hareket de cariPayId ile bağlıdır; birinin silinmesi diğerini ve ödeme kaydını da siler.
-function makeCariPayTx(accId, o, debit, credit, payId, label) {
-  if (!accId || !data.accounts.find(a => a.id === accId)) return null;
-  if (!data.transactions[accId]) data.transactions[accId] = [];
-  const list = data.transactions[accId];
-  ensureTxOrders(list);
-  const tx = {
-    id: 'tx_c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-    date: o.date, desc: label, irsaliyeNo: '', vehiclePlate: '', txType: '',
-    debit, credit, paymentMethod: 'Cari',
-    dueDate: null, dueReminderId: null, kdvTransfer: false, kdvRate: 20, taxEntryId: null,
-    cariPayId: payId, order: nextOrderForDate(list, o.date)
-  };
-  list.push(tx);
-  return tx.id;
-}
-function createCariInvoicePayment(o) {
-  if (!data.cariPayEntries) data.cariPayEntries = [];
-  const payId = 'cpay_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-  const isTahsilat = o.type === 'tahsilat';
-  const amount = Number(o.amount) || 0;
-  const txIds = [];
-  const invAcc = data.accounts.find(a => a.id === o.accountId);
-  const payerAcc = data.accounts.find(a => a.id === o.cariAccountId);
-  const t1 = makeCariPayTx(o.accountId, o, isTahsilat ? 0 : amount, isTahsilat ? amount : 0, payId,
-    o.desc + (payerAcc && o.cariAccountId !== o.accountId ? ' — ' + payerAcc.name + ' carisinden' : ''));
-  if (t1) txIds.push(t1);
-  if (o.cariAccountId && o.cariAccountId !== o.accountId) {
-    const t2 = makeCariPayTx(o.cariAccountId, o, isTahsilat ? amount : 0, isTahsilat ? 0 : amount, payId,
-      o.desc + (invAcc ? ' — ' + invAcc.name + ' faturası' : ''));
-    if (t2) txIds.push(t2);
-  }
-  data.cariPayEntries.push({
-    id: payId, date: o.date, type: o.type, desc: o.desc, amount,
-    payerAccId: o.cariAccountId || null, invAccId: o.accountId || null,
-    taxEntryId: o.taxEntryId || null, srcTxId: o.srcTxId || null, txIds
-  });
-}
-function removeCariPayment(payId) {
-  const rec = (data.cariPayEntries || []).find(x => x.id === payId);
-  if (rec) (rec.txIds || []).forEach(removeLinkedCariTx);
-  Object.keys(data.transactions).forEach(accId => {
-    data.transactions[accId] = (data.transactions[accId] || []).filter(t => t.cariPayId !== payId);
-  });
-  data.cariPayEntries = (data.cariPayEntries || []).filter(x => x.id !== payId);
-}
 function createInvoicePayment(o) {
-  if (o.kasaAccount === 'cari') { createCariInvoicePayment(o); return; }
   if (!data.kasaEntries) data.kasaEntries = [];
   const entry = {
     id: 'kasa_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -2435,13 +2383,7 @@ function buildInvPayBox(p) {
         <option value="nakit">Kasa (Nakit)</option>
         <option value="banka">Banka</option>
         <option value="kart">Kredi Kartı</option>
-        <option value="cari">Cariden (cari hesaptan öde)</option>
       </select>
-      <div id="${p}PayCariRow" style="display:none; flex-direction:column; gap:4px;">
-        <input type="text" id="${p}PayCari" list="${p}PayCariDatalist" placeholder="Ödemenin yapıldığı cariyi ara ve seçin..." autocomplete="off" />
-        <datalist id="${p}PayCariDatalist"></datalist>
-        <div style="font-size:11px; color:#8B99AD;">Kasa/Banka'ya işlem yazılmaz. Seçilen cariye ters yönde hareket düşer (ödemede <b>Alacak</b>, tahsilatta <b>Borç</b>).</div>
-      </div>
       <input type="text" id="${p}PayMethod" list="payMethodList" placeholder="Ödeme şekli (Nakit, Havale/EFT, Çek...)" />
       <input type="number" id="${p}PayAmount" placeholder="Tutar" min="0" step="0.01" />
       <div style="font-size:11px; color:#8B99AD;">Ödeme şekli Havale/EFT ise Banka'ya, Kredi Kartı ise Kredi Kartı hesabına otomatik yazılır.</div>
@@ -2461,7 +2403,7 @@ function initInvPayBox(p, show, total, payments, dir) {
   let info = `Toplam: <b>${fmt(total)}</b> · ${dir === 'tahsilat' ? 'Tahsil edilen' : 'Ödenen'}: <b>${fmt(paid)}</b> · Kalan: <b>${fmt(remaining)}</b>`;
   if (paid > 0 && remaining <= 0.005) info = '✅ Tamamen ' + (dir === 'tahsilat' ? 'tahsil edildi' : 'ödendi') + '<br>' + info;
   if (payments.length) {
-    info += '<br>' + payments.map(k => `${fmtDate(k.date)} · ${k.viaCari ? 'Cari' + ((data.accounts.find(a => a.id === k.payerAccId) || {}).name ? ': ' + data.accounts.find(a => a.id === k.payerAccId).name : '') : (acctLbl[kasaAcctOf(k)] || '')} · ${fmt(k.amount)}`).join('<br>');
+    info += '<br>' + payments.map(k => `${fmtDate(k.date)} · ${acctLbl[kasaAcctOf(k)] || ''} · ${fmt(k.amount)}`).join('<br>');
   }
   document.getElementById(p + 'PayInfo').innerHTML = info;
   document.getElementById(p + 'PayLabel').innerHTML = dir === 'tahsilat'
@@ -2469,10 +2411,6 @@ function initInvPayBox(p, show, total, payments, dir) {
     : '💳 Ödeme yap (Kasa/Banka\'ya <u>ödeme</u> olarak işle)';
   document.getElementById(p + 'PayDate').value = todayStr();
   document.getElementById(p + 'PayAcct').value = 'nakit';
-  document.getElementById(p + 'PayCari').value = '';
-  document.getElementById(p + 'PayCariRow').style.display = 'none';
-  document.getElementById(p + 'PayMethod').style.display = '';
-  fillSearchableDatalist(p + 'PayCariDatalist', data.accounts);
   document.getElementById(p + 'PayMethod').value = '';
   document.getElementById(p + 'PayAmount').value = remaining > 0 ? remaining : '';
 }
@@ -2483,15 +2421,10 @@ function readInvPay(p) {
   const date = document.getElementById(p + 'PayDate').value;
   const amount = parseFloat(document.getElementById(p + 'PayAmount').value) || 0;
   if (!date || amount <= 0) { alert('Ödeme tarihini ve tutarını girin.'); return false; }
-  const kasaAccount = document.getElementById(p + 'PayAcct').value;
-  let cariAccountId = null;
-  if (kasaAccount === 'cari') {
-    cariAccountId = resolveSearchableId(p + 'PayCari', data.accounts);
-    if (!cariAccountId) { alert('Ödemenin yapıldığı cariyi listeden seçin.'); return false; }
-  }
   return {
-    date, amount, kasaAccount, cariAccountId,
-    paymentMethod: kasaAccount === 'cari' ? 'Cari' : document.getElementById(p + 'PayMethod').value.trim()
+    date, amount,
+    kasaAccount: document.getElementById(p + 'PayAcct').value,
+    paymentMethod: document.getElementById(p + 'PayMethod').value.trim()
   };
 }
 ['taxEdit', 'txEdit'].forEach(p => {
@@ -2502,84 +2435,7 @@ function readInvPay(p) {
   document.getElementById(p + 'PayOn').addEventListener('change', (ev) => {
     document.getElementById(p + 'PayBox').style.display = ev.target.checked ? 'flex' : 'none';
   });
-  document.getElementById(p + 'PayAcct').addEventListener('change', (ev) => {
-    const isCari = ev.target.value === 'cari';
-    document.getElementById(p + 'PayCariRow').style.display = isCari ? 'flex' : 'none';
-    document.getElementById(p + 'PayMethod').style.display = isCari ? 'none' : '';
-  });
 });
-
-// ---- Cari ekranından fatura ödemesi (Vergi Takibi'nde fatura aramadan) ----
-// Vergi Takibi'nden otomatik gelen (🔒) fatura hareketlerinin yanındaki 💳 düğmesi bu pencereyi açar.
-let cariPayCtx = null;
-function cariPayInfoOf(t) {
-  const e = (data.taxEntries || []).find(x => x.id === t.fromTaxEntryId);
-  if (!e) return null;
-  const total = Number((e.amount * (1 + (e.vatRate || 0) / 100)).toFixed(2));
-  const dir = e.type === 'satis' ? 'tahsilat' : 'odeme';
-  const pays = invPaymentsOf({ taxEntryId: e.id, txId: t.id });
-  return { e, total, dir, pays, paid: invPaidSum(pays) };
-}
-function txPayBadge(t) {
-  const i = cariPayInfoOf(t);
-  if (!i || !i.pays.length) return '';
-  return i.paid >= i.total - 0.005
-    ? ` <span style="color:#1D8A5B; font-weight:600; font-size:11px;">✅ ${i.dir === 'tahsilat' ? 'Tahsil edildi' : 'Ödendi'}</span>`
-    : ` <span style="color:#A3660F; font-weight:600; font-size:11px;">◐ Kısmi: ${fmt(i.paid)} / ${fmt(i.total)}</span>`;
-}
-(function () {
-  const ov = document.createElement('div');
-  ov.className = 'modal-overlay'; ov.id = 'cariPayModalOverlay';
-  ov.innerHTML = `<div class="modal-box" style="max-height:90vh; overflow-y:auto;">
-    <h3>Fatura ödemesi</h3>
-    <div class="field-group">
-      <div id="cariPayTitle" style="font-size:13px; font-weight:600;"></div>
-      ${buildInvPayBox('cp')}
-    </div>
-    <div class="actions">
-      <button id="cariPayCancel">Vazgeç</button>
-      <button id="cariPaySave" class="primary-btn">Kaydet</button>
-    </div>
-  </div>`;
-  document.body.appendChild(ov);
-  document.getElementById('cpPayAcct').addEventListener('change', (ev) => {
-    const isCari = ev.target.value === 'cari';
-    document.getElementById('cpPayCariRow').style.display = isCari ? 'flex' : 'none';
-    document.getElementById('cpPayMethod').style.display = isCari ? 'none' : '';
-  });
-  document.getElementById('cariPayCancel').addEventListener('click', () => { ov.style.display = 'none'; });
-  document.getElementById('cariPaySave').addEventListener('click', () => {
-    if (!cariPayCtx) return;
-    const t = (data.transactions[currentAccId] || []).find(x => x.id === cariPayCtx.txId);
-    const i = t ? cariPayInfoOf(t) : null;
-    if (!i) { ov.style.display = 'none'; return; }
-    const pay = readInvPay('cp');
-    if (!pay) return;
-    createInvoicePayment({
-      date: pay.date, type: i.dir, desc: invPayDesc(i.dir, i.e.irsaliyeNo), amount: pay.amount,
-      kasaAccount: pay.kasaAccount, paymentMethod: pay.paymentMethod, cariAccountId: pay.cariAccountId,
-      accountId: i.e.type === 'masraf' ? null : currentAccId, taxEntryId: i.e.id, srcTxId: t.id
-    });
-    save();
-    ov.style.display = 'none';
-    if (typeof renderKasa === 'function') renderKasa();
-    if (typeof renderVergiTakibi === 'function') renderVergiTakibi();
-    refreshDetail();
-    renderList();
-  });
-})();
-function openCariPayModal(txId) {
-  const t = (data.transactions[currentAccId] || []).find(x => x.id === txId);
-  const i = t ? cariPayInfoOf(t) : null;
-  if (!i) { alert('Bu hareketin bağlı olduğu fatura kaydı bulunamadı.'); return; }
-  cariPayCtx = { txId };
-  document.getElementById('cariPayTitle').textContent = (i.e.irsaliyeNo ? 'Fatura no: ' + i.e.irsaliyeNo + ' · ' : '') + fmtDate(i.e.date) + ' · ' + (i.e.desc || '');
-  initInvPayBox('cp', true, i.total, i.pays, i.dir);
-  document.getElementById('cpPayOn').checked = true;
-  document.getElementById('cpPayOn').parentElement.style.display = 'none';
-  document.getElementById('cpPayBox').style.display = 'flex';
-  document.getElementById('cariPayModalOverlay').style.display = 'flex';
-}
 
 // Kasa hareketi (tahsilat/ödeme) bir cariyle ilişkilendirilmişse, o caride otomatik bir hareket
 // oluşturur/günceller. entry.linkedTxId ile bağlantı korunur; her çağrıda önce eski hareket
@@ -2779,7 +2635,7 @@ function renderTx() {
         let val = '';
         if (k === 'date') val = fmtDate(t.date);
         else if (k === 'irsNo') val = escapeHtml(t.irsaliyeNo || '');
-        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' + txPayBadge(t) : '');
+        else if (k === 'desc') val = txTypeBadge(t.txType) + escapeHtml(t.desc || '') + (t.paymentMethod ? ` <span style="color:#8B99AD; font-size:11px;">· ${escapeHtml(t.paymentMethod)}</span>` : '') + (t.taxEntryId ? ' <span title="Vergi Takibi\'ne aktarıldı" style="font-size:11px;">🧾</span>' : '') + (t.kasaEntryId ? ' <span title="Kasa\'dan otomatik oluşturuldu" style="font-size:11px;">💰</span>' : '') + (t.fromTaxEntryId ? ' <span title="Vergi Takibi\'nden otomatik oluşturuldu" style="font-size:11px;">📑</span>' : '');
         else if (k === 'plaka') val = escapeHtml(t.vehiclePlate || '');
         else if (k === 'debit') val = t.debit ? fmt(t.debit) : '';
         else if (k === 'credit') val = t.credit ? fmt(t.credit) : '';
@@ -2788,11 +2644,7 @@ function renderTx() {
         const extraStyle = k === 'balance' ? 'font-weight:600;' : '';
         return `<span class="${cls}" style="${extraStyle}">${val}</span>`;
       }).join('');
-      const actionsHtml = (t.fromTaxEntryId && !t.cariPayId)
-        ? `<span style="display:inline-flex; align-items:center; white-space:nowrap;"><button class="payTxBtn" data-id="${t.id}" aria-label="Fatura ödemesi" title="Bu faturaya ödeme / tahsilat kaydet" style="font-size:13px; padding:2px 6px;">💳</button><span title="Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın." style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span></span>`
-        : t.cariPayId
-        ? `<button class="delTxBtn" data-id="${t.id}" aria-label="Cariden ödemeyi sil" title="Cariden ödeme kaydını siler (karşı carideki hareket de silinir)">&times;</button>`
-        : (t.kasaEntryId || t.fromTaxEntryId)
+      const actionsHtml = (t.kasaEntryId || t.fromTaxEntryId)
         ? `<span title="${t.kasaEntryId ? 'Bu hareket Kasa ekranından otomatik oluşturuldu; düzenlemek/silmek için Kasa ekranını kullanın.' : 'Bu hareket Vergi Takibi ekranından otomatik oluşturuldu; düzenlemek/silmek için Vergi Takibi ekranını kullanın.'}" style="font-size:13px; color:#8B99AD; padding:0 6px;">🔒</span>`
         : `<button class="editTxBtn" data-id="${t.id}" aria-label="İşlemi düzenle" style="color:#17212F;">✎</button>
         <button class="delTxBtn" data-id="${t.id}" aria-label="İşlemi sil">&times;</button>`;
@@ -2848,13 +2700,10 @@ document.getElementById('txList').addEventListener('click', (e) => {
     renderTx();
     return;
   }
-  const payTxBtn = e.target.closest('.payTxBtn');
-  if (payTxBtn) { openCariPayModal(payTxBtn.dataset.id); return; }
   const delBtn = e.target.closest('.delTxBtn');
   if (delBtn) {
     showConfirm('Bu hareketi silmek istediğinize emin misiniz?', () => {
       const t = data.transactions[currentAccId].find(x => x.id === delBtn.dataset.id);
-      if (t && t.cariPayId) { removeCariPayment(t.cariPayId); save(); refreshDetail(); return; }
       if (t && t.taxEntryId) data.taxEntries = data.taxEntries.filter(e => e.id !== t.taxEntryId);
       data.transactions[currentAccId] = data.transactions[currentAccId].filter(t => t.id !== delBtn.dataset.id);
       save();
@@ -2987,7 +2836,7 @@ document.getElementById('txEditSave').addEventListener('click', () => {
     const dir = debit > 0 ? 'tahsilat' : 'odeme';
     createInvoicePayment({
       date: pay.date, type: dir, desc: invPayDesc(dir, t.irsaliyeNo), amount: pay.amount,
-      kasaAccount: pay.kasaAccount, paymentMethod: pay.paymentMethod, cariAccountId: pay.cariAccountId,
+      kasaAccount: pay.kasaAccount, paymentMethod: pay.paymentMethod,
       accountId: currentAccId, srcTxId: t.id, taxEntryId: t.taxEntryId || null
     });
     if (typeof renderKasa === 'function') renderKasa();
@@ -3063,8 +2912,6 @@ document.getElementById('delAccBtn').addEventListener('click', () => {
   showConfirm('Bu cariyi ve tüm hareketlerini silmek istediğinize emin misiniz?', () => {
     const linkedTaxIds = (data.transactions[currentAccId] || []).map(t => t.taxEntryId).filter(Boolean);
     if (linkedTaxIds.length > 0) data.taxEntries = data.taxEntries.filter(e => !linkedTaxIds.includes(e.id));
-    (data.cariPayEntries || []).filter(x => x.payerAccId === currentAccId || x.invAccId === currentAccId)
-      .forEach(x => removeCariPayment(x.id));
     (data.kasaEntries || []).forEach(e => {
       if (e.accountId === currentAccId) { e.accountId = null; e.linkedTxId = null; }
     });
@@ -6437,15 +6284,24 @@ function computeHareketKontrol() {
     txs.forEach(t => {
       const no = String(t.irsaliyeNo || '').trim();
       if (!no) return;
-      // Aynı fatura numarasında KDV oranı farklı olan hareketler (karma oranlı fatura satırları) mükerrer sayılmaz.
-      let rate = null;
-      if (t.taxEntryId) { const te = (data.taxEntries || []).find(e => e.id === t.taxEntryId); if (te && te.vatRate != null) rate = Number(te.vatRate); }
-      else if (t.kdvTransfer && t.kdvRate != null) rate = Number(t.kdvRate);
-      const key = irsKeyOf(no) + '|' + (rate === null ? '' : rate);
+      const key = irsKeyOf(no);
       (groups[key] = groups[key] || []).push(t);
     });
+    // Aynı numaralı faturada farklı KDV oranı varsa (ör. aynı fatura no altında %20 ve %10 kalemler)
+    // bu mükerrer değil, çok oranlı tek fatura sayılır ve gözardı edilir. KDV oranı yalnızca
+    // Vergi Takibi'nden girilen veya "Vergi Takibi'ne aktar" işaretli hareketlerde bilinir; oranı bilinmeyen hareketler karşılaştırmaya girmez.
+    const hasMixedRates = (g) => {
+      const rates = new Set();
+      g.forEach(t => {
+        // Vergi Takibi'nden girilen faturanın cari hareketi: oran o kayıttan okunur.
+        const te = t.fromTaxEntryId ? (data.taxEntries || []).find(e => e.id === t.fromTaxEntryId) : null;
+        if (te && te.vatRate != null) { rates.add(Number(te.vatRate)); return; }
+        if (t.kdvTransfer && t.kdvRate !== '' && t.kdvRate != null) rates.add(Number(t.kdvRate));
+      });
+      return rates.size > 1;
+    };
     const dupGroups = Object.values(groups)
-      .filter(g => g.length > 1)
+      .filter(g => g.length > 1 && !hasMixedRates(g))
       .sort((a, b) => b[0].date.localeCompare(a[0].date));
     if (dupGroups.length > 0) {
       results.push({ accountId: acc.id, accountName: acc.name, accountType: acc.type, groups: dupGroups });
@@ -6847,7 +6703,7 @@ document.getElementById('taxEditSave').addEventListener('click', () => {
     const dir = e.type === 'satis' ? 'tahsilat' : 'odeme';
     createInvoicePayment({
       date: pay.date, type: dir, desc: invPayDesc(dir, e.irsaliyeNo), amount: pay.amount,
-      kasaAccount: pay.kasaAccount, paymentMethod: pay.paymentMethod, cariAccountId: pay.cariAccountId,
+      kasaAccount: pay.kasaAccount, paymentMethod: pay.paymentMethod,
       accountId: e.type === 'masraf' ? null : e.accountId, taxEntryId: e.id, srcTxId: e.fromTxId || null
     });
     if (typeof renderKasa === 'function') renderKasa();
