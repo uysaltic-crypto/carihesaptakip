@@ -117,8 +117,13 @@
   .neg { color: var(--danger); }
   .list-wrap { background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft); box-shadow: var(--shadow-1); overflow: hidden; }
   .tx-col { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .col-resizer { position: absolute; top: 0; right: -5px; bottom: 0; width: 10px; cursor: col-resize; z-index: 2; }
-  .col-resizer:hover, .col-resizer.resizing { background: rgba(47,111,224,0.22); }
+  .col-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 12px; cursor: col-resize; z-index: 2; }
+  .col-resizer::after {
+    content: ""; position: absolute; top: 15%; bottom: 15%; right: 4px; width: 3px; border-radius: 2px;
+    background: var(--muted-2); opacity: .55; transition: background .12s ease, opacity .12s ease;
+  }
+  .col-resizer:hover, .col-resizer.resizing { background: rgba(47,111,224,0.12); }
+  .col-resizer:hover::after, .col-resizer.resizing::after { background: var(--info); opacity: 1; }
   @media (max-width: 720px) { .col-resizer { display: none; } }
   .empty { text-align: center; color: var(--muted-2); padding: 40px 0; font-size: 14px; }
   .detail-card {
@@ -336,6 +341,9 @@
     .veh-actions, .driver-card > div:last-child { width: 100%; justify-content: flex-end; margin-top: 6px; }
     .perkm-name { width: 90px; }
     .fuel-name { width: 90px; }
+  }
+  @media (min-width: 721px) {
+  #kasaFormGrid input, #kasaFormGrid select, #kasaFormGrid button { font-size: 12.5px; padding: 7px 6px; min-width: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     .modal-box { animation: none; }
@@ -735,7 +743,7 @@
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran gerçek hareketlerinizi (yaptığınız ödemeler ve aldığınız tahsilatlar) tarihe göre kaydeder. <b>Kasa sekmesinde sadece nakit</b> işlenir; <b>Banka</b> ve <b>Kredi Kartı</b> hareketleri kendi sekmelerinde, ayrı bakiyelerle takip edilir. Bir hareketi isterseniz bir cariyle ilişkilendirebilirsiniz; ancak bu ekrandaki kayıtlar carinin bakiyesini <b>etkilemez</b> — cari hesaplardan bağımsız, ayrı bir kasa defteridir.</p>
     <div id="kasaTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px;"></div>
     <div class="summary" id="kasaSummaryCards"></div>
-    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 130px 110px 1.4fr 1fr 150px 34px 120px 34px 110px 70px;">
+    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 118px 84px minmax(0,1fr) 130px 96px 28px 84px 28px 90px 62px; gap:6px;">
       <input type="date" id="kasaDate" />
       <select id="kasaType">
         <option value="tahsilat">Tahsilat</option>
