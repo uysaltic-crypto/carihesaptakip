@@ -735,7 +735,7 @@
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran gerçek hareketlerinizi (yaptığınız ödemeler ve aldığınız tahsilatlar) tarihe göre kaydeder. <b>Kasa sekmesinde sadece nakit</b> işlenir; <b>Banka</b> ve <b>Kredi Kartı</b> hareketleri kendi sekmelerinde, ayrı bakiyelerle takip edilir. Bir hareketi isterseniz bir cariyle ilişkilendirebilirsiniz; ancak bu ekrandaki kayıtlar carinin bakiyesini <b>etkilemez</b> — cari hesaplardan bağımsız, ayrı bir kasa defteridir.</p>
     <div id="kasaTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px;"></div>
     <div class="summary" id="kasaSummaryCards"></div>
-    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 130px 110px 1.4fr 1fr 150px 34px 110px 70px;">
+    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 130px 110px 1.4fr 1fr 150px 34px 120px 34px 110px 70px;">
       <input type="date" id="kasaDate" />
       <select id="kasaType">
         <option value="tahsilat">Tahsilat</option>
@@ -745,6 +745,8 @@
       <input type="text" id="kasaAcc" list="kasaAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="kasaAccDatalist"></datalist>
       <input type="text" id="kasaPayMethod" list="payMethodList" placeholder="Ödeme şekli (opsiyonel)" />
       <button type="button" id="kasaPayMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 6px;">⚙</button>
+      <input type="text" id="kasaTxType" list="txTypeList" placeholder="Tür (Normal)" />
+      <button type="button" id="kasaTxTypeManageBtn" title="Tür listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 6px;">⚙</button>
       <input type="number" id="kasaAmount" placeholder="Tutar" min="0" step="0.01" />
       <button id="addKasaBtn" class="primary-btn">+ Ekle</button>
     </div>
@@ -813,6 +815,11 @@
       <div style="display:flex; gap:8px;">
         <input type="text" id="kasaEditPayMethod" list="payMethodList" placeholder="Nakit, Havale/EFT, Çek..." style="flex:1;" />
         <button type="button" id="kasaEditPayMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 10px;">⚙</button>
+      </div>
+      <label style="font-size:12px; color:#5B6B82;">Tür</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="kasaEditTxType" list="txTypeList" placeholder="Normal" style="flex:1;" />
+        <button type="button" id="kasaEditTxTypeManageBtn" title="Tür listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 10px;">⚙</button>
       </div>
       <input type="number" id="kasaEditAmount" placeholder="Tutar" min="0" step="0.01" />
     </div>
@@ -1700,12 +1707,16 @@ document.getElementById('txTypeManageSave').addEventListener('click', () => {
         if ((t.txType || '').trim().toLocaleLowerCase('tr-TR') === fromKey) t.txType = r.to;
       });
     });
+    (data.kasaEntries || []).forEach(e => {
+      if ((e.txType || '').trim().toLocaleLowerCase('tr-TR') === fromKey) e.txType = r.to;
+    });
   });
   data.txTypeOptions = finalList;
   save();
   renderTxTypeList();
   document.getElementById('txTypeManageModalOverlay').style.display = 'none';
   if (currentAccId) renderTx();
+  if (activeView === 'kasa') renderKasa();
 });
 
 // "Ödeme şekli" alanının öneri listesi (datalist) kullanıcı tarafından yönetilebilir (data.payMethodOptions).
@@ -2480,7 +2491,7 @@ function upsertCariTxFromKasa(entry) {
     id: 'tx_k_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     date: entry.date,
     desc: entry.desc || (isTahsilat ? 'Kasa tahsilatı' : 'Kasa ödemesi'),
-    irsaliyeNo: '', vehiclePlate: '', txType: '',
+    irsaliyeNo: '', vehiclePlate: '', txType: entry.txType || '',
     debit: isTahsilat ? 0 : amount,
     credit: isTahsilat ? amount : 0,
     paymentMethod: entry.paymentMethod || '',
@@ -7358,7 +7369,7 @@ function renderKasa() {
         <div class="rem-left">
           <div>
             <span class="rem-date">${fmtDate(r.date)}</span>
-            <p class="rem-desc"><span style="color:${typeColor}; font-weight:600;">${typeLabel}</span> — ${escapeHtml(r.desc || '')}
+            <p class="rem-desc"><span style="color:${typeColor}; font-weight:600;">${typeLabel}</span> — ${txTypeBadge(r.txType)}${escapeHtml(r.desc || '')}
               <span class="rem-acc">${extras ? extras + ' · ' : ''}Bakiye: ${fmt(r.runningBalance)}</span>
             </p>
           </div>
@@ -7409,16 +7420,18 @@ document.getElementById('addKasaBtn').addEventListener('click', () => {
   const desc = document.getElementById('kasaDesc').value.trim();
   const accountId = resolveSearchableId('kasaAcc', data.accounts);
   const paymentMethod = document.getElementById('kasaPayMethod').value.trim();
+  const txType = document.getElementById('kasaTxType').value.trim();
   const amount = parseFloat(document.getElementById('kasaAmount').value) || 0;
   if (!date || !amount) return;
   if (!data.kasaEntries) data.kasaEntries = [];
-  const entry = { id: 'kasa_' + Date.now(), date, type, desc, accountId, paymentMethod, amount, kasaAccount: activeKasaAcct, linkedTxId: null };
+  const entry = { id: 'kasa_' + Date.now(), date, type, desc, accountId, paymentMethod, txType, amount, kasaAccount: activeKasaAcct, linkedTxId: null };
   data.kasaEntries.push(entry);
   upsertCariTxFromKasa(entry);
   save();
   document.getElementById('kasaDesc').value = '';
   document.getElementById('kasaAcc').value = '';
   document.getElementById('kasaPayMethod').value = '';
+  document.getElementById('kasaTxType').value = '';
   document.getElementById('kasaAmount').value = '';
   renderKasa();
   if (currentAccId === accountId) refreshDetail();
@@ -7433,6 +7446,7 @@ function openKasaEdit(id) {
   document.getElementById('kasaEditDesc').value = e.desc || '';
   setSearchableValue('kasaEditAcc', data.accounts, e.accountId);
   document.getElementById('kasaEditPayMethod').value = e.paymentMethod || '';
+  document.getElementById('kasaEditTxType').value = e.txType || '';
   document.getElementById('kasaEditAmount').value = e.amount;
   document.getElementById('kasaEditModalOverlay').style.display = 'flex';
 }
@@ -7447,11 +7461,12 @@ document.getElementById('kasaEditSave').addEventListener('click', () => {
   const desc = document.getElementById('kasaEditDesc').value.trim();
   const accountId = resolveSearchableId('kasaEditAcc', data.accounts);
   const paymentMethod = document.getElementById('kasaEditPayMethod').value.trim();
+  const txType = document.getElementById('kasaEditTxType').value.trim();
   const amount = parseFloat(document.getElementById('kasaEditAmount').value) || 0;
   if (!date || !amount) return;
   const e = (data.kasaEntries || []).find(x => x.id === editingKasaId);
   const prevAccountId = e.accountId;
-  e.date = date; e.type = type; e.desc = desc; e.accountId = accountId; e.paymentMethod = paymentMethod; e.amount = amount;
+  e.date = date; e.type = type; e.desc = desc; e.accountId = accountId; e.paymentMethod = paymentMethod; e.txType = txType; e.amount = amount;
   e.kasaAccount = document.getElementById('kasaEditAcct').value;
   upsertCariTxFromKasa(e);
   save();
@@ -7462,6 +7477,8 @@ document.getElementById('kasaEditSave').addEventListener('click', () => {
 
 document.getElementById('kasaPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
 document.getElementById('kasaEditPayMethodManageBtn').addEventListener('click', openPayMethodManageModal);
+document.getElementById('kasaTxTypeManageBtn').addEventListener('click', openTxTypeManageModal);
+document.getElementById('kasaEditTxTypeManageBtn').addEventListener('click', openTxTypeManageModal);
 
 // ---- Otomatik Drive yedeği (açılışta günde bir kez + belirlenen saatte) ----
 // Ayarlar ana veriden ayrı tutulur; yedekten geri yükleme bu ayarları bozmaz.
