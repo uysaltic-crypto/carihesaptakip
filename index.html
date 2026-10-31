@@ -7442,12 +7442,12 @@ document.getElementById('addKasaBtn').addEventListener('click', () => {
   data.kasaEntries.push(entry);
   upsertCariTxFromKasa(entry);
   save();
+  // Tarih, Ödeme/Tahsilat, ilgili cari, ödeme şekli ve tür bilinçli olarak SİLİNMEZ:
+  // art arda işlerken tekrar girmek gerekmesin. Sadece açıklama ve tutar temizlenir.
   document.getElementById('kasaDesc').value = '';
-  document.getElementById('kasaAcc').value = '';
-  document.getElementById('kasaPayMethod').value = '';
-  document.getElementById('kasaTxType').value = '';
   document.getElementById('kasaAmount').value = '';
   renderKasa();
+  document.getElementById('kasaAmount').focus();
   if (currentAccId === accountId) refreshDetail();
 });
 
