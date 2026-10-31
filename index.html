@@ -113,6 +113,8 @@
   .acc-row .type { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
   .acc-row .note { font-size: 12px; color: #5B6B82; margin: 3px 0 0; white-space: pre-wrap; }
   .acc-row .bal { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .bal-tag { font-size: 11px; font-weight: 600; letter-spacing: .02em; margin-right: 8px; padding: 2px 7px; border-radius: 999px; border: 1px solid currentColor; opacity: .85; }
+  .detail-head .bal-value .bal-tag { font-size: 12px; }
   .pos { color: var(--success); }
   .neg { color: var(--danger); }
   .list-wrap { background: var(--surface); border-radius: var(--r-md); border: 1px solid var(--line-soft); box-shadow: var(--shadow-1); overflow: hidden; }
@@ -1614,6 +1616,10 @@ function save() {
   return ok;
 }
 
+function balLabel(b) {
+  return b > 0 ? 'Alacak' : (b < 0 ? 'Borç' : '');
+}
+
 function balanceOf(id) {
   const txs = data.transactions[id] || [];
   return txs.reduce((s, t) => s + (Number(t.debit)||0) - (Number(t.credit)||0), 0);
@@ -2208,7 +2214,7 @@ function renderList() {
         <p class="type">${a.type === 'musteri' ? 'Müşteri' : (a.type === 'tedarikci' ? 'Tedarikçi' : (a.type === 'sofor' ? 'Şoför' : 'Ortak'))}</p>
         ${a.note ? `<p class="note">${escapeHtml(a.note)}</p>` : ''}
       </div>
-      <p class="bal ${cls}">${fmt(b)}</p>
+      <p class="bal ${cls}">${b !== 0 ? `<span class="bal-tag">${balLabel(b)}</span>` : ''}${fmt(b)}</p>
     </div>`;
   }).join('');
 }
@@ -2557,7 +2563,7 @@ function openDetail(id) {
   const acc = data.accounts.find(a => a.id === id);
   document.getElementById('detName').textContent = acc.name;
   document.getElementById('detSub').textContent = (acc.type === 'musteri' ? 'Müşteri' : (acc.type === 'tedarikci' ? 'Tedarikçi' : (acc.type === 'sofor' ? 'Şoför' : 'Ortak'))) + (acc.phone ? ' · ' + acc.phone : '') + (acc.taxNo ? ' · VN: ' + acc.taxNo : '') + (acc.banka ? ' · ' + acc.banka : '') + (acc.iban ? ' · IBAN: ' + acc.iban : '');
-  document.getElementById('detBalance').textContent = fmt(balanceOf(id));
+  { const _b = balanceOf(id); document.getElementById('detBalance').innerHTML = (_b !== 0 ? '<span class="bal-tag">' + balLabel(_b) + '</span>' : '') + fmt(_b); }
   document.getElementById('listView').style.display = 'none';
   document.getElementById('detailView').style.display = 'block';
   updateTxLayout(acc.type === 'sofor');
@@ -2575,7 +2581,7 @@ function refreshDetail() {
   if (!acc) return;
   document.getElementById('detName').textContent = acc.name;
   document.getElementById('detSub').textContent = (acc.type === 'musteri' ? 'Müşteri' : (acc.type === 'tedarikci' ? 'Tedarikçi' : (acc.type === 'sofor' ? 'Şoför' : 'Ortak'))) + (acc.phone ? ' · ' + acc.phone : '') + (acc.taxNo ? ' · VN: ' + acc.taxNo : '') + (acc.banka ? ' · ' + acc.banka : '') + (acc.iban ? ' · IBAN: ' + acc.iban : '');
-  document.getElementById('detBalance').textContent = fmt(balanceOf(currentAccId));
+  { const _b = balanceOf(currentAccId); document.getElementById('detBalance').innerHTML = (_b !== 0 ? '<span class="bal-tag">' + balLabel(_b) + '</span>' : '') + fmt(_b); }
   renderTx();
 }
 
