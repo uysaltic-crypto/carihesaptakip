@@ -1136,7 +1136,7 @@
           <input type="checkbox" id="gdriveAutoOn" /> Otomatik yedekle
         </label>
         <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-size:13px;">
-          Günlük yedek saati: <input type="time" id="gdriveAutoTime" value="16:00" />
+          Günlük yedek saati: <input type="time" id="gdriveAutoTime" value="17:00" />
         </div>
         <p style="font-size:11.5px; color:#5B6B82; margin:0 0 6px; line-height:1.5;">Program açıldığında günde bir kez, ayrıca bu saatte (sayfa açıksa) yedeklenir. Google izni süresi dolmuşsa ekranın üstünde "Şimdi yedekle" butonu çıkar; basınca yedek alınır. Bu cihazda hiç veri yoksa buluttaki yedeğin üzerine yazmamak için otomatik yedek alınmaz.</p>
         <p id="gdriveAutoLast" style="font-size:12px; color:#3A4657; margin:0;"></p>
@@ -7512,7 +7512,9 @@ function autoBackupSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(AUTO_BK_KEY) || '{}') || {}; } catch (e) { s = {}; }
   if (s.enabled === undefined) s.enabled = true;
-  if (!s.time) s.time = '16:00';
+  if (!s.time) s.time = '17:00';
+  // Tek seferlik geçiş: uyarı saati 17:00 olarak ayarlandı
+  if (!s.timeV17) { s.time = '17:00'; s.timeV17 = true; try { localStorage.setItem(AUTO_BK_KEY, JSON.stringify(s)); } catch (e) {} }
   return s;
 }
 function saveAutoBackupSettings(s) {
@@ -7543,9 +7545,8 @@ function autoBackupDue() {
   if (!s.enabled || !gdriveGetClientId() || isAllDataEmpty()) return false;
   const now = new Date();
   const today = localDateStr(now);
-  const openDue = s.lastOpenDate !== today;
-  const timeDue = localTimeStr(now) >= s.time && s.lastTimedDate !== today;
-  return openDue || timeDue;
+  // Uyarı yalnızca belirlenen saatte (varsayılan 17:00) ve günde bir kez verilir
+  return localTimeStr(now) >= s.time && s.lastTimedDate !== today;
 }
 
 // Bütün veriyi Drive'daki yedek dosyasının üzerine yazar (gdriveAccessToken geçerli olmalı).
@@ -7624,7 +7625,7 @@ document.getElementById('gdriveAutoOn').addEventListener('change', () => {
 });
 document.getElementById('gdriveAutoTime').addEventListener('change', () => {
   const s = autoBackupSettings();
-  s.time = document.getElementById('gdriveAutoTime').value || '16:00';
+  s.time = document.getElementById('gdriveAutoTime').value || '17:00';
   if (s.lastTimedDate === localDateStr() && localTimeStr() < s.time) s.lastTimedDate = null;
   saveAutoBackupSettings(s);
   updateAutoBackupBanner();
