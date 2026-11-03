@@ -7165,7 +7165,7 @@ function renderInvImport() {
   const existingTax = data.taxEntries || [];
   const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
   const seen = new Set();
-  let nNew = 0, nDup = 0, nAttach = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
+  let nNew = 0, nDup = 0, nAttach = 0, nCari = 0, nSkip = 0, sumMatrah = 0, sumKdv = 0;
 
   const rows = invImportItems.map((item, i) => {
     const cp = invCounterpart(item, dir);
@@ -7183,6 +7183,27 @@ function renderInvImport() {
         st = (item.xmlStripped && dupEntries.some(e => !e.docKey))
           ? { kind: 'attach', label: 'Zaten var — fatura görseli eklenecek' }
           : { kind: 'dup', label: "Vergi Takibi'nde zaten var" };
+        // Daha önce içeri aktarılmış ama cariye hareketi işlenmemiş faturalar:
+        // "carilere hareket de işle" işaretliyse cariye hareket olarak eklenebilir.
+        item._pendEntries = null; item._lockedAcc = null;
+        if (doCari && st.kind === 'dup') {
+          const pend = dupEntries.filter(e => !e.fromTxId && !e.linkedTxId);
+          if (pend.length > 0) {
+            const locked = pend.find(e => e.accountId && data.accounts.some(a => a.id === e.accountId));
+            const target = locked ? locked.accountId : ((item.choice && item.choice !== '__none__') ? item.choice : null);
+            if (target) {
+              const has = target !== '__new__' && (data.transactions[target] || []).some(tx => invNoNorm(tx.irsaliyeNo) && invNoNorm(tx.irsaliyeNo) === noKey);
+              if (has) st = { kind: 'dup', label: 'Carisinde aynı fatura no zaten var' };
+              else {
+                st = { kind: 'cari', label: 'Zaten var — cariye hareket eklenecek' };
+                item._pendEntries = pend; item._lockedAcc = locked ? locked.accountId : null;
+              }
+            } else {
+              st = { kind: 'dup', label: "Vergi Takibi'nde var — cari seçilmedi" };
+              item._pendEntries = pend;
+            }
+          }
+        }
       }
       else if (seen.has(key)) st = { kind: 'dup', label: 'Aynı fatura listede tekrar var' };
       else { st = { kind: 'new', label: 'Yeni' }; seen.add(key); }
@@ -7191,16 +7212,20 @@ function renderInvImport() {
     if (st.kind === 'new') {
       nNew++;
       item.lines.forEach(l => { sumMatrah += l.amount; sumKdv += l.amount * l.rate / 100; });
-    } else if (st.kind === 'dup') nDup++; else if (st.kind === 'attach') nAttach++; else nSkip++;
+    } else if (st.kind === 'dup') nDup++; else if (st.kind === 'attach') nAttach++; else if (st.kind === 'cari') nCari++; else nSkip++;
 
     const matrah = item.lines.reduce((s, l) => s + l.amount, 0);
     const kdv = item.lines.reduce((s, l) => s + l.amount * l.rate / 100, 0);
     const rates = item.lines.map(l => '%' + l.rate).join(', ');
-    const color = st.kind === 'new' ? '#1D8A5B' : (st.kind === 'dup' ? '#8B99AD' : (st.kind === 'attach' ? '#2F6FE0' : '#C43D33'));
+    const color = st.kind === 'new' ? '#1D8A5B' : (st.kind === 'dup' ? '#8B99AD' : ((st.kind === 'attach' || st.kind === 'cari') ? '#2F6FE0' : '#C43D33'));
 
     let accCell = '<span style="color:#8B99AD;">—</span>';
     let extra = '';
-    if (st.kind === 'new') {
+    const pendNoAcc = st.kind === 'dup' && item._pendEntries && !item._lockedAcc && doCari && (!item.choice || item.choice === '__none__');
+    if (st.kind === 'cari' && item._lockedAcc) {
+      const la = data.accounts.find(a => a.id === item._lockedAcc);
+      accCell = `<span>${la ? escapeHtml(la.name) : ''}</span>`;
+    } else if (st.kind === 'new' || (st.kind === 'cari' && !item._lockedAcc) || pendNoAcc) {
       accCell = `<select class="invAccSel" data-i="${i}" style="width:100%; font-size:12px; padding:5px 6px;">
         <option value="__new__" ${item.choice === '__new__' ? 'selected' : ''}>+ Yeni cari aç${cp.name ? ': ' + escapeHtml(cp.name) : ''}</option>
         <option value="__none__" ${item.choice === '__none__' ? 'selected' : ''}>Cari ilişkisi kurma</option>
@@ -7212,7 +7237,7 @@ function renderInvImport() {
       }
     }
     const noteHtml = item.notes.length ? `<div style="font-size:11px; color:#A3660F;">${item.notes.map(escapeHtml).join(' · ')}</div>` : '';
-    return `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; border-bottom:1px solid #E7EAF0; font-size:12.5px; align-items:start; ${(st.kind === 'new' || st.kind === 'attach') ? '' : 'opacity:.6;'}">
+    return `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; border-bottom:1px solid #E7EAF0; font-size:12.5px; align-items:start; ${(st.kind === 'new' || st.kind === 'attach' || st.kind === 'cari') ? '' : 'opacity:.6;'}">
       <span>${item.date ? fmtDate(item.date) : '—'}</span>
       <span><b>${escapeHtml(item.invoiceNo || '—')}</b>${noteHtml}</span>
       <span>${escapeHtml(cp.name || '(adsız)')}${cp.id ? `<div style="font-size:11px; color:#8B99AD;">${escapeHtml(cp.id)}</div>` : ''}</span>
@@ -7229,14 +7254,14 @@ function renderInvImport() {
     ? `<div class="empty">${document.getElementById('invImportDir').value ? 'Henüz dosya seçilmedi.' : 'Önce yukarıdan fatura türünü seçin (Satış / Alış); ardından dosya seçme penceresi açılır.'}</div>`
     : header + rows.join('');
 
-  let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nAttach > 0 ? '<span style="color:#2F6FE0;"><b>' + nAttach + '</b> mevcut kayda görsel eklenecek</span> · ' : ''}${nDup} zaten var · ${nSkip} atlandı`;
+  let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nAttach > 0 ? '<span style="color:#2F6FE0;"><b>' + nAttach + '</b> mevcut kayda görsel eklenecek</span> · ' : ''}${nCari > 0 ? '<span style="color:#2F6FE0;"><b>' + nCari + '</b> mevcut faturaya cari hareketi eklenecek</span> · ' : ''}${nDup} zaten var · ${nSkip} atlandı`;
   if (nNew > 0) sum += ` · Eklenecek matrah: <b>${fmt(sumMatrah)}</b>, KDV: <b>${fmt(sumKdv)}</b>`;
   if (invImportMeta.notInvoice > 0) sum += `<div style="font-size:12px; color:#8B99AD;">${invImportMeta.notInvoice} dosya fatura olmadığı için (ör. uygulama yanıtı) yok sayıldı.</div>`;
   if (invImportMeta.errors.length > 0) sum += `<div style="font-size:12px; color:#C43D33;">${invImportMeta.errors.map(escapeHtml).join('<br>')}</div>`;
   document.getElementById('invImportSummary').innerHTML = sum;
   const btn = document.getElementById('invImportConfirm');
-  btn.disabled = nNew + nAttach === 0;
-  btn.textContent = nNew > 0 ? nNew + ' faturayı içeri aktar' : (nAttach > 0 ? nAttach + ' faturaya görsel ekle' : 'İçeri aktar');
+  btn.disabled = nNew + nAttach + nCari === 0;
+  btn.textContent = nNew > 0 ? nNew + ' faturayı içeri aktar' : (nCari > 0 ? nCari + ' faturayı cariye işle' : (nAttach > 0 ? nAttach + ' faturaya görsel ekle' : 'İçeri aktar'));
 }
 
 document.getElementById('taxImportBtn').addEventListener('click', () => {
@@ -7270,9 +7295,9 @@ document.getElementById('invImportFile').addEventListener('change', async (e) =>
   const dir = document.getElementById('invImportDir').value;
   res.items.forEach(it => { it.choice = invDefaultChoice(it, dir); });
   invImportItems = invImportItems.concat(res.items);
-  // Fatura tarihine göre (eskiden yeniye), aynı gündeyse fatura no'ya göre sırala
-  invImportItems.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) ||
-    String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''), 'tr', { numeric: true }));
+  // Fatura tarihine göre sondan başa (yeniden eskiye), aynı gündeyse fatura no'ya göre sırala
+  invImportItems.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) ||
+    String(b.invoiceNo || '').localeCompare(String(a.invoiceNo || ''), 'tr', { numeric: true }));
   invImportMeta.notInvoice += res.notInvoice;
   invImportMeta.errors = invImportMeta.errors.concat(res.errors);
   info.textContent = files.length + ' dosya okundu';
@@ -7299,7 +7324,8 @@ document.getElementById('invImportConfirm').addEventListener('click', async () =
   const doCari = document.getElementById('invImportCariTx').checked;
   const newOnes = invImportItems.filter(it => it._status && it._status.kind === 'new');
   const attachOnes = invImportItems.filter(it => it._status && it._status.kind === 'attach');
-  if (newOnes.length === 0 && attachOnes.length === 0) return;
+  const cariOnes = invImportItems.filter(it => it._status && it._status.kind === 'cari');
+  if (newOnes.length === 0 && attachOnes.length === 0 && cariOnes.length === 0) return;
   if (!data.taxEntries) data.taxEntries = [];
   const confirmBtn = document.getElementById('invImportConfirm');
   confirmBtn.disabled = true;
@@ -7360,13 +7386,45 @@ document.getElementById('invImportConfirm').addEventListener('click', async () =
       addedEntries++;
     });
   });
+  // Daha önce içeri aktarılmış, cariye işlenmemiş faturalar → cari hareketi ekle
+  let cariOnlyCount = 0;
+  cariOnes.forEach(item => {
+    const cp = invCounterpart(item, dir);
+    let accId = item._lockedAcc || null;
+    if (!accId) {
+      if (item.choice === '__new__') {
+        if (cp.name) {
+          const key = cp.id || invNorm(cp.name);
+          if (!createdAccs[key]) {
+            const acc = { id: 'acc_' + stamp + '_' + (seq++), name: cp.name, type: dir === 'satis' ? 'musteri' : 'tedarikci', phone: '', taxNo: cp.id || '', iban: '', banka: '', note: '' };
+            data.accounts.push(acc);
+            data.transactions[acc.id] = [];
+            createdAccs[key] = acc.id;
+            createdCount++;
+          }
+          accId = createdAccs[key];
+        }
+      } else if (item.choice && item.choice !== '__none__') accId = item.choice;
+    }
+    if (!accId) return;
+    let added = 0;
+    (item._pendEntries || []).forEach(e => {
+      e.accountId = accId;
+      e.noCariTx = false;
+      upsertCariTxFromTaxEntry(e);
+      if (e.linkedTxId) added++;
+    });
+    if (added > 0) cariOnlyCount++;
+    cariCount += added;
+  });
   save();
   document.getElementById('invImportModalOverlay').style.display = 'none';
   invImportItems = [];
   renderVergiTakibi();
   renderList();
   if (currentAccId) refreshDetail();
-  alert(newOnes.length + ' fatura içeri aktarıldı (' + addedEntries + ' KDV kaydı)' +
+  alert((newOnes.length > 0 ? newOnes.length + ' fatura içeri aktarıldı (' + addedEntries + ' KDV kaydı)' : 'İşlem tamamlandı') +
+    (cariOnlyCount ? '\n' + cariOnlyCount + ' mevcut faturanın cari hareketi eklendi' : '') +
     (attachedCount ? '\n' + attachedCount + ' mevcut faturaya görsel eklendi' : '') +
     (createdCount ? '\n' + createdCount + ' yeni cari açıldı' : '') +
     (cariCount ? '\n' + cariCount + ' cari hareketi işlendi' : '') + '.');
