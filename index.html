@@ -684,6 +684,9 @@
 
     <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Araç / koçan bazında eksik no kontrolü <span style="font-weight:400; color:#5B6B82; font-size:12px;">(kullanılan no'lardan önce/sonra kalan, henüz işlenmemiş no'lar)</span></p>
     <div class="list-wrap" id="irsGapList"></div>
+
+    <p style="font-weight:600; font-size:15px; margin:18px 0 8px;">Koçanı kayıtlı olmayan no'lar için tahmini atlanan kontrolü <span style="font-weight:400; color:#5B6B82; font-size:12px;">("İrsaliye Takip"te koçanı girilmemiş veya koçan aralığı dışında kalan no'lar; birbirine en fazla 50 no yakın olanlar tek koçan gibi sayılır)</span></p>
+    <div class="list-wrap" id="irsUncoveredList"></div>
   </div>
 
   <div id="fiyatkontrolView" style="display:none;">
@@ -3978,6 +3981,19 @@ function findIrsConflict(irsaliyeNo, excludeTripId, vehicleId) {
   ) || null;
 }
 
+// Numerik bir irsaliye no'sunun, "İrsaliye Takip"te kayıtlı (teslim alınmış olanlar dahil) hiçbir koçanın
+// başlangıç-bitiş aralığına girmediğini kontrol eder. Bu no'lar İrsaliye Kontrolü'nde koçan bazlı
+// taranamadığı için sefer girilirken kullanıcı uyarılır. Sayısal olmayan no'larda null döner.
+function irsNoOutsideBooklets(irsaliyeNo) {
+  const num = parseIrsNoNumeric(String(irsaliyeNo || '').trim());
+  if (num === null) return false;
+  return !data.irsaliyeler.some(bk => {
+    const r = bookletRangeOf(bk);
+    return r && num >= r.start && num <= r.end;
+  });
+}
+const IRS_NO_BOOKLET_MSG = (no) => `${no} numarası "İrsaliye Takip"te kayıtlı hiçbir koçanın aralığında değil. Koçan girilmezse bu no'nun çevresindeki atlanan/eksik numaralar kontrol edilemez.`;
+
 const IRS_GAP_MAX_RANGE = 5000; // performans için kontrol edilecek azami numara sayısı
 
 function driverVehicleLabelOf(t) {
@@ -4110,15 +4126,39 @@ function computeIrsKontrol() {
     return a.vehicleName.localeCompare(b.vehicleName, 'tr');
   });
 
-  return { tripsWithNo, vehicleGroups };
+  // Hiçbir koçan kaydının (teslim alınmış olanlar dahil) aralığına girmeyen numaralar: bunlar için
+  // koçan bilgisi olmadığından, yan yana kullanılan numaralar (aralarında en fazla 50 fark olan)
+  // tahmini bir koçan gibi gruplanır ve aradaki işlenmemiş numaralar "atlanan" olarak listelenir.
+  const uncoveredTrips = numericTrips.filter(x => !booklets.some(b => x.num >= b.range.start && x.num <= b.range.end));
+  const uncoveredNums = Array.from(new Set(uncoveredTrips.map(x => x.num))).sort((a, b) => a - b);
+  const uncoveredClusters = [];
+  uncoveredNums.forEach(n => {
+    const last = uncoveredClusters[uncoveredClusters.length - 1];
+    if (last && n - last.max <= DEFAULT_IRS_PAGE_COUNT) { last.nums.push(n); last.max = n; }
+    else uncoveredClusters.push({ min: n, max: n, nums: [n] });
+  });
+  uncoveredClusters.forEach(c => {
+    const set = new Set(c.nums);
+    c.missing = [];
+    for (let n = c.min + 1; n < c.max; n++) if (!set.has(n)) c.missing.push(n);
+    const trips = uncoveredTrips.filter(x => x.num >= c.min && x.num <= c.max).map(x => x.trip);
+    c.drivers = Array.from(new Set(trips.map(tr => {
+      const d = data.drivers.find(dd => dd.id === tr.driverId);
+      return d ? d.name : 'Silinmiş şoför';
+    })));
+    c.count = c.nums.length;
+  });
+  const uncovered = { clusters: uncoveredClusters, totalMissing: uncoveredClusters.reduce((s, c) => s + c.missing.length, 0) };
+
+  return { tripsWithNo, vehicleGroups, uncovered };
 }
 
 function updateIrsKontrolBadge() {
-  const { vehicleGroups } = computeIrsKontrol();
+  const { vehicleGroups, uncovered } = computeIrsKontrol();
   const total = vehicleGroups.reduce((sum, vg) => sum + vg.segments.reduce((s, seg) => {
     const dupExtra = seg.duplicateGroups.reduce((x, g) => x + (g.length - 1), 0);
     return s + dupExtra + seg.gapInfo.skipped.length + seg.gapInfo.notYetUsed.length;
-  }, 0), 0);
+  }, 0), 0) + uncovered.totalMissing;
   const badge = document.getElementById('irsKontrolBadge');
   if (total > 0) { badge.style.display = 'flex'; badge.textContent = total; }
   else badge.style.display = 'none';
@@ -4126,7 +4166,7 @@ function updateIrsKontrolBadge() {
 }
 
 function renderIrsaliyeKontrol() {
-  const { vehicleGroups } = computeIrsKontrol();
+  const { vehicleGroups, uncovered } = computeIrsKontrol();
   updateIrsKontrolBadge();
 
   let totalDupExtra = 0, totalSkipped = 0, totalNotYetUsed = 0, segCount = 0;
@@ -4140,6 +4180,7 @@ function renderIrsaliyeKontrol() {
     <div class="card"><p class="label">Mükerrer kayıt</p><p class="value" style="${totalDupExtra > 0 ? 'color:#C43D33;' : ''}">${totalDupExtra}</p></div>
     <div class="card"><p class="label">Atlanan no</p><p class="value" style="${totalSkipped > 0 ? 'color:#C43D33;' : ''}">${totalSkipped}</p></div>
     <div class="card"><p class="label">Eksik no</p><p class="value" style="${totalNotYetUsed > 0 ? 'color:#A3660F;' : ''}">${totalNotYetUsed}</p></div>
+    <div class="card"><p class="label">Koçansız (tahmini) atlanan</p><p class="value" style="${uncovered.totalMissing > 0 ? 'color:#C43D33;' : ''}">${uncovered.totalMissing}</p></div>
     <div class="card"><p class="label">Kontrol edilen koçan/aralık</p><p class="value">${segCount}</p></div>
   `;
 
@@ -4227,6 +4268,21 @@ function renderIrsaliyeKontrol() {
       gapRows.push(...rowsForVeh);
     }
   });
+  // Koçanı kayıtlı olmayan numaralar (tahmini atlanan kontrolü)
+  const uncList = document.getElementById('irsUncoveredList');
+  uncList.innerHTML = uncovered.clusters.filter(c => c.missing.length > 0).length === 0
+    ? `<div class="empty">Koçanı kayıtlı olmayan numaralar arasında atlanan no bulunamadı.</div>`
+    : uncovered.clusters.filter(c => c.missing.length > 0).map(c => `
+        <div class="rem-row">
+          <div class="rem-left">
+            <div>
+              <p class="rem-desc">${c.min} – ${c.max} arası (${c.count} no işlenmiş, ${escapeHtml(c.drivers.join(', '))}) — <b>${c.missing.length}</b> no atlanmış olabilir
+                <span class="rem-acc" style="color:#C43D33;">${escapeHtml(formatMissingRanges(c.missing))}</span>
+              </p>
+            </div>
+          </div>
+        </div>`).join('');
+
   gapList.innerHTML = gapRows.length === 0 ? `<div class="empty">Kontrol için, "İrsaliye Takip" ekranından başlangıç ve bitiş no'su girilmiş en az bir koçan kaydı gerekir, veya eksik no bulunamadı.</div>` : gapRows.join('');
 }
 
@@ -5234,6 +5290,12 @@ document.getElementById('tripEditSave').addEventListener('click', () => {
     focusAndSelect('tripEditIrsaliyeNo');
     return;
   }
+  const prevTrip = data.trips.find(x => x.id === editingTripId);
+  if (irsaliyeNo !== String((prevTrip && prevTrip.irsaliyeNo) || '').trim() && irsNoOutsideBooklets(irsaliyeNo) &&
+      !confirm(IRS_NO_BOOKLET_MSG(irsaliyeNo) + '\n\nYine de kaydedilsin mi?')) {
+    focusAndSelect('tripEditIrsaliyeNo');
+    return;
+  }
   const t = data.trips.find(x => x.id === editingTripId);
   t.driverId = driverId; t.irsaliyeNo = irsaliyeNo; t.date = date; t.desc = desc; t.vehicleId = vehicleId; t.price = price;
   upsertTripTx(t);
@@ -5250,9 +5312,16 @@ document.getElementById('tripEditIrsaliyeNo').addEventListener('input', () => {
   const conflict = findIrsConflict(val, editingTripId, vehicleId);
   if (conflict) {
     warn.textContent = `Bu no zaten kullanılmış: ${fmtDate(conflict.date)} — ${driverVehicleLabelPlain(conflict)}`;
+    warn.style.color = '';
     warn.style.display = 'block';
     document.getElementById('tripEditIrsaliyeNo').style.borderColor = '#C43D33';
+  } else if (irsNoOutsideBooklets(val)) {
+    warn.textContent = `Uyarı: ${val} hiçbir koçan aralığında değil — önce "İrsaliye Takip"ten koçanı ekleyin.`;
+    warn.style.color = '#A3660F';
+    warn.style.display = 'block';
+    document.getElementById('tripEditIrsaliyeNo').style.borderColor = '#E0A030';
   } else {
+    warn.style.color = '';
     warn.style.display = 'none';
     document.getElementById('tripEditIrsaliyeNo').style.borderColor = '';
   }
@@ -5271,6 +5340,10 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
   const conflict = findIrsConflict(irsaliyeNo, null, vehicleId);
   if (conflict) {
     alert(`Bu irsaliye no (${irsaliyeNo}) zaten kullanılmış:\n${fmtDate(conflict.date)} — ${driverVehicleLabelPlain(conflict)}\n\nLütfen farklı bir irsaliye no girin.`);
+    focusAndSelect('tripIrsaliyeNo');
+    return;
+  }
+  if (irsNoOutsideBooklets(irsaliyeNo) && !confirm(IRS_NO_BOOKLET_MSG(irsaliyeNo) + '\n\nYine de kaydedilsin mi?\n(İptal: koçanı önce "İrsaliye Takip"ten ekleyebilirsiniz)')) {
     focusAndSelect('tripIrsaliyeNo');
     return;
   }
@@ -5300,9 +5373,16 @@ document.getElementById('tripIrsaliyeNo').addEventListener('input', () => {
   const conflict = findIrsConflict(val, null, vehicleId);
   if (conflict) {
     warn.textContent = `Uyarı: bu no zaten kullanılmış — ${fmtDate(conflict.date)}, ${driverVehicleLabelPlain(conflict)}`;
+    warn.style.color = '';
     warn.style.display = 'block';
     document.getElementById('tripIrsaliyeNo').style.borderColor = '#C43D33';
+  } else if (irsNoOutsideBooklets(val)) {
+    warn.textContent = `Uyarı: ${val} hiçbir koçan aralığında değil — önce "İrsaliye Takip"ten koçanı ekleyin.`;
+    warn.style.color = '#A3660F';
+    warn.style.display = 'block';
+    document.getElementById('tripIrsaliyeNo').style.borderColor = '#E0A030';
   } else {
+    warn.style.color = '';
     warn.style.display = 'none';
     document.getElementById('tripIrsaliyeNo').style.borderColor = '';
   }
