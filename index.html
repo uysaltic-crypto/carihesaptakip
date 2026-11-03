@@ -774,6 +774,7 @@
     <p style="font-size:12.5px; color:#5B6B82; margin:0 0 10px;">Luca e-Belge Portal'da faturaları seçip <b>"İndir(Xml)"</b> ile indirin; inen XML dosyalarını veya ZIP'i buraya seçin (birden fazla dosya seçebilirsiniz). Program matrah ve KDV'yi faturanın içinden okur, Vergi Takibi'ne ekler. Daha önce eklenmiş faturalar (fatura no / ETTN) tekrar eklenmez. Eklemeden önce aşağıda önizleme görürsünüz.</p>
     <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
       <select id="invImportDir">
+        <option value="" selected disabled>— Önce fatura türünü seçin —</option>
         <option value="satis">Satış faturaları (benim kestiklerim)</option>
         <option value="alis">Alış faturaları (bana gelenler)</option>
       </select>
@@ -7219,7 +7220,7 @@ function renderInvImport() {
   const header = `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; font-size:11px; font-weight:600; color:#5B6B82; position:sticky; top:0;">
     <span>Tarih</span><span>Fatura no</span><span>Faturadaki ad</span><span>İlişkilendirilecek cari</span><span style="text-align:right;">Matrah</span><span style="text-align:right;">KDV</span><span>Durum</span></div>`;
   document.getElementById('invImportList').innerHTML = invImportItems.length === 0
-    ? '<div class="empty">Henüz dosya seçilmedi.</div>'
+    ? `<div class="empty">${document.getElementById('invImportDir').value ? 'Henüz dosya seçilmedi.' : 'Önce yukarıdan fatura türünü seçin (Satış / Alış); ardından dosya seçme penceresi açılır.'}</div>`
     : header + rows.join('');
 
   let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nAttach > 0 ? '<span style="color:#2F6FE0;"><b>' + nAttach + '</b> mevcut kayda görsel eklenecek</span> · ' : ''}${nDup} zaten var · ${nSkip} atlandı`;
@@ -7237,11 +7238,18 @@ document.getElementById('taxImportBtn').addEventListener('click', () => {
   invImportMeta = { notInvoice: 0, errors: [] };
   document.getElementById('invImportCariTx').checked = false;
   document.getElementById('invImportFileInfo').textContent = '';
+  document.getElementById('invImportDir').value = '';
   renderInvImport();
   document.getElementById('invImportModalOverlay').style.display = 'flex';
+});
+document.getElementById('invImportPickBtn').addEventListener('click', () => {
+  if (!document.getElementById('invImportDir').value) {
+    alert('Önce fatura türünü seçin (Satış / Alış).');
+    document.getElementById('invImportDir').focus();
+    return;
+  }
   document.getElementById('invImportFile').click();
 });
-document.getElementById('invImportPickBtn').addEventListener('click', () => document.getElementById('invImportFile').click());
 document.getElementById('invImportCancel').addEventListener('click', () => {
   document.getElementById('invImportModalOverlay').style.display = 'none';
   invImportItems = [];
@@ -7256,6 +7264,9 @@ document.getElementById('invImportFile').addEventListener('change', async (e) =>
   const dir = document.getElementById('invImportDir').value;
   res.items.forEach(it => { it.choice = invDefaultChoice(it, dir); });
   invImportItems = invImportItems.concat(res.items);
+  // Fatura tarihine göre (eskiden yeniye), aynı gündeyse fatura no'ya göre sırala
+  invImportItems.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) ||
+    String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''), 'tr', { numeric: true }));
   invImportMeta.notInvoice += res.notInvoice;
   invImportMeta.errors = invImportMeta.errors.concat(res.errors);
   info.textContent = files.length + ' dosya okundu';
@@ -7265,6 +7276,8 @@ document.getElementById('invImportDir').addEventListener('change', () => {
   const dir = document.getElementById('invImportDir').value;
   invImportItems.forEach(it => { it.choice = invDefaultChoice(it, dir); });
   renderInvImport();
+  // Tür seçilince ve henüz dosya yoksa dosya seçme penceresini aç
+  if (dir && invImportItems.length === 0) document.getElementById('invImportFile').click();
 });
 document.getElementById('invImportCariTx').addEventListener('change', renderInvImport);
 document.getElementById('invImportList').addEventListener('change', (e) => {
@@ -7276,6 +7289,7 @@ document.getElementById('invImportList').addEventListener('change', (e) => {
 
 document.getElementById('invImportConfirm').addEventListener('click', async () => {
   const dir = document.getElementById('invImportDir').value;
+  if (!dir) return;
   const doCari = document.getElementById('invImportCariTx').checked;
   const newOnes = invImportItems.filter(it => it._status && it._status.kind === 'new');
   const attachOnes = invImportItems.filter(it => it._status && it._status.kind === 'attach');
