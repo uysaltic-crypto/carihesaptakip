@@ -7223,7 +7223,7 @@ function renderInvImport() {
     </div>`;
   });
 
-  const header = `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; font-size:11px; font-weight:600; color:#5B6B82; position:sticky; top:0;">
+  const header = `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; font-size:11px; font-weight:600; color:#5B6B82; position:sticky; top:0; z-index:5;">
     <span>Tarih</span><span>Fatura no</span><span>Faturadaki ad</span><span>İlişkilendirilecek cari</span><span style="text-align:right;">Matrah</span><span style="text-align:right;">KDV</span><span>Durum</span></div>`;
   document.getElementById('invImportList').innerHTML = invImportItems.length === 0
     ? `<div class="empty">${document.getElementById('invImportDir').value ? 'Henüz dosya seçilmedi.' : 'Önce yukarıdan fatura türünü seçin (Satış / Alış); ardından dosya seçme penceresi açılır.'}</div>`
