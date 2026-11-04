@@ -4648,6 +4648,7 @@ function computeHakedisReport(dateFrom, dateTo) {
     }
 
     let hakedis = 0, resmi = 0, avans = 0, ceza = 0, halil = 0, masraf = 0;
+    const masrafItems = [];
     const icra = {};
     txs.forEach(t => {
       const typeRaw = (t.txType || '').trim();
@@ -4665,7 +4666,10 @@ function computeHakedisReport(dateFrom, dateTo) {
       else if (typeKey === 'avans') avans += (debit - credit);
       else if (typeKey === 'ceza') ceza += (debit - credit);
       else if (typeKey === 'halil') halil += (debit - credit);
-      else if (typeKey === 'masraf') masraf += (debit - credit);
+      else if (typeKey === 'masraf') {
+        masraf += (debit - credit);
+        masrafItems.push({ date: t.date, desc: (t.desc || '').trim(), amount: debit - credit });
+      }
       else {
         icra[typeKey] = (icra[typeKey] || 0) + (debit - credit);
         if (!dynamicLabels[typeKey]) dynamicLabels[typeKey] = typeRaw;
@@ -4674,7 +4678,7 @@ function computeHakedisReport(dateFrom, dateTo) {
     const icraTotal = Object.values(icra).reduce((s, v) => s + v, 0);
     const nakit = hakedis - resmi - icraTotal - avans - ceza - halil;
 
-    rows.push({ name: driver.name, group, hakedis, resmi, icra, avans, ceza, halil, nakit, masraf });
+    rows.push({ name: driver.name, group, hakedis, resmi, icra, avans, ceza, halil, nakit, masraf, masrafItems });
   });
 
   return { rows, dynamicLabels };
@@ -4769,6 +4773,33 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     <td>${num(totals.avans)}</td><td>${num(totals.ceza)}</td><td>${numHalil(totals.halil)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td>
   </tr>`;
 
+  // Raporun en altı: masrafı olan şoförlerin masraf açıklamaları ve tutarları (tabloyla aynı sırada)
+  const orderedRows = [];
+  activeCats.forEach(c => byGroup[c].forEach(r => orderedRows.push(r)));
+  looseRows.forEach(r => orderedRows.push(r));
+  const masrafRows = orderedRows.filter(r => r.masrafItems && r.masrafItems.length > 0);
+  let masrafDetailHtml = '';
+  if (masrafRows.length > 0) {
+    let mBody = '';
+    masrafRows.forEach(r => {
+      const items = r.masrafItems.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+      items.forEach((it, idx) => {
+        mBody += '<tr>' +
+          (idx === 0 ? `<td class="mdrv" rowspan="${items.length + (items.length > 1 ? 1 : 0)}">${escapeHtml(r.name)}</td>` : '') +
+          `<td class="mdate">${it.date ? fmtDate(it.date) : ''}</td>` +
+          `<td class="mdesc">${escapeHtml(it.desc || '—')}</td>` +
+          `<td class="mamt">${numMasraf(it.amount)}</td></tr>`;
+      });
+      if (items.length > 1) mBody += `<tr class="msub"><td colspan="2">${escapeHtml(r.name)} toplam</td><td class="mamt">${numMasraf(r.masraf)}</td></tr>`;
+    });
+    const mTotal = masrafRows.reduce((s, r) => s + r.masraf, 0);
+    masrafDetailHtml = `<h2>Masraf Detayı</h2>
+    <table class="mdet">
+      <thead><tr><th>ŞOFÖR</th><th>TARİH</th><th>AÇIKLAMA</th><th>TUTAR</th></tr></thead>
+      <tbody>${mBody}<tr class="mtot"><td colspan="3">GENEL TOPLAM</td><td class="mamt">${numMasraf(mTotal)}</td></tr></tbody>
+    </table>`;
+  }
+
   const titleParts = ['Şoför Hakediş Raporu'];
   if (dateFrom || dateTo) titleParts.push(`— ${dateFrom ? fmtDate(dateFrom) : 'başlangıç'} / ${dateTo ? fmtDate(dateTo) : 'bugün'}`);
   const title = titleParts.join(' ');
@@ -4794,6 +4825,15 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       td.toplam { background: #CFE6FA; font-weight: 700; }
       td.spacer, th.spacer { border: none; background: transparent; width: 14px; padding: 0; }
       tr.grp-spacer td { border: none; padding: 5px 0; }
+      h2 { font-size: 12px; margin: 22px 0 8px; }
+      table.mdet { page-break-inside: auto; }
+      table.mdet tr { page-break-inside: avoid; }
+      table.mdet td.mdrv { text-align: left; font-weight: 700; vertical-align: top; background: #F6F6F6; }
+      table.mdet td.mdate { text-align: center; }
+      table.mdet td.mdesc { text-align: left; white-space: normal; min-width: 260px; }
+      table.mdet td.mamt { color: #C0392B; font-weight: 600; }
+      table.mdet tr.msub td { font-weight: 700; text-align: right; background: #FAFAFA; }
+      table.mdet tr.mtot td { font-weight: 700; border-top: 2px solid #333; text-align: right; }
       tr.totals td { font-weight: 700; color: #2F6FE0; border-top: 2px solid #333; }
       @page { size: A4 landscape; margin: 10mm; }
       @media print { body { padding: 0; } }
@@ -4804,6 +4844,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       <thead>${headerHtml}</thead>
       <tbody>${bodyHtml}${totalsHtml}</tbody>
     </table>
+    ${masrafDetailHtml}
     <script>window.onload = () => { window.print(); };<\/script>
   </body></html>`);
   printWindow.document.close();
