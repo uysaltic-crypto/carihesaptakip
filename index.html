@@ -1566,7 +1566,14 @@ function migrateLegacyFuelData() {
 
 function migrateTxTypeOptions() {
   if (!Array.isArray(data.txTypeOptions) || data.txTypeOptions.length === 0) {
-    data.txTypeOptions = ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'];
+    data.txTypeOptions = ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans', 'Ceza'];
+    data.txTypeCezaAdded = true;
+    save();
+  }
+  // Mevcut kayıtlarda tür listesine bir kez "Ceza" eklenir (kullanıcı sonradan silerse tekrar eklenmez)
+  if (!data.txTypeCezaAdded) {
+    data.txTypeCezaAdded = true;
+    if (!data.txTypeOptions.some(v => String(v).trim().toLocaleLowerCase('tr-TR') === 'ceza')) data.txTypeOptions.push('Ceza');
     save();
   }
 }
@@ -1663,6 +1670,7 @@ const TX_TYPE_COLORS = {
   'resmi': ['#EAF1FD', '#2F6FE0'],
   'icra': ['#F5EAFD', '#8E44AD'],
   'avans': ['#E8F5EE', '#1E8E5A'],
+  'ceza': ['#FFE1E1', '#D63B3B'],
 };
 
 // "Tür" alanının öneri listesi (datalist) kullanıcı tarafından yönetilebilir (data.txTypeOptions).
@@ -4631,7 +4639,7 @@ function computeHakedisReport(dateFrom, dateTo) {
       group = driver.category || 'tir';
     }
 
-    let hakedis = 0, resmi = 0, avans = 0, masraf = 0;
+    let hakedis = 0, resmi = 0, avans = 0, ceza = 0, masraf = 0;
     const icra = {};
     txs.forEach(t => {
       const typeRaw = (t.txType || '').trim();
@@ -4647,6 +4655,7 @@ function computeHakedisReport(dateFrom, dateTo) {
       if (!typeRaw || typeKey === 'normal') { hakedis += credit - debit; }
       else if (typeKey === 'resmi') resmi += (debit - credit);
       else if (typeKey === 'avans') avans += (debit - credit);
+      else if (typeKey === 'ceza') ceza += (debit - credit);
       else if (typeKey === 'masraf') masraf += (debit - credit);
       else {
         icra[typeKey] = (icra[typeKey] || 0) + (debit - credit);
@@ -4654,9 +4663,9 @@ function computeHakedisReport(dateFrom, dateTo) {
       }
     });
     const icraTotal = Object.values(icra).reduce((s, v) => s + v, 0);
-    const nakit = hakedis - resmi - icraTotal - avans;
+    const nakit = hakedis - resmi - icraTotal - avans - ceza;
 
-    rows.push({ name: driver.name, group, hakedis, resmi, icra, avans, nakit, masraf });
+    rows.push({ name: driver.name, group, hakedis, resmi, icra, avans, ceza, nakit, masraf });
   });
 
   return { rows, dynamicLabels };
@@ -4689,7 +4698,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const byGroup = {};
   rows.forEach(r => { (byGroup[r.group] = byGroup[r.group] || []).push(r); });
 
-  const totals = { hakedis: 0, resmi: 0, avans: 0, nakit: 0, masraf: 0, toplam: 0 };
+  const totals = { hakedis: 0, resmi: 0, avans: 0, ceza: 0, nakit: 0, masraf: 0, toplam: 0 };
   const dynTotals = {};
   dynamicKeys.forEach(k => dynTotals[k] = 0);
 
@@ -4699,7 +4708,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const numMasraf = (n) => n ? (-n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 
   const rowHtml = (r, showGroupCell, rowspan) => {
-    totals.hakedis += r.hakedis; totals.resmi += r.resmi; totals.avans += r.avans;
+    totals.hakedis += r.hakedis; totals.resmi += r.resmi; totals.avans += r.avans; totals.ceza += r.ceza;
     totals.nakit += r.nakit;
     totals.masraf += r.masraf;
     // TOPLAM = Nakit + Masraf (raporda görünen masraf eksi gösterildiği için: nakit - masraf)
@@ -4713,6 +4722,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     html += `<td class="resmi">${num(r.resmi)}</td>`;
     dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="avans">${num(r.avans)}</td>`;
+    html += `<td class="ceza">${num(r.ceza)}</td>`;
     html += `<td class="nakit">${num(r.nakit)}</td>`;
     html += `<td class="spacer"></td>`;
     html += `<td class="masraf">${numMasraf(r.masraf)}</td>`;
@@ -4721,7 +4731,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     return html + '</tr>';
   };
 
-  const totalColCount = 2 + 2 + dynamicKeys.length + 2 + 1 + 1 + 1 + 1; // grp+drv, hakedis+resmi, icra..., avans+nakit, spacer, masraf
+  const totalColCount = 2 + 2 + dynamicKeys.length + 3 + 1 + 1 + 1 + 1; // grp+drv, hakedis+resmi, icra..., avans+nakit, spacer, masraf
   const spacerRow = '<tr class="grp-spacer"><td colspan="' + totalColCount + '"></td></tr>';
 
   let bodyHtml = '';
@@ -4738,12 +4748,12 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const headerHtml = `<tr>
     <th></th><th>ŞOFÖRLER</th><th>HAKEDİŞ</th><th>RESMİ</th>
     ${dynamicKeys.map(k => `<th>${escapeHtml(dynamicLabels[k].toLocaleUpperCase('tr'))}</th>`).join('')}
-    <th>AVANS</th><th>NAKİT</th><th class="spacer"></th><th>MASRAF</th><th class="spacer"></th><th>TOPLAM</th>
+    <th>AVANS</th><th>CEZA</th><th>NAKİT</th><th class="spacer"></th><th>MASRAF</th><th class="spacer"></th><th>TOPLAM</th>
   </tr>`;
   const totalsHtml = `<tr class="totals">
     <td></td><td></td><td>${num(totals.hakedis)}</td><td>${num(totals.resmi)}</td>
     ${dynamicKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
-    <td>${num(totals.avans)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td>
+    <td>${num(totals.avans)}</td><td>${num(totals.ceza)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td>
   </tr>`;
 
   const titleParts = ['Şoför Hakediş Raporu'];
@@ -4764,6 +4774,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       td.hakedis { background: #C6E8C6; }
       td.resmi { background: #F4C9A0; }
       td.icra { background: #FFF200; }
+      td.ceza { background: #FAC8C8; }
       td.nakit { color: #C0392B; font-weight: 700; }
       td.masraf { border-left: 2px solid #333; color: #C0392B; }
       td.toplam { background: #CFE6FA; font-weight: 700; }
