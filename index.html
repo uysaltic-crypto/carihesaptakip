@@ -739,6 +739,7 @@
     <div class="toolbar" style="justify-content:flex-end;">
       <button id="taxRateManageBtn">⚙ KDV oranlarını düzenle</button>
       <button id="taxImportBtn">📥 Faturaları içeri aktar (XML/ZIP)</button>
+      <button id="taxFixCariBtn">🔗 Cariye işlenmemişleri düzelt</button>
       <button id="taxExcelBtn">📊 Excel raporu al</button>
     </div>
     <div class="list-wrap" id="taxList"></div>
@@ -792,6 +793,25 @@
     <div class="actions">
       <button id="invImportCancel">Vazgeç</button>
       <button id="invImportConfirm" class="primary-btn" disabled>İçeri aktar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="taxFixModalOverlay">
+  <div class="modal-box" style="width:980px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+    <h3>KDV takibinde olup cariye işlenmemiş faturalar</h3>
+    <p style="font-size:12.5px; color:#5B6B82; margin:0 0 10px;">Vergi Takibi'nde kayıtlı olduğu hâlde carinin hareketlerinde görünmeyen faturalar aşağıda listelenir. İşaretli olanlar için cariye hareket eklenir (satış → carinin borcuna, alış → alacağına; tutar KDV dahil). Carisinde aynı fatura no'lu hareket varsa satır işaretsiz gelir.</p>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:8px;">
+      <input type="checkbox" id="taxFixShowNoAcc" />
+      Cari seçilmemiş kayıtları da göster (cari seçerek işleyebilirsiniz)
+    </label>
+    <div id="taxFixSummary" style="font-size:13px; margin-bottom:8px;"></div>
+    <div style="overflow-x:auto;">
+      <div class="list-wrap" id="taxFixList" style="max-height:46vh; overflow-y:auto; min-width:860px;"></div>
+    </div>
+    <div class="actions">
+      <button id="taxFixCancel">Vazgeç</button>
+      <button id="taxFixConfirm" class="primary-btn" disabled>Cariye işle</button>
     </div>
   </div>
 </div>
@@ -7428,6 +7448,104 @@ document.getElementById('invImportConfirm').addEventListener('click', async () =
     (attachedCount ? '\n' + attachedCount + ' mevcut faturaya görsel eklendi' : '') +
     (createdCount ? '\n' + createdCount + ' yeni cari açıldı' : '') +
     (cariCount ? '\n' + cariCount + ' cari hareketi işlendi' : '') + '.');
+});
+
+// ---- KDV takibinde olup cariye işlenmemiş kayıtları düzelt ----
+let taxFixRows = [];
+function taxFixBuild() {
+  const showNoAcc = document.getElementById('taxFixShowNoAcc').checked;
+  const prevSel = {};
+  taxFixRows.forEach(r => { prevSel[r.key] = { accId: r.accId, checked: r.checked, touched: r.touched }; });
+  const groups = {};
+  (data.taxEntries || []).forEach(e => {
+    if (e.fromTxId || e.linkedTxId) return;
+    if (e.type !== 'alis' && e.type !== 'satis' && e.type !== 'masraf') return;
+    const accOk = e.accountId && data.accounts.some(a => a.id === e.accountId);
+    if (!accOk && !showNoAcc) return;
+    const key = (accOk ? e.accountId : 'none') + '|' + e.type + '|' + e.date + '|' + (invNoNorm(e.irsaliyeNo) || e.id);
+    if (!groups[key]) groups[key] = { key, entries: [], accId: accOk ? e.accountId : '', hasAcc: !!accOk, type: e.type, date: e.date, no: e.irsaliyeNo || '' };
+    groups[key].entries.push(e);
+  });
+  taxFixRows = Object.values(groups).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.no).localeCompare(String(a.no), 'tr', { numeric: true }));
+  taxFixRows.forEach(r => {
+    r.total = r.entries.reduce((s, e) => s + Number(((Number(e.amount) || 0) * (1 + (Number(e.vatRate) || 0) / 100)).toFixed(2)), 0);
+    const pv = prevSel[r.key];
+    if (pv && pv.touched) { r.accId = pv.accId; r.checked = pv.checked; r.touched = true; }
+    taxFixDecide(r, !(pv && pv.touched));
+  });
+}
+function taxFixDecide(r, resetChecked) {
+  const noKey = invNoNorm(r.no);
+  r.dupInCari = !!(r.accId && noKey && (data.transactions[r.accId] || []).some(tx => invNoNorm(tx.irsaliyeNo) === noKey));
+  if (resetChecked) r.checked = !!r.accId && !r.dupInCari;
+}
+function renderTaxFix() {
+  const accSorted = data.accounts.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  const typeLbl = { alis: 'Alış', satis: 'Satış', masraf: 'Masraf' };
+  const grid = 'display:grid; grid-template-columns: 34px 86px 160px 70px 1fr 120px 200px; gap:8px; padding:8px 12px; align-items:center;';
+  const header = `<div style="${grid} background:#F7F9FC; border-bottom:1px solid #E7EAF0; font-size:11px; font-weight:600; color:#5B6B82; position:sticky; top:0; z-index:5;"><span></span><span>Tarih</span><span>Fatura no</span><span>Tür</span><span>Cari</span><span style="text-align:right;">Tutar (KDV dahil)</span><span>Durum</span></div>`;
+  const rows = taxFixRows.map((r, i) => {
+    const acc = r.accId ? data.accounts.find(a => a.id === r.accId) : null;
+    const accCell = r.hasAcc
+      ? `<span>${acc ? escapeHtml(acc.name) : ''}</span>`
+      : `<select class="taxFixAccSel" data-i="${i}" style="width:100%; font-size:12px; padding:5px 6px;"><option value="">— Cari seçin —</option>${accSorted.map(a => `<option value="${a.id}" ${r.accId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}</select>`;
+    let st;
+    if (!r.accId) st = '<span style="color:#8B99AD;">Cari seçilmedi</span>';
+    else if (r.dupInCari) st = '<span style="color:#A3660F;">Carisinde aynı fatura no var</span>';
+    else st = '<span style="color:#1D8A5B; font-weight:600;">Cariye eklenecek</span>';
+    return `<div style="${grid} border-bottom:1px solid #E7EAF0; font-size:12.5px;">
+      <input type="checkbox" class="taxFixChk" data-i="${i}" ${r.checked ? 'checked' : ''} ${r.accId ? '' : 'disabled'} />
+      <span>${r.date ? fmtDate(r.date) : '—'}</span>
+      <span><b>${escapeHtml(r.no || '—')}</b>${r.entries.length > 1 ? `<div style="font-size:11px; color:#8B99AD;">${r.entries.length} KDV kalemi</div>` : ''}</span>
+      <span>${typeLbl[r.type] || r.type}</span>
+      <span>${accCell}</span>
+      <span style="text-align:right;">${fmt(r.total)}</span>
+      <span>${st}</span>
+    </div>`;
+  });
+  document.getElementById('taxFixList').innerHTML = taxFixRows.length === 0
+    ? '<div class="empty">Cariye işlenmemiş KDV kaydı bulunamadı.</div>'
+    : header + rows.join('');
+  const sel = taxFixRows.filter(r => r.checked && r.accId);
+  document.getElementById('taxFixSummary').innerHTML = `<b>${taxFixRows.length}</b> fatura listelendi · <span style="color:#1D8A5B;"><b>${sel.length}</b> işlenecek</span> · toplam <b>${fmt(sel.reduce((s, r) => s + r.total, 0))}</b>`;
+  const btn = document.getElementById('taxFixConfirm');
+  btn.disabled = sel.length === 0;
+  btn.textContent = sel.length > 0 ? sel.length + ' faturayı cariye işle' : 'Cariye işle';
+  document.querySelectorAll('.taxFixChk').forEach(c => c.addEventListener('change', () => {
+    const r = taxFixRows[Number(c.dataset.i)]; r.checked = c.checked; r.touched = true; renderTaxFix();
+  }));
+  document.querySelectorAll('.taxFixAccSel').forEach(s => s.addEventListener('change', () => {
+    const r = taxFixRows[Number(s.dataset.i)]; r.accId = s.value; r.touched = true; taxFixDecide(r, true); renderTaxFix();
+  }));
+}
+document.getElementById('taxFixCariBtn').addEventListener('click', () => {
+  taxFixRows = [];
+  document.getElementById('taxFixShowNoAcc').checked = false;
+  taxFixBuild();
+  renderTaxFix();
+  document.getElementById('taxFixModalOverlay').style.display = 'flex';
+});
+document.getElementById('taxFixShowNoAcc').addEventListener('change', () => { taxFixBuild(); renderTaxFix(); });
+document.getElementById('taxFixCancel').addEventListener('click', () => { document.getElementById('taxFixModalOverlay').style.display = 'none'; });
+document.getElementById('taxFixConfirm').addEventListener('click', () => {
+  const sel = taxFixRows.filter(r => r.checked && r.accId);
+  if (sel.length === 0) return;
+  let added = 0;
+  sel.forEach(r => {
+    r.entries.forEach(e => {
+      e.accountId = r.accId;
+      e.noCariTx = false;
+      upsertCariTxFromTaxEntry(e);
+      if (e.linkedTxId) added++;
+    });
+  });
+  save();
+  document.getElementById('taxFixModalOverlay').style.display = 'none';
+  taxFixRows = [];
+  renderVergiTakibi();
+  renderList();
+  if (currentAccId) refreshDetail();
+  alert(sel.length + ' faturanın cari hareketi eklendi (' + added + ' hareket).');
 });
 
 // ---- Kasa (nakit/banka takibi) ----
