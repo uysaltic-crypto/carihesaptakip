@@ -7133,6 +7133,25 @@ document.getElementById('invDocPrint').addEventListener('click', () => {
   w.focus(); w.print();
 });
 
+// İçeri aktarma listesinde, henüz kaydedilmemiş (dosyadan okunan) faturanın görselini gösterir
+function showInvoiceItemPreview(item) {
+  const frame = document.getElementById('invDocFrame');
+  const note = document.getElementById('invDocNote');
+  const msg = (x) => '<p style="font-family:Arial,sans-serif;padding:20px;color:#3A4657;">' + x + '</p>';
+  note.textContent = '';
+  document.getElementById('invDocModalOverlay').style.display = 'flex';
+  if (!item.xmlStripped) { frame.srcdoc = msg('Bu fatura için görsel verisi okunamadı.'); return; }
+  let html = null;
+  if (item.xsltText) {
+    try { html = invTransform(item.xmlStripped, item.xsltText); } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
+  }
+  if (!html) {
+    html = invFallbackHtml(item.xmlStripped);
+    note.textContent = 'Bu XML içinde fatura şablonu bulunamadı veya uygulanamadı; özet görünüm gösteriliyor.';
+  }
+  frame.srcdoc = html;
+}
+
 function invCounterpart(item, dir) { return dir === 'satis' ? item.customer : item.supplier; }
 
 // Vergi/TC no veya birebir (Türkçe karakter/büyük-küçük harf farkı gözetmeyen) isim eşleşmesi
@@ -7257,9 +7276,11 @@ function renderInvImport() {
       }
     }
     const noteHtml = item.notes.length ? `<div style="font-size:11px; color:#A3660F;">${item.notes.map(escapeHtml).join(' · ')}</div>` : '';
+    const viewDk = (item._dupEntries || []).find(e => e.docKey);
+    const viewBtn = (viewDk || item.xmlStripped) ? `<div><button type="button" class="invImpViewBtn" data-i="${i}" style="font-size:11px; padding:2px 8px; margin-top:4px;">🧾 Görsel</button></div>` : '';
     return `<div style="display:grid; grid-template-columns: 86px 150px 1fr 1fr 110px 100px 170px; gap:8px; padding:8px 12px; border-bottom:1px solid #E7EAF0; font-size:12.5px; align-items:start; ${(st.kind === 'new' || st.kind === 'attach' || st.kind === 'cari') ? '' : 'opacity:.6;'}">
       <span>${item.date ? fmtDate(item.date) : '—'}</span>
-      <span><b>${escapeHtml(item.invoiceNo || '—')}</b>${noteHtml}</span>
+      <span><b>${escapeHtml(item.invoiceNo || '—')}</b>${noteHtml}${viewBtn}</span>
       <span>${escapeHtml(cp.name || '(adsız)')}${cp.id ? `<div style="font-size:11px; color:#8B99AD;">${escapeHtml(cp.id)}</div>` : ''}</span>
       <span>${accCell}${extra}</span>
       <span style="text-align:right;">${fmt(matrah)}<div style="font-size:11px; color:#8B99AD;">${escapeHtml(rates)}</div></span>
@@ -7273,6 +7294,11 @@ function renderInvImport() {
   document.getElementById('invImportList').innerHTML = invImportItems.length === 0
     ? `<div class="empty">${document.getElementById('invImportDir').value ? 'Henüz dosya seçilmedi.' : 'Önce yukarıdan fatura türünü seçin (Satış / Alış); ardından dosya seçme penceresi açılır.'}</div>`
     : header + rows.join('');
+  document.querySelectorAll('.invImpViewBtn').forEach(b => b.addEventListener('click', () => {
+    const it = invImportItems[Number(b.dataset.i)];
+    const dk = it && (it._dupEntries || []).find(e => e.docKey);
+    if (dk) showInvoiceDoc(dk.docKey); else if (it) showInvoiceItemPreview(it);
+  }));
 
   let sum = `<b>${invImportItems.length}</b> fatura okundu · <span style="color:#1D8A5B;"><b>${nNew}</b> yeni</span> · ${nAttach > 0 ? '<span style="color:#2F6FE0;"><b>' + nAttach + '</b> mevcut kayda görsel eklenecek</span> · ' : ''}${nCari > 0 ? '<span style="color:#2F6FE0;"><b>' + nCari + '</b> mevcut faturaya cari hareketi eklenecek</span> · ' : ''}${nDup} zaten var · ${nSkip} atlandı`;
   if (nNew > 0) sum += ` · Eklenecek matrah: <b>${fmt(sumMatrah)}</b>, KDV: <b>${fmt(sumKdv)}</b>`;
@@ -7496,7 +7522,7 @@ function renderTaxFix() {
     return `<div style="${grid} border-bottom:1px solid #E7EAF0; font-size:12.5px;">
       <input type="checkbox" class="taxFixChk" data-i="${i}" ${r.checked ? 'checked' : ''} ${r.accId ? '' : 'disabled'} />
       <span>${r.date ? fmtDate(r.date) : '—'}</span>
-      <span><b>${escapeHtml(r.no || '—')}</b>${r.entries.length > 1 ? `<div style="font-size:11px; color:#8B99AD;">${r.entries.length} KDV kalemi</div>` : ''}</span>
+      <span><b>${escapeHtml(r.no || '—')}</b>${r.entries.length > 1 ? `<div style="font-size:11px; color:#8B99AD;">${r.entries.length} KDV kalemi</div>` : ''}${r.entries.some(e => e.docKey) ? `<div><button type="button" class="taxFixViewBtn" data-i="${i}" style="font-size:11px; padding:2px 8px; margin-top:4px;">🧾 Görsel</button></div>` : `<div style="font-size:11px; color:#8B99AD;">görsel kayıtlı değil</div>`}</span>
       <span>${typeLbl[r.type] || r.type}</span>
       <span>${accCell}</span>
       <span style="text-align:right;">${fmt(r.total)}</span>
@@ -7511,6 +7537,11 @@ function renderTaxFix() {
   const btn = document.getElementById('taxFixConfirm');
   btn.disabled = sel.length === 0;
   btn.textContent = sel.length > 0 ? sel.length + ' faturayı cariye işle' : 'Cariye işle';
+  document.querySelectorAll('.taxFixViewBtn').forEach(b => b.addEventListener('click', () => {
+    const r = taxFixRows[Number(b.dataset.i)];
+    const e = r && r.entries.find(x => x.docKey);
+    if (e) showInvoiceDoc(e.docKey);
+  }));
   document.querySelectorAll('.taxFixChk').forEach(c => c.addEventListener('change', () => {
     const r = taxFixRows[Number(c.dataset.i)]; r.checked = c.checked; r.touched = true; renderTaxFix();
   }));
