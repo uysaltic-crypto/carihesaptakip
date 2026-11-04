@@ -4793,7 +4793,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       if (items.length > 1) mBody += `<tr class="msub"><td colspan="2">${escapeHtml(r.name)} toplam</td><td class="mamt">${numMasraf(r.masraf)}</td></tr>`;
     });
     const mTotal = masrafRows.reduce((s, r) => s + r.masraf, 0);
-    masrafDetailHtml = `<h2>Masraf Detayı</h2>
+    masrafDetailHtml = `<h2 class="mpage">Masraf Detayı</h2>
     <table class="mdet">
       <thead><tr><th>ŞOFÖR</th><th>TARİH</th><th>AÇIKLAMA</th><th>TUTAR</th></tr></thead>
       <tbody>${mBody}<tr class="mtot"><td colspan="3">GENEL TOPLAM</td><td class="mamt">${numMasraf(mTotal)}</td></tr></tbody>
@@ -4826,6 +4826,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       td.spacer, th.spacer { border: none; background: transparent; width: 14px; padding: 0; }
       tr.grp-spacer td { border: none; padding: 5px 0; }
       h2 { font-size: 12px; margin: 22px 0 8px; }
+      h2.mpage { break-before: page; page-break-before: always; margin-top: 0; }
       table.mdet { page-break-inside: auto; }
       table.mdet tr { page-break-inside: avoid; }
       table.mdet td.mdrv { text-align: left; font-weight: 700; vertical-align: top; background: #F6F6F6; }
