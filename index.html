@@ -4716,6 +4716,9 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   // dahil olmak üzere tüm satırlarda gösterilir ve genel toplama katılır.
   const numMasraf = (n) => n ? (-n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 
+  // Halil sütununda sadece görünüm: eksi işareti gösterilmez (hesaplama aynı kalır)
+  const numHalil = (n) => n ? Math.abs(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+
   const rowHtml = (r, showGroupCell, rowspan) => {
     totals.hakedis += r.hakedis; totals.resmi += r.resmi; totals.avans += r.avans; totals.ceza += r.ceza; totals.halil += r.halil;
     totals.nakit += r.nakit;
@@ -4732,7 +4735,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="avans">${num(r.avans)}</td>`;
     html += `<td class="ceza">${num(r.ceza)}</td>`;
-    html += `<td class="halil">${num(r.halil)}</td>`;
+    html += `<td class="halil">${numHalil(r.halil)}</td>`;
     html += `<td class="nakit">${num(r.nakit)}</td>`;
     html += `<td class="spacer"></td>`;
     html += `<td class="masraf">${numMasraf(r.masraf)}</td>`;
@@ -4763,7 +4766,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const totalsHtml = `<tr class="totals">
     <td></td><td></td><td>${num(totals.hakedis)}</td><td>${num(totals.resmi)}</td>
     ${dynamicKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
-    <td>${num(totals.avans)}</td><td>${num(totals.ceza)}</td><td>${num(totals.halil)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td>
+    <td>${num(totals.avans)}</td><td>${num(totals.ceza)}</td><td>${numHalil(totals.halil)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td>
   </tr>`;
 
   const titleParts = ['Şoför Hakediş Raporu'];
