@@ -749,14 +749,15 @@
     <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran gerçek hareketlerinizi (yaptığınız ödemeler ve aldığınız tahsilatlar) tarihe göre kaydeder. <b>Kasa sekmesinde sadece nakit</b> işlenir; <b>Banka</b> ve <b>Kredi Kartı</b> hareketleri kendi sekmelerinde, ayrı bakiyelerle takip edilir. Bir hareketi isterseniz bir cariyle ilişkilendirebilirsiniz; ancak bu ekrandaki kayıtlar carinin bakiyesini <b>etkilemez</b> — cari hesaplardan bağımsız, ayrı bir kasa defteridir.</p>
     <div id="kasaTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px;"></div>
     <div class="summary" id="kasaSummaryCards"></div>
-    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 118px 84px minmax(0,1fr) 130px 96px 28px 84px 28px 90px 62px; gap:6px;">
+    <div class="rem-form" id="kasaFormGrid" style="grid-template-columns: 118px 84px minmax(0,1fr) 108px 104px 96px 28px 84px 28px 90px 62px; gap:6px; align-items:center;">
       <input type="date" id="kasaDate" />
       <select id="kasaType">
         <option value="tahsilat">Tahsilat</option>
         <option value="odeme">Ödeme</option>
       </select>
       <input type="text" id="kasaDesc" placeholder="Açıklama" />
-      <input type="text" id="kasaAcc" list="kasaAccDatalist" placeholder="İlgili cari (opsiyonel)..." autocomplete="off" /><datalist id="kasaAccDatalist"></datalist>
+      <input type="text" id="kasaAcc" list="kasaAccDatalist" placeholder="İlgili cari..." autocomplete="off" /><datalist id="kasaAccDatalist"></datalist>
+      <span id="kasaAccBal" style="font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#8B99AD;" title="Seçilen carinin güncel bakiyesi"></span>
       <input type="text" id="kasaPayMethod" list="payMethodList" placeholder="Ödeme şekli (opsiyonel)" />
       <button type="button" id="kasaPayMethodManageBtn" title="Ödeme şekli listesini düzenle (ekle/sil/yeniden adlandır)" style="padding:9px 6px;">⚙</button>
       <input type="text" id="kasaTxType" list="txTypeList" placeholder="Tür (Normal)" />
@@ -7726,6 +7727,7 @@ function renderKasaSummary() {
 }
 
 function renderKasa() {
+  if (typeof updateKasaAccBal === 'function') updateKasaAccBal();
   renderKasaTabs();
   renderKasaSummary();
   fillSearchableDatalist('kasaAccDatalist', data.accounts);
@@ -7815,6 +7817,54 @@ function renderKasa() {
 }
 
 fillSearchableDatalist('kasaAccDatalist', data.accounts);
+
+// ---- Liste (datalist) alanlarında ok simgesine basınca TÜM seçenekleri göster ----
+// Tarayıcılar, alanda değer varken listeyi o değere göre süzer. Ok simgesine basıldığında değer
+// geçici olarak saklanıp alan boşaltılır; yeni seçim yapılmazsa odak çıkınca eski değer geri gelir.
+// Dokunmatik cihazlarda (ok simgesi ayrı olmadığından) alana dokunmak aynı işi yapar.
+(function setupDatalistArrow() {
+  const stash = new WeakMap();
+  const isListInput = el => el && el.matches && el.matches('input[list]');
+  function stashAndClear(inp) {
+    if (inp.value && !stash.has(inp)) { stash.set(inp, inp.value); inp.value = ''; }
+  }
+  document.addEventListener('pointerdown', e => {
+    const inp = e.target.closest ? e.target.closest('input[list]') : null;
+    if (!inp || inp.disabled || inp.readOnly) return;
+    const r = inp.getBoundingClientRect();
+    if (e.clientX >= r.right - 30) stashAndClear(inp);
+  }, true);
+  document.addEventListener('focusin', e => {
+    if (isListInput(e.target) && window.matchMedia('(pointer: coarse)').matches) stashAndClear(e.target);
+  });
+  document.addEventListener('input', e => { if (stash.has(e.target)) stash.delete(e.target); });
+  document.addEventListener('focusout', e => {
+    const inp = e.target;
+    if (!stash.has(inp)) return;
+    const v = stash.get(inp);
+    stash.delete(inp);
+    if (!inp.value) {
+      inp.value = v;
+      inp.dispatchEvent(new CustomEvent('datalist-restore', { bubbles: true }));
+    }
+  });
+})();
+
+// ---- Kasa: seçilen carinin güncel bakiyesini göster ----
+function updateKasaAccBal() {
+  const el = document.getElementById('kasaAccBal');
+  if (!el) return;
+  const id = resolveSearchableId('kasaAcc', data.accounts);
+  if (!id) { el.textContent = ''; el.title = 'Seçilen carinin güncel bakiyesi'; return; }
+  const b = balanceOf(id);
+  const txt = b === 0 ? fmt(0) : fmt(Math.abs(b)) + ' ' + balLabel(b);
+  el.textContent = txt;
+  el.title = 'Cari bakiyesi: ' + txt;
+  el.style.color = b > 0 ? '#1D8A5B' : (b < 0 ? '#C43D33' : '#8B99AD');
+}
+['input', 'change', 'datalist-restore'].forEach(ev =>
+  document.getElementById('kasaAcc').addEventListener(ev, updateKasaAccBal));
+updateKasaAccBal();
 
 document.getElementById('addKasaBtn').addEventListener('click', () => {
   const date = document.getElementById('kasaDate').value;
