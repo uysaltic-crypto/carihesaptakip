@@ -4704,6 +4704,10 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   }
 
   const dynamicKeys = Object.keys(dynamicLabels).sort((a, b) => dynamicLabels[a].localeCompare(dynamicLabels[b], 'tr'));
+  // GİDER sütunu AVANS'ın sağında, diğer dinamik sütunlar (İcra...) AVANS'ın solunda gösterilir
+  const isGiderKey = (k) => String(dynamicLabels[k]).trim().toLocaleLowerCase('tr-TR') === 'gider';
+  const icraKeys = dynamicKeys.filter(k => !isGiderKey(k));
+  const giderKeys = dynamicKeys.filter(isGiderKey);
   const CAT_ORDER = ['tir', 'kirkayak', 'balikesir', 'calisan'];
   const catLabel = (c) => c === 'kirkayak' ? 'KIRKAYAK' : (c === 'balikesir' ? 'BALIKESİR' : (c === 'calisan' ? 'ÇALIŞANLAR' : 'TIRLAR'));
   const num = (n) => n ? n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
@@ -4736,19 +4740,18 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
     html += `<td class="drv">${escapeHtml(r.name)}</td>`;
     html += `<td class="hakedis">${num(r.hakedis)}</td>`;
     html += `<td class="resmi">${num(r.resmi)}</td>`;
-    dynamicKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
+    icraKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="avans">${num(r.avans)}</td>`;
-    html += `<td class="ceza">${num(r.ceza)}</td>`;
-    html += `<td class="halil">${numHalil(r.halil)}</td>`;
-    html += `<td class="nakit">${num(r.nakit)}</td>`;
+    giderKeys.forEach(k => { html += `<td class="icra">${num(r.icra[k])}</td>`; });
     html += `<td class="spacer"></td>`;
     html += `<td class="masraf">${numMasraf(r.masraf)}</td>`;
     html += `<td class="spacer"></td>`;
     html += `<td class="toplam">${num(rowToplam)}</td>`;
+    html += `<td class="blank"></td>`;
     return html + '</tr>';
   };
 
-  const totalColCount = 2 + 2 + dynamicKeys.length + 4 + 1 + 1 + 1 + 1; // grp+drv, hakedis+resmi, icra..., avans+nakit, spacer, masraf
+  const totalColCount = 2 + 2 + dynamicKeys.length + 1 + 1 + 1 + 1 + 1 + 1; // grp+drv, hakedis+resmi, icra..., avans+nakit, spacer, masraf
   const spacerRow = '<tr class="grp-spacer"><td colspan="' + totalColCount + '"></td></tr>';
 
   let bodyHtml = '';
@@ -4764,13 +4767,17 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
 
   const headerHtml = `<tr>
     <th></th><th>ŞOFÖRLER</th><th>HAKEDİŞ</th><th>RESMİ</th>
-    ${dynamicKeys.map(k => `<th>${escapeHtml(dynamicLabels[k].toLocaleUpperCase('tr'))}</th>`).join('')}
-    <th>AVANS</th><th>CEZA</th><th>HALİL</th><th>NAKİT</th><th class="spacer"></th><th>MASRAF</th><th class="spacer"></th><th>TOPLAM</th>
+    ${icraKeys.map(k => `<th>${escapeHtml(dynamicLabels[k].toLocaleUpperCase('tr'))}</th>`).join('')}
+    <th>AVANS</th>
+    ${giderKeys.map(k => `<th>${escapeHtml(dynamicLabels[k].toLocaleUpperCase('tr'))}</th>`).join('')}
+    <th class="spacer"></th><th>MASRAF</th><th class="spacer"></th><th>TOPLAM</th><th class="blank"></th>
   </tr>`;
   const totalsHtml = `<tr class="totals">
     <td></td><td></td><td>${num(totals.hakedis)}</td><td>${num(totals.resmi)}</td>
-    ${dynamicKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
-    <td>${num(totals.avans)}</td><td>${num(totals.ceza)}</td><td>${numHalil(totals.halil)}</td><td>${num(totals.nakit)}</td><td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td>
+    ${icraKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
+    <td>${num(totals.avans)}</td>
+    ${giderKeys.map(k => `<td>${num(dynTotals[k])}</td>`).join('')}
+    <td class="spacer"></td><td>${numMasraf(totals.masraf)}</td><td class="spacer"></td><td class="toplam">${num(totals.toplam)}</td><td class="blank"></td>
   </tr>`;
 
   // Raporun en altı: masrafı olan şoförlerin masraf açıklamaları ve tutarları (tabloyla aynı sırada)
@@ -4823,6 +4830,7 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
       td.nakit { color: #C0392B; font-weight: 700; }
       td.masraf { border-left: 2px solid #333; color: #C0392B; }
       td.toplam { background: #CFE6FA; font-weight: 700; }
+      td.blank, th.blank { width: 90px; min-width: 90px; }
       td.spacer, th.spacer { border: none; background: transparent; width: 14px; padding: 0; }
       tr.grp-spacer td { border: none; padding: 5px 0; }
       h2 { font-size: 12px; margin: 22px 0 8px; }
