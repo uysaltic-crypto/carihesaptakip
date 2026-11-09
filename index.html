@@ -2614,7 +2614,14 @@ function upsertCariTxFromTaxEntry(entry) {
   entry.linkedTxId = tx.id;
 }
 
+let listScrollY = null; // cari listesinden detaya girerken kaydırma konumu
 function openDetail(id) {
+  {
+    const _lv = document.getElementById('listView'), _cv = document.getElementById('carilerView');
+    const fromList = _lv.style.display !== 'none' && (!_cv || _cv.style.display !== 'none');
+    if (fromList) listScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    else if (document.getElementById('detailView').style.display === 'none') listScrollY = null;
+  }
   currentAccId = id;
   collapsedMonths = new Set();
   collapseMonthsOnNextRender = true;
@@ -3043,6 +3050,11 @@ document.getElementById('backBtn').addEventListener('click', () => {
   document.getElementById('detailView').style.display = 'none';
   document.getElementById('listView').style.display = 'block';
   renderList();
+  if (listScrollY !== null) {
+    const y = listScrollY;
+    window.scrollTo(0, y);
+    requestAnimationFrame(() => { window.scrollTo(0, y); requestAnimationFrame(() => window.scrollTo(0, y)); });
+  }
 });
 
 function upsertTxDueReminder(tx, accountId) {
