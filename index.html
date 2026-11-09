@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cari Hesap Takip Programı</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17212F">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
@@ -393,6 +395,7 @@
   <div id="alertBanner" style="display:none;"></div>
   <div id="autoBackupBanner" style="display:none;"></div>
   <div id="emptyDataBanner" style="display:none;"></div>
+  <div id="sharedIrsBanner" class="alert-banner" style="display:none; cursor:pointer;"></div>
 
   <div id="carilerView">
     <div class="tabs">
@@ -614,7 +617,10 @@
       <button id="addTripBtn" class="primary-btn">+ Ekle</button>
     </div>
     <p id="tripIrsWarning" style="display:none; color:#C43D33; font-size:12.5px; margin:-6px 0 12px;"></p>
-    <p id="tripHistoryTitle" style="font-weight:600; font-size:15px; margin-bottom:8px;">Sefer geçmişi</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+      <p id="tripHistoryTitle" style="font-weight:600; font-size:15px; margin:0;">Sefer geçmişi</p>
+      <button type="button" id="openIrsInboxBtn">📥 Gelen irsaliyeler</button>
+    </div>
     <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
       <select id="tripSort">
         <option value="added_desc" selected>Eklenme sırası (son eklenen en üstte)</option>
@@ -5341,6 +5347,7 @@ function renderTrips() {
       </div>
       <div class="rem-actions">
         <span class="rem-amt">${fmt(t.price||0)}</span>
+        ${(t.irsaliyeNo && window.irsFileIdx && window.irsFileIdx.get(String(t.irsaliyeNo).replace(/\s+/g, '').toLowerCase())) ? `<button class="viewTripIrsBtn" data-no="${escapeHtml(t.irsaliyeNo)}" title="WhatsApp'tan gelen irsaliye görseli">📎 İrsaliye</button>` : ''}
         <button class="editTripBtn" data-id="${t.id}">Düzenle</button>
         <button class="delTripBtn" data-id="${t.id}">Sil</button>
       </div>
@@ -5357,6 +5364,9 @@ function renderTrips() {
   });
   list.querySelectorAll('.editTripBtn').forEach(btn => {
     btn.addEventListener('click', () => openTripEdit(btn.dataset.id));
+  });
+  list.querySelectorAll('.viewTripIrsBtn').forEach(btn => {
+    btn.addEventListener('click', () => { if (typeof showIrsFilesForNo === 'function') showIrsFilesForNo(btn.dataset.no); });
   });
 }
 
@@ -8416,6 +8426,273 @@ document.getElementById('gdriveAutoTime').addEventListener('change', () => {
 setInterval(updateAutoBackupBanner, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) updateAutoBackupBanner(); });
 setTimeout(updateAutoBackupBanner, 2500);
+
+// ======================================================================
+// WhatsApp / "Paylaş" ile gelen irsaliyeler
+// (Dosyalar sw.js tarafından tarayıcı deposuna yazılır; burada listelenir, no ile eşleştirilir)
+// ======================================================================
+window.irsFileIdx = new Map();   // normalize irsaliye no -> [kayıt id'leri]
+let irsInboxPendingCount = 0;
+let irsInboxMsg = '';
+let irsInboxUrls = [];
+
+function irsNorm(n) { return String(n || '').replace(/\s+/g, '').toLowerCase(); }
+function irsInboxDb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('cari-hesap-irsaliye-gelen', 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('files')) r.result.createObjectStore('files', { keyPath: 'id' }); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function irsInboxAll() {
+  const db = await irsInboxDb();
+  return new Promise((res, rej) => {
+    const rq = db.transaction('files').objectStore('files').getAll();
+    rq.onsuccess = () => { db.close(); res(rq.result || []); };
+    rq.onerror = () => { db.close(); rej(rq.error); };
+  });
+}
+async function irsInboxPut(rec) {
+  const db = await irsInboxDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(rec);
+    tx.oncomplete = () => { db.close(); res(); }; tx.onerror = () => { db.close(); rej(tx.error); };
+  });
+}
+async function irsInboxDel(id) {
+  const db = await irsInboxDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(id);
+    tx.oncomplete = () => { db.close(); res(); }; tx.onerror = () => { db.close(); rej(tx.error); };
+  });
+}
+
+async function irsReloadIdx() {
+  let all = [];
+  try { all = await irsInboxAll(); } catch (e) { console.error(e); }
+  const idx = new Map();
+  all.forEach(r => { if (r.irsNo) { const k = irsNorm(r.irsNo); if (!idx.has(k)) idx.set(k, []); idx.get(k).push(r.id); } });
+  window.irsFileIdx = idx;
+  irsInboxPendingCount = all.filter(r => !r.irsNo).length;
+  updateSharedIrsBanner();
+  const btn = document.getElementById('openIrsInboxBtn');
+  if (btn) btn.textContent = '📥 Gelen irsaliyeler' + (irsInboxPendingCount ? ' (' + irsInboxPendingCount + ')' : '');
+  if (typeof activeView !== 'undefined' && activeView === 'seferler') renderTrips();
+  return all;
+}
+
+function updateSharedIrsBanner() {
+  const b = document.getElementById('sharedIrsBanner');
+  if (!b) return;
+  if (!irsInboxPendingCount) { b.style.display = 'none'; return; }
+  b.style.display = 'block';
+  b.innerHTML = `📥 Paylaşımdan gelen <b>${irsInboxPendingCount}</b> irsaliye numara girilmeyi bekliyor. <b style="text-decoration:underline;">Görüntüle</b>`;
+}
+document.getElementById('sharedIrsBanner').addEventListener('click', () => openIrsInbox());
+document.getElementById('openIrsInboxBtn').addEventListener('click', () => openIrsInbox());
+
+function irsFreeUrls() { irsInboxUrls.forEach(u => URL.revokeObjectURL(u)); irsInboxUrls = []; }
+function irsUrl(rec) { const u = URL.createObjectURL(rec.blob); irsInboxUrls.push(u); return u; }
+function irsIsPdf(rec) { return /pdf/i.test(rec.type || '') || /\.pdf$/i.test(rec.name || ''); }
+
+// Tam ekran görüntüleyici
+function showIrsFiles(recs, title) {
+  let ov = document.getElementById('irsViewerOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'irsViewerOverlay';
+    ov.style.cssText = 'position:fixed; inset:0; background:rgba(16,23,33,0.82); z-index:40; display:none; flex-direction:column;';
+    ov.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; color:#fff;"><b id="irsViewerTitle"></b><button type="button" id="irsViewerClose">✕ Kapat</button></div><div id="irsViewerBody" style="flex:1; overflow:auto; padding:8px 14px 20px; display:flex; flex-direction:column; align-items:center; gap:14px;"></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#irsViewerClose').addEventListener('click', () => { ov.style.display = 'none'; ov.querySelector('#irsViewerBody').innerHTML = ''; });
+  }
+  const urls = [];
+  document.getElementById('irsViewerTitle').textContent = title || 'İrsaliye';
+  const body = ov.querySelector('#irsViewerBody');
+  body.innerHTML = '';
+  recs.forEach(r => {
+    const u = URL.createObjectURL(r.blob); urls.push(u);
+    const el = irsIsPdf(r)
+      ? Object.assign(document.createElement('iframe'), { src: u })
+      : Object.assign(document.createElement('img'), { src: u, alt: r.name });
+    el.style.cssText = irsIsPdf(r) ? 'width:min(900px,100%); height:78vh; border:0; background:#fff;' : 'max-width:min(900px,100%); height:auto; background:#fff; border-radius:6px;';
+    body.appendChild(el);
+  });
+  ov.style.display = 'flex';
+  const obs = new MutationObserver(() => { if (ov.style.display === 'none') { urls.forEach(u => URL.revokeObjectURL(u)); obs.disconnect(); } });
+  obs.observe(ov, { attributes: true, attributeFilter: ['style'] });
+}
+async function showIrsFilesForNo(no) {
+  const k = irsNorm(no);
+  const all = await irsInboxAll();
+  const recs = all.filter(r => irsNorm(r.irsNo) === k);
+  if (!recs.length) { alert('Bu numaraya ait irsaliye görseli bulunamadı.'); return; }
+  showIrsFiles(recs, 'İrsaliye No: ' + no);
+}
+
+function irsTripsFor(no) {
+  const k = irsNorm(no);
+  return (data.trips || []).filter(t => irsNorm(t.irsaliyeNo) === k);
+}
+
+// Gelen irsaliyeler penceresi
+function ensureIrsInboxModal() {
+  let ov = document.getElementById('irsInboxOverlay');
+  if (ov) return ov;
+  ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'irsInboxOverlay';
+  ov.innerHTML = `<div class="modal-box" style="width:760px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;">
+      <h3 style="margin:0;">📥 Gelen irsaliyeler</h3>
+      <button type="button" id="irsInboxClose">Kapat</button>
+    </div>
+    <p style="font-size:12px; color:#5B6B82; margin:0 0 10px;">WhatsApp'ta irsaliye fotoğrafına/PDF'ine basılı tutup <b>Paylaş → Cari Takip</b> deyin; dosya buraya düşer. Üzerindeki irsaliye numarasını yazıp kaydedince aynı numaralı seferin yanında <b>📎 İrsaliye</b> düğmesi çıkar.</p>
+    <div id="irsDropZone" style="border:2px dashed #B8C4D6; border-radius:10px; padding:12px; margin-bottom:10px; text-align:center; font-size:13px; color:#3A4657; background:#F7F9FC;">
+      <button type="button" id="irsPickBtn" class="primary-btn">📎 Bilgisayardan dosya seç</button>
+      <input type="file" id="irsPickInput" accept="image/*,application/pdf,.pdf" multiple style="display:none;" />
+      <div style="margin-top:6px; font-size:12px; color:#5B6B82;">veya fotoğrafı/PDF'i buraya <b>sürükleyip bırakın</b> ya da WhatsApp Web'de resme sağ tıklayıp <b>Resmi kopyala</b> dedikten sonra bu pencerede <b>Ctrl+V</b> yapın.</div>
+    </div>
+    <div id="irsInboxMsg" style="display:none; font-size:12.5px; padding:8px 10px; border-radius:8px; background:#EAF6EF; color:#1D6B4A; margin-bottom:10px;"></div>
+    <div id="irsInboxBody"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#irsInboxClose').addEventListener('click', closeIrsInbox);
+  ov.addEventListener('click', e => { if (e.target === ov) closeIrsInbox(); });
+  return ov;
+}
+function closeIrsInbox() { document.getElementById('irsInboxOverlay').style.display = 'none'; irsFreeUrls(); }
+async function openIrsInbox() {
+  const ov = ensureIrsInboxModal();
+  ov.style.display = 'flex';
+  await renderIrsInbox();
+}
+async function renderIrsInbox() {
+  irsFreeUrls();
+  const all = (await irsReloadIdx()).sort((a, b) => b.sharedAt - a.sharedAt);
+  const pending = all.filter(r => !r.irsNo), done = all.filter(r => r.irsNo);
+  const msgEl = document.getElementById('irsInboxMsg');
+  msgEl.style.display = irsInboxMsg ? 'block' : 'none';
+  msgEl.textContent = irsInboxMsg;
+  const when = ts => { const d = new Date(ts); return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
+  const thumb = r => irsIsPdf(r)
+    ? `<div class="irsThumb" data-id="${r.id}" style="width:84px; height:84px; flex:none; border-radius:8px; background:#F7F9FC; border:1px solid #D7DCE5; display:flex; align-items:center; justify-content:center; font-size:26px; cursor:pointer;">📄</div>`
+    : `<img class="irsThumb" data-id="${r.id}" src="${irsUrl(r)}" alt="" style="width:84px; height:84px; flex:none; object-fit:cover; border-radius:8px; border:1px solid #D7DCE5; cursor:pointer;" />`;
+  let html = '';
+  if (!all.length) html = '<div class="empty">Henüz paylaşımdan gelen irsaliye yok.</div>';
+  if (pending.length) {
+    html += `<p style="font-weight:600; margin:6px 0;">Numara bekleyenler (${pending.length})</p>` + pending.map(r => `
+      <div style="display:flex; gap:10px; padding:10px 0; border-bottom:1px solid #E7EAF0; align-items:center; flex-wrap:wrap;">
+        ${thumb(r)}
+        <div style="flex:1; min-width:180px;">
+          <div style="font-size:12px; color:#5B6B82; word-break:break-all;">${escapeHtml(r.name)} · ${when(r.sharedAt)}</div>
+          <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+            <input type="text" class="irsNoInput" data-id="${r.id}" placeholder="İrsaliye no" inputmode="numeric" style="flex:1; min-width:120px;" />
+            <button type="button" class="irsSaveBtn primary-btn" data-id="${r.id}">Kaydet</button>
+            <button type="button" class="irsDelBtn" data-id="${r.id}" style="color:#C43D33;">Sil</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+  if (done.length) {
+    html += `<p style="font-weight:600; margin:14px 0 6px;">Numarası girilenler (${done.length})</p>` + done.map(r => {
+      const n = irsTripsFor(r.irsNo).length;
+      return `<div style="display:flex; gap:10px; padding:8px 0; border-bottom:1px solid #E7EAF0; align-items:center; flex-wrap:wrap;">
+        ${thumb(r)}
+        <div style="flex:1; min-width:180px;">
+          <div><b>İrs. No: ${escapeHtml(r.irsNo)}</b> <span style="font-size:12px; color:${n ? '#1D8A5B' : '#A3660F'};">${n ? '✔ ' + n + ' sefere bağlı' : '⏳ sefer bekleniyor'}</span></div>
+          <div style="font-size:12px; color:#5B6B82; word-break:break-all;">${escapeHtml(r.name)} · ${when(r.sharedAt)}</div>
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <button type="button" class="irsReopenBtn" data-id="${r.id}">Numarayı değiştir</button>
+            <button type="button" class="irsDelBtn" data-id="${r.id}" style="color:#C43D33;">Sil</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const body = document.getElementById('irsInboxBody');
+  body.innerHTML = html;
+  const byId = id => all.find(r => r.id === id);
+  body.querySelectorAll('.irsThumb').forEach(el => el.addEventListener('click', () => { const r = byId(el.dataset.id); if (r) showIrsFiles([r], r.irsNo ? 'İrsaliye No: ' + r.irsNo : r.name); }));
+  const save = async id => {
+    const inp = body.querySelector(`.irsNoInput[data-id="${id}"]`);
+    const no = inp.value.trim();
+    if (!no) { inp.focus(); return; }
+    const r = byId(id); if (!r) return;
+    r.irsNo = no;
+    await irsInboxPut(r);
+    const trips = irsTripsFor(no);
+    irsInboxMsg = trips.length
+      ? `İrsaliye ${no}: ${trips.length} sefere bağlandı (${trips.map(t => fmtDate(t.date)).join(', ')}).`
+      : `İrsaliye ${no} kaydedildi. Bu numarayla sefer henüz yok; sefer eklenince 📎 düğmesi otomatik görünür.`;
+    await renderIrsInbox();
+  };
+  body.querySelectorAll('.irsSaveBtn').forEach(b => b.addEventListener('click', () => save(b.dataset.id)));
+  body.querySelectorAll('.irsNoInput').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') save(i.dataset.id); }));
+  body.querySelectorAll('.irsReopenBtn').forEach(b => b.addEventListener('click', async () => {
+    const r = byId(b.dataset.id); if (!r) return; r.irsNo = ''; await irsInboxPut(r); irsInboxMsg = ''; await renderIrsInbox();
+  }));
+  body.querySelectorAll('.irsDelBtn').forEach(b => b.addEventListener('click', () => {
+    showConfirm('Bu irsaliye dosyası silinsin mi?', async () => { await irsInboxDel(b.dataset.id); irsInboxMsg = ''; await renderIrsInbox(); });
+  }));
+}
+
+
+// ---- Bilgisayardan ekleme: dosya seç / sürükle-bırak / Ctrl+V ----
+async function irsAddFiles(fileList) {
+  const files = Array.from(fileList || []).filter(f => f && f.size > 0 && (/^image\//i.test(f.type) || /pdf/i.test(f.type) || /\.(pdf|jpe?g|png|webp|gif)$/i.test(f.name || '')));
+  if (!files.length) { irsInboxMsg = 'Yalnızca fotoğraf veya PDF eklenebilir.'; await renderIrsInbox(); return; }
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    await irsInboxPut({
+      id: 'up_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 7),
+      name: f.name && f.name !== 'image.png' ? f.name : 'yapistirilan-' + new Date().toLocaleTimeString('tr-TR').replace(/:/g, '') + '.' + ext,
+      type: f.type || '', blob: f, sharedAt: Date.now(), irsNo: ''
+    });
+  }
+  irsInboxMsg = `${files.length} dosya eklendi. Her birinin irsaliye numarasını yazıp Kaydet'e basın.`;
+  await renderIrsInbox();
+}
+(function setupIrsAdd() {
+  const ov = ensureIrsInboxModal();
+  const zone = ov.querySelector('#irsDropZone'), pick = ov.querySelector('#irsPickInput');
+  ov.querySelector('#irsPickBtn').addEventListener('click', () => pick.click());
+  pick.addEventListener('change', () => { irsAddFiles(pick.files); pick.value = ''; });
+  ['dragenter', 'dragover'].forEach(ev => ov.addEventListener(ev, e => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) { e.preventDefault(); zone.style.background = '#E3EEFD'; zone.style.borderColor = '#2F6FE0'; }
+  }));
+  ['dragleave', 'drop'].forEach(ev => ov.addEventListener(ev, () => { zone.style.background = '#F7F9FC'; zone.style.borderColor = '#B8C4D6'; }));
+  ov.addEventListener('drop', e => {
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { e.preventDefault(); irsAddFiles(e.dataTransfer.files); }
+  });
+  document.addEventListener('paste', e => {
+    if (ov.style.display !== 'flex') return;
+    const files = Array.from((e.clipboardData && e.clipboardData.files) || []);
+    if (files.length) { e.preventDefault(); irsAddFiles(files); }
+  });
+})();
+
+// Service worker (paylaşım hedefi) + paylaşımdan dönüşte pencereyi otomatik aç
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('Service worker kaydedilemedi', e));
+}
+(function handleSharedReturn() {
+  const url = new URL(location.href);
+  const sh = url.searchParams.get('irs-shared');
+  irsReloadIdx().then(() => {
+    if (sh !== null) {
+      url.searchParams.delete('irs-shared');
+      history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+      const n = Number(sh) || 0;
+      irsInboxMsg = n ? `${n} dosya alındı. Her birinin irsaliye numarasını yazıp Kaydet'e basın.` : 'Paylaşımla dosya gelmedi (yalnızca fotoğraf veya PDF paylaşabilirsiniz).';
+      openIrsInbox();
+    }
+  });
+})();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) irsReloadIdx(); });
+setTimeout(() => { try { if (typeof irsReloadIdx === 'function') irsReloadIdx(); } catch (e) {} }, 1500); // trips yüklendikten sonra bağlantıları tazele
 
 </script>
 </body>
