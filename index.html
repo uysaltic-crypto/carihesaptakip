@@ -8052,36 +8052,135 @@ function renderKasa() {
 
 fillSearchableDatalist('kasaAccDatalist', data.accounts);
 
-// ---- Liste (datalist) alanlarında ok simgesine basınca TÜM seçenekleri göster ----
-// Tarayıcılar, alanda değer varken listeyi o değere göre süzer. Ok simgesine basıldığında değer
-// geçici olarak saklanıp alan boşaltılır; yeni seçim yapılmazsa odak çıkınca eski değer geri gelir.
-// Dokunmatik cihazlarda (ok simgesi ayrı olmadığından) alana dokunmak aynı işi yapar.
-(function setupDatalistArrow() {
-  const stash = new WeakMap();
-  const isListInput = el => el && el.matches && el.matches('input[list]');
-  function stashAndClear(inp) {
-    if (inp.value && !stash.has(inp)) { stash.set(inp, inp.value); inp.value = ''; }
-  }
-  document.addEventListener('pointerdown', e => {
-    const inp = e.target.closest ? e.target.closest('input[list]') : null;
-    if (!inp || inp.disabled || inp.readOnly) return;
-    const r = inp.getBoundingClientRect();
-    if (e.clientX >= r.right - 30) stashAndClear(inp);
-  }, true);
-  document.addEventListener('focusin', e => {
-    if (isListInput(e.target) && window.matchMedia('(pointer: coarse)').matches) stashAndClear(e.target);
-  });
-  document.addEventListener('input', e => { if (stash.has(e.target)) stash.delete(e.target); });
-  document.addEventListener('focusout', e => {
-    const inp = e.target;
-    if (!stash.has(inp)) return;
-    const v = stash.get(inp);
-    stash.delete(inp);
-    if (!inp.value) {
-      inp.value = v;
-      inp.dispatchEvent(new CustomEvent('datalist-restore', { bubbles: true }));
+// ---- Liste (datalist) alanları için özel açılır liste ----
+// Tarayıcının kendi öneri listesi boyanamadığı için `list` özniteliği `data-dl`e taşınır ve yerine
+// kendi listemiz çizilir: üzerine gelinen/seçilen satır koyu renkle vurgulanır, ok simgesi her zaman görünür,
+// ok simgesine basınca (alanda değer olsa bile) tüm seçenekler açılır.
+(function setupCustomCombo() {
+  const st = document.createElement('style');
+  st.textContent = `
+    input[data-dl] {
+      padding-right: 28px !important;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%235B6B82' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
     }
+    #comboPop { position: fixed; z-index: 2147483000; display: none; overflow-y: auto; max-height: 280px;
+      background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 4px;
+      box-shadow: 0 12px 32px rgba(23,33,47,0.18); font-size: 14px; }
+    #comboPop .comboOpt { padding: 8px 10px; border-radius: 7px; cursor: pointer; color: var(--ink);
+      border-left: 3px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #comboPop .comboOpt.cur { background: #EAF1FD; font-weight: 600; }
+    #comboPop .comboOpt.active { background: #BCD2F5; color: #0B2A63; font-weight: 600; border-left-color: #2F6FE0; }
+  `;
+  document.head.appendChild(st);
+  const pop = document.createElement('div');
+  pop.id = 'comboPop';
+  document.body.appendChild(pop);
+
+  let cur = null, opts = [], active = -1;
+  const norm = t => String(t || '').toLocaleLowerCase('tr');
+  const optionValues = inp => {
+    const dl = document.getElementById(inp.dataset.dl);
+    return dl ? Array.from(dl.options).map(o => o.value) : [];
+  };
+  function strip(root) {
+    (root.querySelectorAll ? root.querySelectorAll('input[list]') : []).forEach(i => {
+      i.dataset.dl = i.getAttribute('list'); i.removeAttribute('list');
+    });
+    if (root.matches && root.matches('input[list]')) { root.dataset.dl = root.getAttribute('list'); root.removeAttribute('list'); }
+  }
+  strip(document);
+  new MutationObserver(muts => muts.forEach(m => {
+    m.addedNodes.forEach(n => { if (n.nodeType === 1) strip(n); });
+    if (m.type === 'attributes' && m.target.matches && m.target.matches('input[list]')) strip(m.target);
+  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['list'] });
+
+  function position() {
+    if (!cur) return;
+    const r = cur.getBoundingClientRect();
+    pop.style.minWidth = Math.max(r.width, 180) + 'px';
+    pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - pop.offsetWidth - 4)) + 'px';
+    const below = window.innerHeight - r.bottom, h = Math.min(280, pop.scrollHeight + 10);
+    if (below < h + 8 && r.top > below) { pop.style.top = Math.max(4, r.top - h - 2) + 'px'; }
+    else { pop.style.top = (r.bottom + 2) + 'px'; }
+  }
+  function setActive(i, scroll) {
+    pop.querySelectorAll('.comboOpt.active').forEach(e => e.classList.remove('active'));
+    active = i;
+    const el = pop.children[i];
+    if (el) { el.classList.add('active'); if (scroll) el.scrollIntoView({ block: 'nearest' }); }
+  }
+  function close() { pop.style.display = 'none'; cur = null; opts = []; active = -1; }
+  function open(inp, showAll) {
+    const all = optionValues(inp);
+    const val = inp.value.trim(), q = norm(val);
+    const exact = all.some(v => v === inp.value);
+    opts = (showAll || !q || exact) ? all : all.filter(v => norm(v).includes(q));
+    if (!opts.length) { close(); return; }
+    cur = inp;
+    pop.innerHTML = opts.map((v, i) => `<div class="comboOpt${v === inp.value ? ' cur' : ''}" data-i="${i}">${escapeHtml(v)}</div>`).join('');
+    pop.style.display = 'block';
+    pop.scrollTop = 0;
+    position();
+    const ci = opts.indexOf(inp.value);
+    if (ci >= 0) { setActive(ci, true); } else { active = -1; }
+    position();
+  }
+  function choose(i) {
+    if (!cur || i < 0 || i >= opts.length) return;
+    const inp = cur;
+    inp.value = opts[i];
+    close();
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    inp.focus();
+  }
+
+  pop.addEventListener('mousedown', e => e.preventDefault()); // alan odağını kaybetmesin
+  pop.addEventListener('mouseover', e => {
+    const o = e.target.closest('.comboOpt'); if (o) setActive(Number(o.dataset.i), false);
   });
+  pop.addEventListener('click', e => {
+    const o = e.target.closest('.comboOpt'); if (o) choose(Number(o.dataset.i));
+  });
+
+  document.addEventListener('pointerdown', e => {
+    const inp = e.target.closest ? e.target.closest('input[data-dl]') : null;
+    if (inp && !inp.disabled && !inp.readOnly) {
+      const r = inp.getBoundingClientRect();
+      if (e.clientX >= r.right - 30) {            // ok simgesi: tüm seçenekleri aç / kapat
+        if (cur === inp) { close(); } else { open(inp, true); }
+        if (document.activeElement !== inp) setTimeout(() => inp.focus(), 0);
+        e.preventDefault();
+      } else if (cur !== inp) { close(); }
+      return;
+    }
+    if (!pop.contains(e.target)) close();
+  }, true);
+  document.addEventListener('input', e => {
+    if (!e.isTrusted) return;
+    const inp = e.target;
+    if (inp.matches && inp.matches('input[data-dl]')) open(inp, false);
+  });
+  document.addEventListener('keydown', e => {
+    const inp = e.target;
+    if (!inp.matches || !inp.matches('input[data-dl]')) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (cur !== inp) { open(inp, true); if (opts.length) setActive(e.key === 'ArrowDown' ? 0 : opts.length - 1, true); }
+      else if (opts.length) setActive(e.key === 'ArrowDown' ? (active + 1) % opts.length : (active <= 0 ? opts.length - 1 : active - 1), true);
+      e.preventDefault();
+    } else if (e.key === 'Enter' && cur === inp && active >= 0) {
+      e.preventDefault(); e.stopPropagation(); choose(active);
+    } else if (e.key === 'Escape' && cur === inp) {
+      e.preventDefault(); e.stopPropagation(); close();
+    } else if (e.key === 'Tab') { close(); }
+  }, true);
+  document.addEventListener('focusout', e => {
+    if (cur && e.target === cur) setTimeout(() => { if (cur && document.activeElement !== cur) close(); }, 0);
+  });
+  window.addEventListener('scroll', e => { if (cur && !pop.contains(e.target)) position(); }, true);
+  window.addEventListener('resize', () => { if (cur) position(); });
 })();
 
 // ---- Kasa: seçilen carinin güncel bakiyesini göster ----
