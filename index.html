@@ -5347,7 +5347,7 @@ function renderTrips() {
       </div>
       <div class="rem-actions">
         <span class="rem-amt">${fmt(t.price||0)}</span>
-        ${(t.irsaliyeNo && window.irsFileIdx && window.irsFileIdx.get(String(t.irsaliyeNo).replace(/\s+/g, '').toLowerCase())) ? `<button class="viewTripIrsBtn" data-no="${escapeHtml(t.irsaliyeNo)}" title="WhatsApp'tan gelen irsaliye görseli">📎 İrsaliye</button>` : ''}
+        ${(t.irsaliyeNo && window.irsFileIdx && window.irsFileIdx.get(irsNorm(t.irsaliyeNo))) ? `<button class="viewTripIrsBtn" data-no="${escapeHtml(t.irsaliyeNo)}" title="WhatsApp'tan gelen irsaliye görseli">📎 İrsaliye</button>` : ''}
         <button class="editTripBtn" data-id="${t.id}">Düzenle</button>
         <button class="delTripBtn" data-id="${t.id}">Sil</button>
       </div>
@@ -8436,7 +8436,7 @@ let irsInboxPendingCount = 0;
 let irsInboxMsg = '';
 let irsInboxUrls = [];
 
-function irsNorm(n) { return String(n || '').replace(/\s+/g, '').toLowerCase(); }
+function irsNorm(n) { const t = String(n || '').trim(); return t ? irsKeyOf(t) : ''; }
 function irsInboxDb() {
   return new Promise((res, rej) => {
     const r = indexedDB.open('cari-hesap-irsaliye-gelen', 1);
@@ -8556,6 +8556,7 @@ function ensureIrsInboxModal() {
     </div>
     <div id="irsInboxMsg" style="display:none; font-size:12.5px; padding:8px 10px; border-radius:8px; background:#EAF6EF; color:#1D6B4A; margin-bottom:10px;"></div>
     <div id="irsInboxBody"></div>
+    <datalist id="irsDrvDl"></datalist><datalist id="irsVehDl"></datalist><datalist id="irsDefDl"></datalist>
   </div>`;
   document.body.appendChild(ov);
   ov.querySelector('#irsInboxClose').addEventListener('click', closeIrsInbox);
@@ -8575,6 +8576,9 @@ async function renderIrsInbox() {
   const msgEl = document.getElementById('irsInboxMsg');
   msgEl.style.display = irsInboxMsg ? 'block' : 'none';
   msgEl.textContent = irsInboxMsg;
+  document.getElementById('irsDrvDl').innerHTML = data.drivers.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr')).map(d => `<option value="${escapeHtml(d.name)}"></option>`).join('');
+  document.getElementById('irsVehDl').innerHTML = data.vehicles.map(v => `<option value="${escapeHtml(v.name)}"></option>`).join('');
+  document.getElementById('irsDefDl').innerHTML = Array.from(new Set(data.tripDefs.map(t => t.name))).sort((a, b) => a.localeCompare(b, 'tr')).map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
   const when = ts => { const d = new Date(ts); return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
   const thumb = r => irsIsPdf(r)
     ? `<div class="irsThumb" data-id="${r.id}" style="width:84px; height:84px; flex:none; border-radius:8px; background:#F7F9FC; border:1px solid #D7DCE5; display:flex; align-items:center; justify-content:center; font-size:26px; cursor:pointer;">📄</div>`
@@ -8589,8 +8593,18 @@ async function renderIrsInbox() {
           <div style="font-size:12px; color:#5B6B82; word-break:break-all;">${escapeHtml(r.name)} · ${when(r.sharedAt)}</div>
           <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
             <input type="text" class="irsNoInput" data-id="${r.id}" placeholder="İrsaliye no" inputmode="numeric" style="flex:1; min-width:120px;" />
-            <button type="button" class="irsSaveBtn primary-btn" data-id="${r.id}">Kaydet</button>
+            <button type="button" class="irsSaveBtn" data-id="${r.id}" title="Sadece numarayı kaydet, sefer oluşturma">Sadece no kaydet</button>
             <button type="button" class="irsDelBtn" data-id="${r.id}" style="color:#C43D33;">Sil</button>
+          </div>
+          <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+            <input type="date" class="irsProcDate" data-id="${r.id}" value="${localDateStr()}" style="flex:0 0 140px;" />
+            <input type="text" class="irsProcDrv" data-id="${r.id}" list="irsDrvDl" placeholder="Şoför..." autocomplete="off" style="flex:1; min-width:140px;" />
+            <input type="text" class="irsProcVeh" data-id="${r.id}" list="irsVehDl" placeholder="Araç..." autocomplete="off" style="flex:1; min-width:120px;" />
+          </div>
+          <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+            <input type="text" class="irsProcDef" data-id="${r.id}" list="irsDefDl" placeholder="Sefer tanımı..." autocomplete="off" style="flex:1; min-width:160px;" />
+            <input type="number" class="irsProcPrice" data-id="${r.id}" placeholder="Hakediş" step="0.01" style="flex:0 0 110px;" />
+            <button type="button" class="irsProcBtn primary-btn" data-id="${r.id}">➕ Sefer olarak işle</button>
           </div>
         </div>
       </div>`).join('');
@@ -8629,6 +8643,58 @@ async function renderIrsInbox() {
     await renderIrsInbox();
   };
   body.querySelectorAll('.irsSaveBtn').forEach(b => b.addEventListener('click', () => save(b.dataset.id)));
+  const q = (cls, id) => body.querySelector('.' + cls + '[data-id="' + id + '"]');
+  const vehByName = n => data.vehicles.find(v => v.name === n);
+  const defFor = (name, veh) => {
+    let c = data.tripDefs.filter(x => x.name === name);
+    if (veh && c.length > 1) c = c.filter(x => x.category === (veh.category || 'tir'));
+    return c[0] || null;
+  };
+  body.querySelectorAll('.irsProcDrv').forEach(i => i.addEventListener('input', () => {
+    const d = data.drivers.find(x => x.name === i.value);
+    const vi = q('irsProcVeh', i.dataset.id);
+    if (d && d.vehicleId && !vi.value) { const v = data.vehicles.find(x => x.id === d.vehicleId); if (v) vi.value = v.name; }
+  }));
+  body.querySelectorAll('.irsProcDef').forEach(i => i.addEventListener('input', () => {
+    const td = defFor(i.value, vehByName(q('irsProcVeh', i.dataset.id).value));
+    if (td) q('irsProcPrice', i.dataset.id).value = td.price;
+  }));
+  body.querySelectorAll('.irsProcBtn').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.id, r = byId(id); if (!r) return;
+    const noInp = q('irsNoInput', id);
+    const no = noInp.value.trim();
+    const date = q('irsProcDate', id).value;
+    const driver = data.drivers.find(x => x.name === q('irsProcDrv', id).value);
+    const veh = vehByName(q('irsProcVeh', id).value);
+    const td = defFor(q('irsProcDef', id).value, veh);
+    const priceVal = q('irsProcPrice', id).value;
+    const missing = [];
+    if (!no) missing.push('irsaliye no');
+    if (!date) missing.push('tarih');
+    if (!driver) missing.push('şoför');
+    if (!veh) missing.push('araç');
+    if (!td) missing.push('sefer tanımı');
+    if (missing.length) { alert('Eksik veya listede olmayan alan: ' + missing.join(', ')); return; }
+    const conflict = findIrsConflict(no, null, veh.id);
+    if (conflict) {
+      alert('Bu irsaliye no (' + no + ') zaten kullanılmış:\n' + fmtDate(conflict.date) + ' — ' + driverVehicleLabelPlain(conflict) + '\n\nSefer oluşturulmadı.');
+      noInp.focus(); return;
+    }
+    if (irsNoOutsideBooklets(no) && !confirm(IRS_NO_BOOKLET_MSG(no) + '\n\nYine de sefer olarak işlensin mi?')) return;
+    const price = priceVal === '' ? null : parseFloat(priceVal);
+    const trip = { id: 'trip_' + Date.now(), irsaliyeNo: no, driverId: driver.id, vehicleId: veh.id, date, desc: td.name, price, pageId: activeSeferPageId === '__ALL__' ? null : activeSeferPageId, linkedTxId: null };
+    upsertTripTx(trip);
+    data.trips.push(trip);
+    r.irsNo = no;
+    await irsInboxPut(r);
+    save();
+    renderTrips(); renderList();
+    const acc = driver.accountId ? data.accounts.find(a => a.id === driver.accountId) : null;
+    irsInboxMsg = '✔ İrsaliye ' + no + ': ' + fmtDate(date) + ' — ' + driver.name + ' (' + veh.name + '), ' + td.name + ' seferi kaydedildi' +
+      (price !== null && acc ? ' ve ' + fmt(price) + ' tutarında ' + acc.name + ' carisine işlendi.' : (price === null ? '. Hakediş girilmediği için cariye tutar yazılmadı.' : '. Şoförün bağlı carisi olmadığı için cariye yazılmadı.'));
+    await renderIrsInbox();
+  }));
+
   body.querySelectorAll('.irsNoInput').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') save(i.dataset.id); }));
   body.querySelectorAll('.irsReopenBtn').forEach(b => b.addEventListener('click', async () => {
     const r = byId(b.dataset.id); if (!r) return; r.irsNo = ''; await irsInboxPut(r); irsInboxMsg = ''; await renderIrsInbox();
