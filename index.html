@@ -8760,6 +8760,149 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) irsReloadIdx(); });
 setTimeout(() => { try { if (typeof irsReloadIdx === 'function') irsReloadIdx(); } catch (e) {} }, 1500); // trips yüklendikten sonra bağlantıları tazele
 
+// ======================================================================
+// Araçlar: Excel'e aktar / Excel'den içeri aktar (muayene, trafik sigortası, kasko, ürün kaskosu)
+// ======================================================================
+const VX_COLS = [
+  { h: 'Araç', key: 'name' },
+  { h: 'Muayene tarihi', key: 'muayeneTarihi', date: true },
+  { h: 'Trafik sigortası tarihi', key: 'trafikTarihi', date: true },
+  { h: 'Trafik sigortası firması', key: 'trafikFirma' },
+  { h: 'Kasko tarihi', key: 'kaskoTarihi', date: true },
+  { h: 'Kasko firması', key: 'kaskoFirma' },
+  { h: 'Ürün kaskosu tarihi', key: 'urunKaskoTarihi', date: true },
+  { h: 'Ürün kaskosu firması', key: 'urunKaskoFirma' }
+];
+const vxNorm = s => String(s == null ? '' : s).toLocaleLowerCase('tr').replace(/\s+/g, '');
+function vxIsoToSerial(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 + 25569 : null;
+}
+function vxPad(n) { return String(n).padStart(2, '0'); }
+// Hücre değeri -> undefined (boş: değiştirme) | null (- : temizle) | 'YYYY-MM-DD' | NaN (geçersiz)
+function vxParseDate(v) {
+  if (v === undefined || v === null || String(v).trim() === '') return undefined;
+  if (typeof v === 'number') {
+    const p = XLSX.SSF.parse_date_code(v);
+    return p ? p.y + '-' + vxPad(p.m) + '-' + vxPad(p.d) : NaN;
+  }
+  const s = String(v).trim();
+  if (s === '-') return null;
+  let y, m, d, r;
+  if ((r = /^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/.exec(s))) { d = +r[1]; m = +r[2]; y = +r[3]; }
+  else if ((r = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) { y = +r[1]; m = +r[2]; d = +r[3]; }
+  else return NaN;
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 1990 || y > 2100) return NaN;
+  const t = new Date(Date.UTC(y, m - 1, d));
+  if (t.getUTCMonth() !== m - 1) return NaN;
+  return y + '-' + vxPad(m) + '-' + vxPad(d);
+}
+
+function exportVehiclesExcel() {
+  if (!data.vehicles.length) { alert('Aktarılacak araç yok.'); return; }
+  const ws = {};
+  VX_COLS.forEach((c, ci) => { ws[XLSX.utils.encode_cell({ r: 0, c: ci })] = { t: 's', v: c.h }; });
+  const list = data.vehicles.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  list.forEach((v, ri) => {
+    VX_COLS.forEach((c, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+      const val = v[c.key];
+      if (c.date) {
+        const ser = vxIsoToSerial(val);
+        ws[addr] = ser === null ? { t: 's', v: '' } : { t: 'n', v: ser, z: 'dd.mm.yyyy' };
+      } else ws[addr] = { t: 's', v: val || '' };
+    });
+  });
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: list.length, c: VX_COLS.length - 1 } });
+  ws['!cols'] = VX_COLS.map(c => ({ wch: c.key === 'name' ? 18 : (c.date ? 20 : 26) }));
+  const info = XLSX.utils.aoa_to_sheet([
+    ['Araç bilgileri Excel dosyası'],
+    [''],
+    ['Değiştirmek istediğiniz tarih ve firma bilgilerini düzeltip kaydedin, sonra programda Araçlar > "Excel\'den içeri aktar" ile yükleyin.'],
+    ['• "Araç" sütunundaki ad (plaka) programdaki adla aynı kalmalı; araç eşleştirmesi bu adla yapılır. Yeni araç bu yolla eklenmez.'],
+    ['• Tarihleri gg.aa.yyyy (örn. 15.03.2027) olarak yazın.'],
+    ['• Boş bıraktığınız hücre programdaki değeri DEĞİŞTİRMEZ. Bir bilgiyi silmek için hücreye - (tire) yazın.'],
+    ['• Sütunların sırası değişebilir, ama başlıkları değiştirmeyin.']
+  ]);
+  info['!cols'] = [{ wch: 120 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Araçlar');
+  XLSX.utils.book_append_sheet(wb, info, 'Açıklama');
+  XLSX.writeFile(wb, 'araclar-' + todayStr() + '.xlsx');
+}
+
+function importVehiclesExcel(file) {
+  const fr = new FileReader();
+  fr.onerror = () => alert('Dosya okunamadı.');
+  fr.onload = () => {
+    let rows;
+    try {
+      const wb = XLSX.read(new Uint8Array(fr.result), { type: 'array' });
+      const ws = wb.Sheets['Araçlar'] || wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: undefined, raw: true });
+    } catch (e) { console.error(e); alert('Excel dosyası açılamadı.'); return; }
+    if (!rows.length) { alert('Dosyada veri yok.'); return; }
+    // Başlıkları sütunlara eşle
+    const hdr = rows[0].map(vxNorm);
+    const colIdx = {};
+    VX_COLS.forEach(c => { const i = hdr.indexOf(vxNorm(c.h)); if (i >= 0) colIdx[c.key] = i; });
+    if (colIdx.name === undefined) { alert('"Araç" başlıklı sütun bulunamadı. Programdan indirdiğiniz dosyanın başlıklarını değiştirmeyin.'); return; }
+    const changes = [], unknown = [], bad = [];
+    const apply = []; // {veh, patch}
+    rows.slice(1).forEach((row, ri) => {
+      const nm = row[colIdx.name];
+      if (nm === undefined || String(nm).trim() === '') return;
+      const veh = data.vehicles.find(v => vxNorm(v.name) === vxNorm(nm));
+      if (!veh) { unknown.push(String(nm).trim()); return; }
+      const patch = {};
+      VX_COLS.forEach(c => {
+        if (c.key === 'name' || colIdx[c.key] === undefined) return;
+        const raw = row[colIdx[c.key]];
+        let nv;
+        if (c.date) {
+          nv = vxParseDate(raw);
+          if (typeof nv === 'number' && isNaN(nv)) { bad.push(`${veh.name} — ${c.h}: "${raw}"`); return; }
+        } else {
+          if (raw === undefined || String(raw).trim() === '') return;
+          nv = String(raw).trim() === '-' ? '' : String(raw).trim();
+        }
+        if (nv === undefined) return;               // boş: değiştirme
+        const cur = c.date ? (veh[c.key] || null) : (veh[c.key] || '');
+        if (nv === cur) return;
+        patch[c.key] = nv;
+        const show = x => x ? (c.date ? fmtDate(x) : x) : '(boş)';
+        changes.push(`${veh.name} — ${c.h}: ${show(cur)} → ${show(nv)}`);
+      });
+      if (Object.keys(patch).length) apply.push({ veh, patch });
+    });
+    let msg = '';
+    if (!changes.length) msg = 'Programdaki bilgilerden farklı bir değişiklik bulunmadı.';
+    if (unknown.length) msg += (msg ? '\n\n' : '') + 'Programda bulunamadığı için atlanan araçlar: ' + unknown.join(', ');
+    if (bad.length) msg += (msg ? '\n\n' : '') + 'Geçersiz tarih nedeniyle atlanan hücreler:\n' + bad.join('\n');
+    if (!changes.length) { alert(msg); return; }
+    const shown = changes.slice(0, 25).join('\n') + (changes.length > 25 ? `\n... ve ${changes.length - 25} değişiklik daha` : '');
+    const ok = confirm(`${apply.length} araçta ${changes.length} değişiklik uygulanacak:\n\n${shown}` + (msg ? '\n\n' + msg : '') + '\n\nUygulansın mı?');
+    if (!ok) return;
+    apply.forEach(({ veh, patch }) => Object.assign(veh, patch));
+    if (!save()) return;
+    renderVehicles();
+    renderReminders();
+    alert(`${changes.length} değişiklik uygulandı.`);
+  };
+  fr.readAsArrayBuffer(file);
+}
+(function setupVehicleExcelButtons() {
+  const tb = document.querySelector('#araclarView .toolbar');
+  const mk = (id, txt) => { const b = document.createElement('button'); b.id = id; b.type = 'button'; b.textContent = txt; tb.appendChild(b); return b; };
+  mk('vehExcelExportBtn', '📤 Excel\'e aktar').addEventListener('click', exportVehiclesExcel);
+  const imp = mk('vehExcelImportBtn', '📥 Excel\'den içeri aktar');
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.xlsx,.xls'; inp.style.display = 'none';
+  tb.appendChild(inp);
+  imp.addEventListener('click', () => inp.click());
+  inp.addEventListener('change', () => { if (inp.files[0]) importVehiclesExcel(inp.files[0]); inp.value = ''; });
+})();
+
 </script>
 </body>
 </html>
