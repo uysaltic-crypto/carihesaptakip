@@ -582,7 +582,7 @@
   <div class="modal-overlay" id="hakedisPdfModalOverlay">
     <div class="modal-box" style="max-width:420px;">
       <h3>Hakediş raporu (PDF)</h3>
-      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında sefer kaydı veya cari hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna (Tır/Kırkayak/Balıkesir) göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. "Çalışan" olarak işaretlenen kişiler listenin en altında ayrı bir "Çalışanlar" başlığı altında gösterilir. Masraf, çalışanlar dahil tüm satırlarda ayrı bir sütunda <b>eksi (negatif)</b> olarak gösterilir; Nakit hesabına dahil edilmez.</p>
+      <p style="font-size:12.5px; color:#5B6B82; margin:0 0 12px;">Seçilen tarih aralığında sefer kaydı veya cari hareketi olan tüm şoförler; sefer kayıtlarına göre en çok çalıştıkları araç grubuna göre gruplanarak, Hakediş/Resmi/Avans/Nakit ve cari harekette "Tür" alanına yazdığınız isimlerle (ör. "CRT İcra") oluşan sütunlarla listelenir. "Çalışan" olarak işaretlenen kişiler listenin en altında ayrı bir "Çalışanlar" başlığı altında gösterilir. Masraf, çalışanlar dahil tüm satırlarda ayrı bir sütunda <b>eksi (negatif)</b> olarak gösterilir; Nakit hesabına dahil edilmez.</p>
       <p style="font-size:12.5px; color:#8B99AD; margin:-6px 0 12px;">Bir şoförü "Çalışan" olarak işaretlemek için Şoförler ekranında ilgili kişiyi düzenleyip "Sefer grubu" alanından "Çalışan"ı seçin.</p>
       <div class="field-group">
         <input type="date" id="hakedisPdfDateFrom" style="flex:1;" />
@@ -699,7 +699,7 @@
     <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap;">
       <div id="fkCategoryTabs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
     </div>
-    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, "Sefer Ekle" bölümünden girilen her seferin fiyatının; ilgili grubun (Tır / Kırkayak / Balıkesir) güncel sefer tanımı fiyatıyla ve şoför carisine yazılan tutarla uyumlu olup olmadığını gösterir.</p>
+    <p style="font-size:13px; color:#5B6B82; margin:0 0 14px;">Bu ekran, "Sefer Ekle" bölümünden girilen her seferin fiyatının; ilgili araç grubunun güncel sefer tanımı fiyatıyla ve şoför carisine yazılan tutarla uyumlu olup olmadığını gösterir.</p>
     <div class="summary" id="fkSummaryCards"></div>
     <div class="toolbar">
       <input id="fkSearch" placeholder="Şoför, araç, irsaliye no veya sefer adıyla ara..." style="flex:1;" />
@@ -1443,12 +1443,18 @@
 const STORAGE_KEY = 'cari-hesap-data-v1';
 let data = { accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [], txTypeOptions: ['Normal', 'Masraf', 'Resmi', 'İcra', 'Avans'] };
 let activeFkCategory = 'hepsi';
-const FK_CATEGORIES = [
-  { key: 'hepsi', label: 'Tümü' },
+const DEFAULT_CATEGORIES = [
   { key: 'tir', label: 'Tır' },
   { key: 'kirkayak', label: 'Kırkayak' },
   { key: 'balikesir', label: 'Balıkesir' }
 ];
+// Araç/şoför/sefer tanımı grupları: kullanıcı ekleyip yeniden adlandırabilir (data.categories)
+function catList() { return (Array.isArray(data.categories) && data.categories.length) ? data.categories : DEFAULT_CATEGORIES; }
+function catLabelOf(key) {
+  const c = catList().find(x => x.key === key);
+  return c ? c.label : (key === 'calisan' ? 'Çalışan' : (key || ''));
+}
+function fkCategories() { return [{ key: 'hepsi', label: 'Tümü' }].concat(catList()); }
 let currentAccId = null;
 let editingAccId = null;
 let activeTab = 'hepsi';
@@ -4744,8 +4750,8 @@ document.getElementById('hakedisPdfGenerate').addEventListener('click', () => {
   const isGiderKey = (k) => String(dynamicLabels[k]).trim().toLocaleLowerCase('tr-TR') === 'gider';
   const icraKeys = dynamicKeys.filter(k => !isGiderKey(k));
   const giderKeys = dynamicKeys.filter(isGiderKey);
-  const CAT_ORDER = ['tir', 'kirkayak', 'balikesir', 'calisan'];
-  const catLabel = (c) => c === 'kirkayak' ? 'KIRKAYAK' : (c === 'balikesir' ? 'BALIKESİR' : (c === 'calisan' ? 'ÇALIŞANLAR' : 'TIRLAR'));
+  const CAT_ORDER = catList().map(c => c.key).concat(['calisan']);
+  const catLabel = (c) => c === 'calisan' ? 'ÇALIŞANLAR' : ((c === 'tir' && catLabelOf('tir') === 'Tır') ? 'TIRLAR' : catLabelOf(c).toLocaleUpperCase('tr'));
   const num = (n) => n ? n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 
   const byGroup = {};
@@ -4903,11 +4909,10 @@ load();
 let editingTripDefId = null;
 
 let activeTripDefCategory = 'tir';
-const TRIP_DEF_CATEGORIES = [{ key: 'tir', label: 'Tır' }, { key: 'kirkayak', label: 'Kırkayak' }, { key: 'balikesir', label: 'Balıkesir' }];
 
 function renderTripDefCategoryTabs() {
   const box = document.getElementById('tripDefCategoryTabs');
-  box.innerHTML = TRIP_DEF_CATEGORIES.map(cat => `
+  box.innerHTML = catList().map(cat => `
     <button class="tripDefCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeTripDefCategory ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">
       ${cat.label}
     </button>
@@ -4921,6 +4926,7 @@ function renderTripDefCategoryTabs() {
 }
 
 function renderTripDefs() {
+  if (typeof populateCategorySelects === 'function') populateCategorySelects();
   renderTripDefCategoryTabs();
   const list = document.getElementById('tripDefList');
   const items = data.tripDefs.filter(td => (td.category || 'tir') === activeTripDefCategory).slice().sort((a,b) => a.name.localeCompare(b.name, 'tr'));
@@ -5002,15 +5008,10 @@ document.getElementById('tripDefModalSave').addEventListener('click', () => {
 
 // ---- Fiyat Kontrolü ----
 let activePriceControlCategory = 'all';
-const PRICE_CONTROL_CATEGORIES = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'tir', label: 'Tır' },
-  { key: 'kirkayak', label: 'Kırkayak' },
-  { key: 'balikesir', label: 'Balıkesir' }
-];
+function priceControlCategories() { return [{ key: 'all', label: 'Tümü' }].concat(catList()); }
 
 function categoryLabel(cat) {
-  return cat === 'kirkayak' ? 'Kırkayak' : (cat === 'balikesir' ? 'Balıkesir' : 'Tır');
+  return catLabelOf(cat || 'tir');
 }
 
 // Bir seferin, aracının kategorisine göre HANGİ sefer tanımına karşılık gelmesi gerektiğini bulur.
@@ -5024,7 +5025,7 @@ function computeExpectedTripDef(trip) {
 
 function renderPriceControlCategoryTabs() {
   const box = document.getElementById('priceControlCategoryTabs');
-  box.innerHTML = PRICE_CONTROL_CATEGORIES.map(c => `
+  box.innerHTML = priceControlCategories().map(c => `
     <button class="priceControlCatBtn" data-key="${c.key}" style="font-size:12px; padding:6px 10px; ${c.key === activePriceControlCategory ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">${c.label}</button>
   `).join('');
   box.querySelectorAll('.priceControlCatBtn').forEach(btn => {
@@ -5561,6 +5562,7 @@ function resetDriverImagePreviews(d) {
 }
 
 function renderDrivers() {
+  if (typeof populateCategorySelects === 'function') populateCategorySelects();
   const list = document.getElementById('driverList');
   if (data.drivers.length === 0) {
     list.innerHTML = `<div class="empty">Henüz şoför eklenmedi.</div>`;
@@ -6292,6 +6294,7 @@ document.getElementById('maintList').addEventListener('click', (e) => {
 });
 
 function renderVehicles() {
+  if (typeof populateCategorySelects === 'function') populateCategorySelects();
   try { renderMaintenance(); } catch (e) { console.error('renderMaintenance hatası', e); }
   const compare = document.getElementById('fuelCompare');
   const withKm = data.vehicles.map(v => ({ id: v.id, name: v.name, km: lastKmOf(v.id) }));
@@ -6317,7 +6320,7 @@ function renderVehicles() {
   list.innerHTML = data.vehicles.map(v => `
     <div class="veh-card">
       <div class="veh-head">
-        <p class="name">${escapeHtml(v.name)} <span style="font-size:11px; font-weight:500; color:#7C8AA0; background:#EEF1F6; border-radius:6px; padding:2px 8px; margin-left:6px;">${v.category === 'kirkayak' ? 'Kırkayak' : (v.category === 'balikesir' ? 'Balıkesir' : 'Tır')}</span></p>
+        <p class="name">${escapeHtml(v.name)} <span style="font-size:11px; font-weight:500; color:#7C8AA0; background:#EEF1F6; border-radius:6px; padding:2px 8px; margin-left:6px;">${escapeHtml(catLabelOf(v.category || 'tir'))}</span></p>
         <div class="veh-actions">
           <button class="editVehBtn" data-id="${v.id}">Düzenle</button>
           <button class="delVehBtn" data-id="${v.id}">Sil</button>
@@ -6444,7 +6447,7 @@ document.getElementById('vehModalSave').addEventListener('click', async () => {
 // ---- Fiyat Kontrolü (sefer tanımı fiyatı vs. sefere yazılan fiyat vs. cariye yazılan tutar) ----
 function renderFkCategoryTabs() {
   const box = document.getElementById('fkCategoryTabs');
-  box.innerHTML = FK_CATEGORIES.map(cat => `
+  box.innerHTML = fkCategories().map(cat => `
     <button class="fkCatTabBtn" data-key="${cat.key}" style="font-size:12px; padding:6px 10px; ${cat.key === activeFkCategory ? 'background:#17212F; color:#fff; border-color:#17212F;' : ''}">
       ${cat.label}
     </button>
@@ -6457,7 +6460,7 @@ function renderFkCategoryTabs() {
   });
 }
 
-// Bir seferin hangi gruba (tır/kırkayak/balıkesir) ait sayılacağını belirler:
+// Bir seferin hangi gruba ait sayılacağını belirler:
 // önce seferdeki aracın grubuna, o yoksa şoförün grubuna bakar.
 function tripCategoryOf(trip) {
   const veh = trip.vehicleId ? data.vehicles.find(v => v.id === trip.vehicleId) : null;
@@ -8901,6 +8904,121 @@ function importVehiclesExcel(file) {
   tb.appendChild(inp);
   imp.addEventListener('click', () => inp.click());
   inp.addEventListener('change', () => { if (inp.files[0]) importVehiclesExcel(inp.files[0]); inp.value = ''; });
+})();
+
+// ======================================================================
+// Araç grupları (Tır / Kırkayak / Balıkesir ...): ekleme, yeniden adlandırma, silme
+// ======================================================================
+function populateCategorySelects() {
+  const fill = (id, extra) => {
+    const sel = document.getElementById(id); if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = catList().map(c => `<option value="${escapeHtml(c.key)}">${escapeHtml(c.label)}</option>`).join('') + (extra || '');
+    if (Array.from(sel.options).some(o => o.value === cur)) sel.value = cur;
+  };
+  fill('vehCategory');
+  fill('tripDefCategory');
+  fill('driverCategory', '<option value="calisan">Çalışan</option>');
+}
+populateCategorySelects();
+
+let catWorking = [];
+function catUsage(key) {
+  return {
+    veh: data.vehicles.filter(v => (v.category || 'tir') === key).length,
+    drv: data.drivers.filter(d => (d.category || 'tir') === key).length,
+    def: data.tripDefs.filter(t => (t.category || 'tir') === key).length
+  };
+}
+function ensureCatModal() {
+  let ov = document.getElementById('catModalOverlay');
+  if (ov) return ov;
+  ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'catModalOverlay';
+  ov.innerHTML = `<div class="modal-box" style="width:460px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+    <h3 style="margin:0 0 6px;">🏷 Araç grupları</h3>
+    <p style="font-size:12px; color:#5B6B82; margin:0 0 10px;">Grup adını değiştirmek, o gruptaki araçları, şoförleri ve sefer tanımlarını bozmaz; hepsi yeni adla görünür. Kullanımda olan bir grup silinemez.</p>
+    <div id="catRows"></div>
+    <div style="display:flex; gap:6px; margin-top:10px;">
+      <input type="text" id="catNewInput" placeholder="Yeni grup adı (ör. Kamyonet)" style="flex:1;" />
+      <button type="button" id="catAddBtn">+ Ekle</button>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+      <button type="button" id="catCancelBtn">Vazgeç</button>
+      <button type="button" id="catSaveBtn" class="primary-btn">Kaydet</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#catCancelBtn').addEventListener('click', () => { ov.style.display = 'none'; });
+  ov.querySelector('#catAddBtn').addEventListener('click', addCatRow);
+  ov.querySelector('#catNewInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCatRow(); } });
+  ov.querySelector('#catSaveBtn').addEventListener('click', saveCats);
+  return ov;
+}
+function catSyncFromInputs() {
+  document.querySelectorAll('#catRows .catLabelInput').forEach(i => { const c = catWorking.find(x => x.key === i.dataset.key); if (c) c.label = i.value; });
+}
+function renderCatRows() {
+  const box = document.getElementById('catRows');
+  box.innerHTML = catWorking.map(c => {
+    const u = catUsage(c.key), used = u.veh + u.drv + u.def;
+    const isNew = !!c.isNew;
+    const info = isNew ? 'yeni' : `${u.veh} araç · ${u.drv} şoför · ${u.def} sefer tanımı`;
+    return `<div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+      <input type="text" class="catLabelInput" data-key="${escapeHtml(c.key)}" value="${escapeHtml(c.label)}" style="flex:1;" />
+      <span style="font-size:11px; color:#8B99AD; white-space:nowrap;">${info}</span>
+      <button type="button" class="catDelBtn" data-key="${escapeHtml(c.key)}" style="color:#C43D33;" ${(c.key === 'tir' || (!isNew && used)) ? 'disabled title="' + (c.key === 'tir' ? 'Varsayılan grup silinemez (adını değiştirebilirsiniz)' : 'Kullanımda olduğu için silinemez') + '"' : ''}>Sil</button>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.catDelBtn').forEach(b => b.addEventListener('click', () => {
+    catSyncFromInputs();
+    catWorking = catWorking.filter(c => c.key !== b.dataset.key);
+    renderCatRows();
+  }));
+}
+function addCatRow() {
+  catSyncFromInputs();
+  const inp = document.getElementById('catNewInput');
+  const label = inp.value.trim();
+  if (!label) { inp.focus(); return; }
+  if (catWorking.some(c => c.label.trim().toLocaleLowerCase('tr') === label.toLocaleLowerCase('tr'))) { alert('Bu adla bir grup zaten var.'); return; }
+  catWorking.push({ key: 'cat_' + Date.now().toString(36), label, isNew: true });
+  inp.value = '';
+  renderCatRows();
+}
+function openCatModal() {
+  const ov = ensureCatModal();
+  catWorking = catList().map(c => ({ key: c.key, label: c.label }));
+  renderCatRows();
+  ov.style.display = 'flex';
+}
+function saveCats() {
+  catSyncFromInputs();
+  const labels = catWorking.map(c => c.label.trim());
+  if (labels.some(l => !l)) { alert('Grup adı boş olamaz.'); return; }
+  const lower = labels.map(l => l.toLocaleLowerCase('tr'));
+  if (new Set(lower).size !== lower.length) { alert('Aynı ada sahip iki grup olamaz.'); return; }
+  data.categories = catWorking.map(c => ({ key: c.key, label: c.label.trim() }));
+  const keys = new Set(data.categories.map(c => c.key));
+  if (!keys.has(activeTripDefCategory)) activeTripDefCategory = 'tir';
+  if (activeFkCategory !== 'hepsi' && !keys.has(activeFkCategory)) activeFkCategory = 'hepsi';
+  if (activePriceControlCategory !== 'all' && !keys.has(activePriceControlCategory)) activePriceControlCategory = 'all';
+  if (!save()) return;
+  document.getElementById('catModalOverlay').style.display = 'none';
+  populateCategorySelects();
+  renderVehicles();
+  try { renderTripDefs(); } catch (e) {}
+  try { renderDrivers(); } catch (e) {}
+  try { renderFiyatKontrol(); } catch (e) {}
+  try { renderPriceControl(); } catch (e) {}
+}
+(function setupCatButton() {
+  const tb = document.querySelector('#araclarView .toolbar');
+  const b = document.createElement('button');
+  b.type = 'button'; b.id = 'editCatsBtn'; b.textContent = '🏷 Araç gruplarını düzenle';
+  tb.appendChild(b);
+  b.addEventListener('click', openCatModal);
 })();
 
 </script>
