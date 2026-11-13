@@ -9021,6 +9021,70 @@ function saveCats() {
   b.addEventListener('click', openCatModal);
 })();
 
+// ======================================================================
+// Araç bilgi formu: A4'e 4 araç, elle doldurulacak (plaka basılı, tarih/firma boş)
+// ======================================================================
+function printVehicleInfoForm() {
+  const vehs = data.vehicles.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  const total = Math.max(4, Math.ceil(vehs.length / 4) * 4);
+  const dateBox = `<div class="dt"><span class="sl">/</span><span class="sl">/</span></div><div class="dtl"><span>gün</span><span>ay</span><span>yıl</span></div>`;
+  const pair = t => `<div class="blk"><div class="ttl">${t}</div>
+      <div class="two"><div class="c1"><div class="lb">Tarih</div>${dateBox}</div><div class="c2"><div class="lb">Firma</div><div class="ln"></div></div></div></div>`;
+  const card = v => `<div class="card">
+      <div class="lbp">ARAÇ PLAKA</div>
+      <div class="plate">${v ? escapeHtml(v.name) : ''}</div>
+      <div class="blk"><div class="ttl">Muayene Tarihi</div><div class="one">${dateBox}</div></div>
+      ${pair('Trafik Sigortası')}${pair('Kasko')}${pair('Ürün Kaskosu')}
+    </div>`;
+  let sheets = '';
+  for (let i = 0; i < total; i += 4) {
+    sheets += '<div class="sheet">' + [0, 1, 2, 3].map(k => card(vehs[i + k] || null)).join('') + '</div>';
+  }
+  const css = `
+    @page { size: A4 portrait; margin: 8mm; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
+    .sheet { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 194mm; height: 279mm; break-after: page; page-break-after: always; }
+    .sheet:last-child { break-after: auto; page-break-after: auto; }
+    .card { border: 0.4mm dashed #999; padding: 8mm 9mm 6mm; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+    .lbp { font-size: 8pt; font-weight: 700; color: #666; }
+    .plate { font-size: 17pt; font-weight: 700; border-bottom: 0.35mm solid #000; height: 10mm; line-height: 10mm; margin-top: 1mm; }
+    .ttl { font-size: 11pt; font-weight: 700; margin-bottom: 1.5mm; }
+    .lb { font-size: 7.5pt; color: #666; margin-bottom: 1mm; }
+    .two { display: flex; gap: 6mm; }
+    .c1 { width: 46%; } .c2 { width: 48%; }
+    .one { width: 50%; }
+    .dt { position: relative; height: 9mm; border-bottom: 0.3mm solid #000; }
+    .dt .sl { position: absolute; bottom: 0.5mm; font-size: 10pt; color: #aaa; }
+    .dt .sl:nth-child(1) { left: 34%; } .dt .sl:nth-child(2) { left: 62%; }
+    .dtl { display: flex; font-size: 6.5pt; color: #aaa; margin-top: 0.8mm; }
+    .dtl span:nth-child(1) { width: 38%; } .dtl span:nth-child(2) { width: 28%; }
+    .ln { height: 9mm; border-bottom: 0.3mm solid #000; }
+  `;
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed; left:-10000px; top:0; width:794px; height:1123px; border:0;';
+  document.body.appendChild(frame);
+  const d = frame.contentDocument;
+  d.open();
+  d.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Araç bilgi formu</title><style>' + css + '</style></head><body>' + sheets + '</body></html>');
+  d.close();
+  const cleanup = () => setTimeout(() => frame.remove(), 500);
+  frame.contentWindow.addEventListener('afterprint', cleanup);
+  setTimeout(() => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { console.error(e); } }, 300);
+  setTimeout(() => frame.remove(), 10 * 60 * 1000);
+}
+(function setupVehFormButton() {
+  const tb = document.querySelector('#araclarView .toolbar');
+  const b = document.createElement('button');
+  b.type = 'button'; b.id = 'vehInfoFormBtn'; b.textContent = '🖨 Araç bilgi formu (PDF)';
+  b.title = 'A4\'e 4 araç sığacak şekilde, elle doldurulacak form. Yazdırma penceresinde "PDF olarak kaydet" seçebilirsiniz.';
+  tb.appendChild(b);
+  b.addEventListener('click', () => {
+    if (!data.vehicles.length) { alert('Programda araç yok.'); return; }
+    printVehicleInfoForm();
+  });
+})();
+
 </script>
 </body>
 </html>
