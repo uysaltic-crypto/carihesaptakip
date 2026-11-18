@@ -7314,14 +7314,31 @@ function invParseXml(text, fileName) {
 
   const rawLines = [];
   let otherTax = false;
+  // Tevkifat (KDV kesintisi) kalemleri: { taxable, amount: tevkif edilen KDV, percent: tevkifat oranı (örn. 20 = 2/10) }
+  // Fatura sağlayıcıları tevkifatı farklı yerlere yazar: belge düzeyi WithholdingTaxTotal, TaxTotal içinde 6xx/9xx kodlu
+  // satır, ya da yalnızca fatura kalemlerinin içinde. Hepsi taranır; aynı tutar iki kez sayılmaz.
+  const whA = [], whB = [], whC = [];
+  const isWithholding = (code, nm) => /^[689]\d\d$/.test(code) || nm.indexOf('TEVK') !== -1;
+  const whItem = ts => ({ taxable: num(kid(ts, 'TaxableAmount')), amount: num(kid(ts, 'TaxAmount')), percent: num(kid(ts, 'Percent')) });
   kids(root, 'TaxTotal').forEach(tt => kids(tt, 'TaxSubtotal').forEach(ts => {
     const scheme = kid(kid(ts, 'TaxCategory'), 'TaxScheme');
     const code = txt(kid(scheme, 'TaxTypeCode'));
     const nm = txt(kid(scheme, 'Name')).toUpperCase();
+    if (isWithholding(code, nm)) { const w = whItem(ts); if (w.amount > 0) whA.push(w); return; }
     const isKdv = code === '0015' || nm.indexOf('KDV') !== -1 || nm.indexOf('KATMA') !== -1;
     if (isKdv) rawLines.push({ amount: num(kid(ts, 'TaxableAmount')), rate: num(kid(ts, 'Percent')) });
     else otherTax = true;
   }));
+  kids(root, 'WithholdingTaxTotal').forEach(wt => kids(wt, 'TaxSubtotal').forEach(ts => {
+    const w = whItem(ts); if (w.amount > 0) whB.push(w);
+  }));
+  kids(root, 'InvoiceLine').forEach(il => kids(il, 'WithholdingTaxTotal').forEach(wt => kids(wt, 'TaxSubtotal').forEach(ts => {
+    const w = whItem(ts); if (w.amount > 0) whC.push(w);
+  })));
+  const mon0 = kid(root, 'LegalMonetaryTotal');
+  const monPayable = num(kid(mon0, 'PayableAmount'));
+  const monIncl = num(kid(mon0, 'TaxInclusiveAmount'));
+  let wh = whB.length ? whB : (whA.length ? whA : whC);
   const byRate = {};
   rawLines.forEach(l => {
     const k = String(l.rate);
@@ -7334,7 +7351,63 @@ function invParseXml(text, fileName) {
     const base = num(kid(mon, 'TaxExclusiveAmount')) || num(kid(mon, 'LineExtensionAmount'));
     if (base) { lines = [{ amount: base, rate: 0 }]; notes.push('KDV satırı bulunamadı, %0 varsayıldı'); }
   }
-  if (kids(root, 'WithholdingTaxTotal').length > 0) notes.push('Tevkifatlı fatura — tutarları kontrol edin');
+  // Tevkifatlı fatura: alıcı KDV'nin bir kısmını satıcıya ödemez (vergi dairesine kendisi öder).
+  // Cariye ve KDV takibine "ödenecek KDV" yansıtılır: etkin KDV oranı = oran × (1 − tevkifat oranı).
+  // Örn. %20 KDV, 2/10 tevkifat → etkin %16 (matrah + %16 = faturadaki "Ödenecek Tutar").
+  let tevTotal = 0, tevApplied = false;
+  // Hiçbir yerde tevkifat satırı yoksa ama fatura tipi TEVKİFAT ise, toplamlar arasındaki farktan kesinti çıkarılır
+  // (Vergiler Dahil Toplam − Ödenecek Tutar).
+  if (!wh.length && (typeCode.indexOf('TEVK') !== -1 || profile.toUpperCase().indexOf('TEVK') !== -1) && monIncl > 0 && monPayable > 0 && monIncl - monPayable > 0.05) {
+    wh = [{ taxable: 0, amount: monIncl - monPayable, percent: 0 }];
+    notes.push('Tevkifat tutarı fatura toplamlarından hesaplandı');
+  }
+  if (wh.length && lines.length && lines.some(l => l.rate > 0)) {
+    const work = lines.map(l => ({ amount: l.amount, rate: l.rate }));
+    const out = [];
+    const snap = r => { const x = Math.round(r * 10) / 10; return (r > 0 && r <= 1.0001 && Math.abs(r - x) < 0.004) ? x : null; };
+    wh.forEach(w => {
+      // Bu kesintinin ait olduğu KDV grubunu bul ("taxable" bazı sağlayıcılarda KDV, bazılarında matrah olabilir)
+      let best = null, bd = Infinity;
+      work.forEach(g => {
+        if (g.rate <= 0 || g.amount <= 0.005) return;
+        const k = g.amount * g.rate / 100;
+        const d = w.taxable > 0 ? Math.min(Math.abs(k - w.taxable), Math.abs(g.amount - w.taxable)) : -k;
+        if (d < bd) { bd = d; best = g; }
+      });
+      if (!best) return;
+      const kdvOfGroup = best.amount * best.rate / 100;
+      // Tevkifat oranı (share): önce belgedeki yüzde, yoksa tutarlardan çıkar
+      let share = null;
+      if (w.percent > 0 && w.percent <= 100) share = w.percent / 100;
+      if (share === null && w.taxable > 0) share = snap(w.amount / w.taxable) || snap(w.amount / (w.taxable * best.rate / 100));
+      if (share === null) share = Math.min(1, w.amount / (w.taxable > 0 && w.taxable <= kdvOfGroup + 0.05 ? w.taxable : kdvOfGroup));
+      // Tevkifata tabi matrah: belgedeki "taxable" KDV mi matrah mı olduğuna göre kuruşu kuruşuna bulunur
+      let matrahW;
+      if (w.taxable > 0 && Math.abs(w.amount / w.taxable - share) < 0.004) matrahW = w.taxable * 100 / best.rate;
+      else if (w.taxable > 0 && Math.abs(w.amount / (w.taxable * best.rate / 100) - share) < 0.004) matrahW = w.taxable;
+      else matrahW = (w.amount / share) * 100 / best.rate;
+      matrahW = Math.min(best.amount, matrahW);
+      if (best.amount - matrahW < 0.5) matrahW = best.amount;   // yuvarlama artığı ayrı satır oluşturmasın
+      const eff = Number((best.rate * (1 - share)).toFixed(4));
+      out.push({ amount: matrahW, rate: eff, origRate: best.rate, tevPct: Number((share * 100).toFixed(2)), tev: w.amount });
+      best.amount -= matrahW;
+      tevTotal += w.amount; tevApplied = true;
+    });
+    if (tevApplied) {
+      lines = out.concat(work.filter(g => g.amount > 0.005)).sort((a, b) => (b.origRate || b.rate) - (a.origRate || a.rate));
+      // Doğrulama: hesaplanan toplam, faturadaki "Ödenecek Tutar" ile uyuşmalı
+      const calc = lines.reduce((t, l) => t + l.amount * (1 + l.rate / 100), 0);
+      if (monPayable > 0 && Math.abs(calc - monPayable) > 0.1) {
+        notes.push('⚠ Hesaplanan tutar (' + fmt(calc) + ') faturadaki ödenecek tutardan (' + fmt(monPayable) + ') farklı — tutarları kontrol edin');
+      }
+    }
+  }
+  if (tevApplied) {
+    const l0 = lines.find(l => l.tev);
+    notes.push('Tevkifatlı fatura: ' + fmt(tevTotal) + ' KDV tevkif edildi; etkin KDV oranı %' + l0.rate + ' olarak işlendi (cariye "ödenecek tutar" yazılır)');
+  } else if (wh.length || kids(root, 'WithholdingTaxTotal').length > 0) {
+    notes.push('Tevkifatlı fatura — tutarları kontrol edin');
+  }
   if (otherTax) notes.push('KDV dışı vergi içeriyor (ör. ÖTV/stopaj) — dikkate alınmadı');
 
   let skipReason = '';
@@ -7590,7 +7663,7 @@ function renderInvImport() {
 
     const matrah = item.lines.reduce((s, l) => s + l.amount, 0);
     const kdv = item.lines.reduce((s, l) => s + l.amount * l.rate / 100, 0);
-    const rates = item.lines.map(l => '%' + l.rate).join(', ');
+    const rates = item.lines.map(l => '%' + l.rate + (l.tev ? ' (tevkifatlı)' : '')).join(', ');
     const color = st.kind === 'new' ? '#1D8A5B' : (st.kind === 'dup' ? '#8B99AD' : ((st.kind === 'attach' || st.kind === 'cari') ? '#2F6FE0' : '#C43D33'));
 
     let accCell = '<span style="color:#8B99AD;">—</span>';
@@ -7747,7 +7820,7 @@ document.getElementById('invImportConfirm').addEventListener('click', async () =
         id: 'taxe_' + stamp + '_' + (seq++),
         date: item.date,
         type: dir,
-        desc: item.lines.length > 1 ? 'e-Fatura (%' + line.rate + ' KDV kalemi)' : 'e-Fatura',
+        desc: line.tev ? ('e-Fatura (tevkifatlı: %' + line.origRate + ' KDV, %' + line.tevPct + ' tevkifat)') : (item.lines.length > 1 ? 'e-Fatura (%' + line.rate + ' KDV kalemi)' : 'e-Fatura'),
         irsaliyeNo: item.invoiceNo,
         accountId: accId,
         amount: Number(line.amount.toFixed(2)),
