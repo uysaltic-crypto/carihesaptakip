@@ -763,6 +763,7 @@
         <button type="button" id="taxSelectAllBtn">☑ Görünenleri seç</button>
         <button type="button" id="taxUnmarkBtn">↩ Yazdırıldı işaretini kaldır</button>
         <button type="button" id="taxPrintBtn" class="primary-btn">🖨 Seçilenleri yazdır (0)</button>
+        <button type="button" id="taxDeleteBtn" style="color:#C43D33; border-color:#E8B4AF;">🗑 Seçilenleri sil (0)</button>
       </span>
     </div>
     <div class="list-wrap" id="taxList"></div>
@@ -6862,9 +6863,7 @@ function renderTaxEntryRow(e) {
     : `<button class="editTaxEntryBtn" data-id="${e.id}">Düzenle</button><button class="delTaxEntryBtn" data-id="${e.id}">Sil</button>`;
   const printedBadge = e.printedAt
     ? ` <span style="color:#5B6B82; font-weight:600;">🖨 Yazdırıldı (${fmtDate(e.printedAt.slice(0, 10))})</span>` : '';
-  const selChk = e.docKey
-    ? `<input type="checkbox" class="taxSelChk" data-id="${e.id}" ${taxPrintSel.has(e.id) ? 'checked' : ''} title="Toplu yazdırma için seç" style="flex:none; width:auto; margin:0 10px 0 0; cursor:pointer;" />`
-    : `<span title="Bu kayıt için fatura görseli kayıtlı değil; yazdırılamaz" style="flex:none; width:23px;"></span>`;
+  const selChk = `<input type="checkbox" class="taxSelChk" data-id="${e.id}" ${taxPrintSel.has(e.id) ? 'checked' : ''} title="Toplu yazdırma / silme için seç" style="flex:none; width:auto; margin:0 10px 0 0; cursor:pointer;" />`;
   return `<div class="rem-row">
     <div class="rem-left" style="align-items:center;">
       ${selChk}
@@ -6916,7 +6915,7 @@ function renderVergiTakibi() {
     const tKdv = items.reduce((t, e) => t + e.amount * (e.vatRate / 100), 0);
     const collapsed = collapsedTaxSections.has(sec.type);
     const header = `<div class="taxSectionHeader" data-taxsec="${sec.type}" style="display:flex; justify-content:space-between; align-items:center; padding:11px 14px; background:#F7F9FC; border-bottom:1px solid #E7EAF0; border-left:4px solid ${sec.color}; cursor:pointer; user-select:none; flex-wrap:wrap; gap:8px;">
-      <span style="font-weight:700; font-size:14px; color:${sec.color}; display:flex; align-items:center; gap:6px;">${items.some(e => e.docKey) ? `<input type="checkbox" class="taxSecChk" data-sec="${sec.type}" ${items.filter(e => e.docKey).every(e => taxPrintSel.has(e.id)) ? 'checked' : ''} title="Bu başlıktaki tüm faturaları seç" style="width:auto; margin:0; cursor:pointer;" />` : ''}<span>${collapsed ? '▸' : '▾'} ${sec.title} <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(${items.length} kayıt)</span></span></span>
+      <span style="font-weight:700; font-size:14px; color:${sec.color}; display:flex; align-items:center; gap:6px;">${items.length ? `<input type="checkbox" class="taxSecChk" data-sec="${sec.type}" ${items.every(e => taxPrintSel.has(e.id)) ? 'checked' : ''} title="Bu başlıktaki tüm kayıtları seç" style="width:auto; margin:0; cursor:pointer;" />` : ''}<span>${collapsed ? '▸' : '▾'} ${sec.title} <span style="font-weight:400; color:#8B99AD; font-size:11.5px;">(${items.length} kayıt)</span></span></span>
       <span style="display:flex; gap:12px; font-size:12px; font-weight:600; flex-wrap:wrap;">
         <span>Matrah: ${fmt(tMatrah)}</span>
         <span>KDV: ${fmt(tKdv)}</span>
@@ -6978,7 +6977,7 @@ function renderVergiTakibi() {
   list.querySelectorAll('.taxSecChk').forEach(cb => {
     cb.addEventListener('click', ev => ev.stopPropagation());
     cb.addEventListener('change', () => {
-      visible.filter(e => e.type === cb.dataset.sec && e.docKey).forEach(e => {
+      visible.filter(e => e.type === cb.dataset.sec).forEach(e => {
         if (cb.checked) taxPrintSel.add(e.id); else taxPrintSel.delete(e.id);
       });
       renderVergiTakibi();
@@ -7030,6 +7029,8 @@ function updateTaxPrintBtn() {
   if (b) { b.textContent = `🖨 Seçilenleri yazdır (${taxPrintSel.size})`; b.disabled = taxPrintSel.size === 0; }
   const u = document.getElementById('taxUnmarkBtn');
   if (u) u.disabled = taxPrintSel.size === 0;
+  const dBtn = document.getElementById('taxDeleteBtn');
+  if (dBtn) { dBtn.textContent = `🗑 Seçilenleri sil (${taxPrintSel.size})`; dBtn.disabled = taxPrintSel.size === 0; }
 }
 
 // Aynı faturanın (aynı docKey) tüm KDV kalemlerini birlikte işaretler / işareti kaldırır
@@ -7066,7 +7067,7 @@ async function printSelectedTaxInvoices() {
   const order = { satis: 0, alis: 1, masraf: 2 };
   const picked = (data.taxEntries || []).filter(e => taxPrintSel.has(e.id) && e.docKey)
     .sort((a, b) => (order[a.type] - order[b.type]) || b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-  if (!picked.length) return;
+  if (!picked.length) { alert('Seçilen kayıtların hiçbirinde yazdırılabilir fatura görseli yok.'); return; }
   const btn = document.getElementById('taxPrintBtn');
   const oldLabel = btn.textContent;
   btn.disabled = true; btn.textContent = 'Hazırlanıyor...';
@@ -7122,10 +7123,35 @@ document.getElementById('taxHidePrinted').addEventListener('change', e => {
 });
 document.getElementById('taxSelectAllBtn').addEventListener('click', () => {
   const q = taxSearchQuery.trim().toLocaleLowerCase('tr');
-  let vis = (data.taxEntries || []).filter(e => e.docKey && (!q || taxEntryMatchesSearch(e, q)) && (!taxHidePrinted || !e.printedAt));
+  let vis = (data.taxEntries || []).filter(e => (!q || taxEntryMatchesSearch(e, q)) && (!taxHidePrinted || !e.printedAt));
   const allSel = vis.length > 0 && vis.every(e => taxPrintSel.has(e.id));
   vis.forEach(e => { if (allSel) taxPrintSel.delete(e.id); else taxPrintSel.add(e.id); });
   renderVergiTakibi();
+});
+document.getElementById('taxDeleteBtn').addEventListener('click', () => {
+  const sel = (data.taxEntries || []).filter(e => taxPrintSel.has(e.id));
+  const deletable = sel.filter(e => !e.fromTxId);          // cari hareketinden otomatik gelenler buradan silinmez
+  const skipped = sel.length - deletable.length;
+  if (!deletable.length) {
+    alert('Seçilen kayıtlar cari hareketinden otomatik oluştuğu için buradan silinemez; ilgili cari hareketini silin.');
+    return;
+  }
+  const withCari = deletable.filter(e => e.linkedTxId).length;
+  const msg = deletable.length + ' kayıt silinecek.' +
+    (withCari ? ' Bunlardan ' + withCari + ' tanesinin carideki hareketi de silinecek.' : '') +
+    (skipped ? ' (' + skipped + ' kayıt cariden otomatik geldiği için silinmeyecek.)' : '') +
+    ' Bu işlem geri alınamaz. Devam edilsin mi?';
+  showConfirm(msg, () => {
+    const ids = new Set(deletable.map(e => e.id));
+    const accIds = new Set();
+    deletable.forEach(e => { if (e.accountId) accIds.add(e.accountId); removeLinkedCariTx(e.linkedTxId); });
+    data.taxEntries = data.taxEntries.filter(x => !ids.has(x.id));
+    ids.forEach(id => taxPrintSel.delete(id));
+    save();
+    renderVergiTakibi();
+    renderList();
+    if (currentAccId && accIds.has(currentAccId)) refreshDetail();
+  });
 });
 document.getElementById('taxUnmarkBtn').addEventListener('click', () => {
   if (taxPrintSel.size) taxSetPrinted([...taxPrintSel], false);
