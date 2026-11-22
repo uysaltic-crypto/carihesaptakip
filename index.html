@@ -3148,7 +3148,7 @@ document.getElementById('exportBtn').addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'cari-hesap-yedek-' + todayStr() + '.json';
+  a.download = 'cari-hesap-yedek-' + todayStr() + '-' + new Date().toTimeString().slice(0,5).replace(':','') + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3167,14 +3167,9 @@ document.getElementById('importFile').addEventListener('change', (e) => {
     try {
       const imported = JSON.parse(reader.result);
       data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
-      save();
-      updateTabStyles();
-      renderList();
-      renderReminders();
-      renderVehicles();
-      updateAlertBanner();
-      updateRemBadge();
-      alert('Yedek başarıyla yüklendi.');
+      if (!save()) return;
+      alert('Yedek başarıyla yüklendi. Sayfa yenileniyor.');
+      location.reload();
     } catch (err) {
       alert('Dosya okunamadı. Lütfen bu programdan indirilmiş geçerli bir yedek dosyası (.json) seçin.');
     }
@@ -3525,6 +3520,7 @@ let gdriveAccessToken = null;
 let gdriveFileId = null;
 let gdriveTokenExpiry = 0;
 let gdriveImgFolderId = null;
+let gdriveFoundCount = 0;
 
 function gdriveGetClientId() {
   return localStorage.getItem('gdrive-client-id') || '';
@@ -3630,11 +3626,18 @@ document.getElementById('gdriveConnectBtn').addEventListener('click', () => {
 });
 
 async function gdriveFindFile() {
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${GDRIVE_FILENAME}'&spaces=drive&fields=files(id,name,modifiedTime)`, {
-    headers: { Authorization: 'Bearer ' + gdriveAccessToken }
+  // Aynı adlı birden fazla dosya olabilir (çöpe atılmış / eski): çöptekileri atla, en son güncellenen dosyayı seç.
+  const q = encodeURIComponent("name='" + GDRIVE_FILENAME + "' and trashed=false");
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)`, {
+    headers: { Authorization: 'Bearer ' + gdriveAccessToken },
+    cache: 'no-store'
   });
   const json = await res.json();
-  if (json.files && json.files.length > 0) return json.files[0];
+  if (json.files && json.files.length > 0) {
+    gdriveFoundCount = json.files.length;
+    return json.files[0];
+  }
+  gdriveFoundCount = 0;
   return null;
 }
 
@@ -3676,19 +3679,15 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       const existing = await gdriveFindFile();
       if (!existing) { gdriveSetStatus('Buluta kayıtlı bir yedek bulunamadı.'); return; }
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, {
-        headers: { Authorization: 'Bearer ' + gdriveAccessToken }
+        headers: { Authorization: 'Bearer ' + gdriveAccessToken },
+        cache: 'no-store'
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const imported = await res.json();
       data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
-      save();
-      updateTabStyles();
-      renderList();
-      renderReminders();
-      renderVehicles();
-      updateAlertBanner();
-      updateRemBadge();
-      gdriveSetStatus('Buluttan başarıyla getirildi — ' + new Date().toLocaleString('tr-TR'));
+      if (!save()) return;
+      gdriveSetStatus('Buluttan getirildi. Yedeğin alındığı zaman: ' + new Date(existing.modifiedTime).toLocaleString('tr-TR') + (gdriveFoundCount > 1 ? ' (Drive\'da ' + gdriveFoundCount + ' aynı adlı dosya var, en yenisi alındı)' : '') + ' — sayfa yenileniyor');
+      setTimeout(() => location.reload(), 3000);
     } catch (e) {
       console.error('Google Drive geri yükleme hatası', e);
       gdriveSetStatus('Geri yükleme başarısız oldu, lütfen tekrar deneyin.');
