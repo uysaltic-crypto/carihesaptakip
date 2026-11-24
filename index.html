@@ -3148,7 +3148,7 @@ document.getElementById('exportBtn').addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'cari-hesap-yedek-' + todayStr() + '-' + new Date().toTimeString().slice(0,5).replace(':','') + '.json';
+  a.download = 'cari-hesap-yedek-' + todayStr() + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3167,9 +3167,14 @@ document.getElementById('importFile').addEventListener('change', (e) => {
     try {
       const imported = JSON.parse(reader.result);
       data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
-      if (!save()) return;
-      alert('Yedek başarıyla yüklendi. Sayfa yenileniyor.');
-      location.reload();
+      save();
+      updateTabStyles();
+      renderList();
+      renderReminders();
+      renderVehicles();
+      updateAlertBanner();
+      updateRemBadge();
+      alert('Yedek başarıyla yüklendi.');
     } catch (err) {
       alert('Dosya okunamadı. Lütfen bu programdan indirilmiş geçerli bir yedek dosyası (.json) seçin.');
     }
@@ -3520,7 +3525,6 @@ let gdriveAccessToken = null;
 let gdriveFileId = null;
 let gdriveTokenExpiry = 0;
 let gdriveImgFolderId = null;
-let gdriveFoundCount = 0;
 
 function gdriveGetClientId() {
   return localStorage.getItem('gdrive-client-id') || '';
@@ -3626,18 +3630,11 @@ document.getElementById('gdriveConnectBtn').addEventListener('click', () => {
 });
 
 async function gdriveFindFile() {
-  // Aynı adlı birden fazla dosya olabilir (çöpe atılmış / eski): çöptekileri atla, en son güncellenen dosyayı seç.
-  const q = encodeURIComponent("name='" + GDRIVE_FILENAME + "' and trashed=false");
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)`, {
-    headers: { Authorization: 'Bearer ' + gdriveAccessToken },
-    cache: 'no-store'
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${GDRIVE_FILENAME}'&spaces=drive&fields=files(id,name,modifiedTime)`, {
+    headers: { Authorization: 'Bearer ' + gdriveAccessToken }
   });
   const json = await res.json();
-  if (json.files && json.files.length > 0) {
-    gdriveFoundCount = json.files.length;
-    return json.files[0];
-  }
-  gdriveFoundCount = 0;
+  if (json.files && json.files.length > 0) return json.files[0];
   return null;
 }
 
@@ -3679,15 +3676,19 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       const existing = await gdriveFindFile();
       if (!existing) { gdriveSetStatus('Buluta kayıtlı bir yedek bulunamadı.'); return; }
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`, {
-        headers: { Authorization: 'Bearer ' + gdriveAccessToken },
-        cache: 'no-store'
+        headers: { Authorization: 'Bearer ' + gdriveAccessToken }
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const imported = await res.json();
       data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
-      if (!save()) return;
-      gdriveSetStatus('Buluttan getirildi. Yedeğin alındığı zaman: ' + new Date(existing.modifiedTime).toLocaleString('tr-TR') + (gdriveFoundCount > 1 ? ' (Drive\'da ' + gdriveFoundCount + ' aynı adlı dosya var, en yenisi alındı)' : '') + ' — sayfa yenileniyor');
-      setTimeout(() => location.reload(), 3000);
+      save();
+      updateTabStyles();
+      renderList();
+      renderReminders();
+      renderVehicles();
+      updateAlertBanner();
+      updateRemBadge();
+      gdriveSetStatus('Buluttan başarıyla getirildi — ' + new Date().toLocaleString('tr-TR'));
     } catch (e) {
       console.error('Google Drive geri yükleme hatası', e);
       gdriveSetStatus('Geri yükleme başarısız oldu, lütfen tekrar deneyin.');
@@ -4058,6 +4059,27 @@ function findIrsConflict(irsaliyeNo, excludeTripId, vehicleId) {
     irsKeyOf(t.irsaliyeNo) === key &&
     (t.vehicleId || null) === (vehicleId || null)
   ) || null;
+}
+
+// Aynı irsaliye no'su BAŞKA bir araçta kullanılmış mı? (Engellenmez, ama kaydederken uyarılır.)
+function findIrsOtherVehicle(irsaliyeNo, excludeTripId, vehicleId) {
+  const str = String(irsaliyeNo || '').trim();
+  if (!str) return [];
+  const key = irsKeyOf(str);
+  return data.trips.filter(t => t.id !== excludeTripId &&
+    String(t.irsaliyeNo || '').trim() !== '' &&
+    irsKeyOf(t.irsaliyeNo) === key &&
+    (t.vehicleId || null) !== (vehicleId || null));
+}
+function confirmIrsOtherVehicle(irsaliyeNo, excludeTripId, vehicleId, driverId, date) {
+  const list = findIrsOtherVehicle(irsaliyeNo, excludeTripId, vehicleId);
+  if (!list.length) return true;
+  const sameDay = list.some(t => t.driverId === driverId && t.date === date);
+  const lines = list.slice(0, 3).map(t => fmtDate(t.date) + ' — ' + driverVehicleLabelPlain(t)).join('\n');
+  return confirm('Bu irsaliye no (' + irsaliyeNo + ') başka araçta da kullanılmış:\n' + lines + '\n\n' +
+    (sameDay ? '⚠ Aynı şoför ve aynı tarih: büyük olasılıkla mükerrer kayıt (araç yanlış seçilmiş olabilir).'
+             : 'Farklı aracın koçanından geliyorsa sorun yok.') +
+    '\n\nYine de kaydedilsin mi?');
 }
 
 // Numerik bir irsaliye no'sunun, "İrsaliye Takip"te kayıtlı (teslim alınmış olanlar dahil) hiçbir koçanın
@@ -5433,6 +5455,7 @@ document.getElementById('tripEditSave').addEventListener('click', () => {
     focusAndSelect('tripEditIrsaliyeNo');
     return;
   }
+  if (!confirmIrsOtherVehicle(irsaliyeNo, editingTripId, vehicleId, driverId, date)) { focusAndSelect('tripEditIrsaliyeNo'); return; }
   const prevTrip = data.trips.find(x => x.id === editingTripId);
   if (irsaliyeNo !== String((prevTrip && prevTrip.irsaliyeNo) || '').trim() && irsNoOutsideBooklets(irsaliyeNo) &&
       !confirm(IRS_NO_BOOKLET_MSG(irsaliyeNo) + '\n\nYine de kaydedilsin mi?')) {
@@ -5458,6 +5481,12 @@ document.getElementById('tripEditIrsaliyeNo').addEventListener('input', () => {
     warn.style.color = '';
     warn.style.display = 'block';
     document.getElementById('tripEditIrsaliyeNo').style.borderColor = '#C43D33';
+  } else if (findIrsOtherVehicle(val, editingTripId, vehicleId).length) {
+    const o = findIrsOtherVehicle(val, editingTripId, vehicleId)[0];
+    warn.textContent = `Dikkat: bu no başka araçta da kullanılmış — ${fmtDate(o.date)}, ${driverVehicleLabelPlain(o)}`;
+    warn.style.color = '#A3660F';
+    warn.style.display = 'block';
+    document.getElementById('tripEditIrsaliyeNo').style.borderColor = '#E0A030';
   } else if (irsNoOutsideBooklets(val)) {
     warn.textContent = `Uyarı: ${val} hiçbir koçan aralığında değil — önce "İrsaliye Takip"ten koçanı ekleyin.`;
     warn.style.color = '#A3660F';
@@ -5486,6 +5515,7 @@ document.getElementById('addTripBtn').addEventListener('click', () => {
     focusAndSelect('tripIrsaliyeNo');
     return;
   }
+  if (!confirmIrsOtherVehicle(irsaliyeNo, null, vehicleId, driverId, date)) { focusAndSelect('tripIrsaliyeNo'); return; }
   if (irsNoOutsideBooklets(irsaliyeNo) && !confirm(IRS_NO_BOOKLET_MSG(irsaliyeNo) + '\n\nYine de kaydedilsin mi?\n(İptal: koçanı önce "İrsaliye Takip"ten ekleyebilirsiniz)')) {
     focusAndSelect('tripIrsaliyeNo');
     return;
@@ -5519,6 +5549,12 @@ document.getElementById('tripIrsaliyeNo').addEventListener('input', () => {
     warn.style.color = '';
     warn.style.display = 'block';
     document.getElementById('tripIrsaliyeNo').style.borderColor = '#C43D33';
+  } else if (findIrsOtherVehicle(val, null, vehicleId).length) {
+    const o = findIrsOtherVehicle(val, null, vehicleId)[0];
+    warn.textContent = `Dikkat: bu no başka araçta da kullanılmış — ${fmtDate(o.date)}, ${driverVehicleLabelPlain(o)}`;
+    warn.style.color = '#A3660F';
+    warn.style.display = 'block';
+    document.getElementById('tripIrsaliyeNo').style.borderColor = '#E0A030';
   } else if (irsNoOutsideBooklets(val)) {
     warn.textContent = `Uyarı: ${val} hiçbir koçan aralığında değil — önce "İrsaliye Takip"ten koçanı ekleyin.`;
     warn.style.color = '#A3660F';
@@ -8781,6 +8817,7 @@ async function renderIrsInbox() {
       alert('Bu irsaliye no (' + no + ') zaten kullanılmış:\n' + fmtDate(conflict.date) + ' — ' + driverVehicleLabelPlain(conflict) + '\n\nSefer oluşturulmadı.');
       noInp.focus(); return;
     }
+    if (!confirmIrsOtherVehicle(no, null, veh.id, driver.id, date)) { noInp.focus(); return; }
     if (irsNoOutsideBooklets(no) && !confirm(IRS_NO_BOOKLET_MSG(no) + '\n\nYine de sefer olarak işlensin mi?')) return;
     const price = priceVal === '' ? null : parseFloat(priceVal);
     const trip = { id: 'trip_' + Date.now(), irsaliyeNo: no, driverId: driver.id, vehicleId: veh.id, date, desc: td.name, price, pageId: activeSeferPageId === '__ALL__' ? null : activeSeferPageId, linkedTxId: null };
