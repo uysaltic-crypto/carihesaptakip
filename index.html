@@ -7615,7 +7615,7 @@ function txDocKeyOf(t) {
 // Chrome 155+ tarayıcıdan XSLTProcessor'ı kaldırdı; yoksa polyfill'i (WASM tabanlı) yükle.
 let _xsltReady = null;
 function ensureXslt() {
-  if (typeof XSLTProcessor !== 'undefined') return Promise.resolve(true);
+  if (typeof XSLTProcessor !== 'undefined') return Promise.resolve(window.xsltPolyfillReady ? window.xsltPolyfillReady.then(() => true, () => true) : true);
   if (_xsltReady) return _xsltReady;
   const urls = [
     'https://cdn.jsdelivr.net/npm/xslt-polyfill@1.0.2/xslt-polyfill.min.js',
@@ -7652,7 +7652,19 @@ async function invTransform(xmlText, xsltText) {
   const proc = new XSLTProcessor();
   try { proc.importStylesheet(xsl); } catch (e) { throw new Error('şablon yüklenemedi: ' + (e && e.message || e)); }
   let out = null;
-  try { out = proc.transformToDocument(xml); } catch (e) { throw new Error('dönüştürme hatası: ' + (e && e.message || e)); }
+  // Polyfill WASM modülü hazır değilse (hata mesajında "not yet loaded") kısa aralıklarla yeniden dene
+  for (let i = 0; ; i++) {
+    try { out = proc.transformToDocument(xml); break; }
+    catch (e) {
+      const m = String((e && e.message) || e);
+      if (i < 40 && /not yet loaded|xsltPolyfillReady/i.test(m)) {
+        try { if (window.xsltPolyfillReady) await window.xsltPolyfillReady; } catch (_) {}
+        await new Promise(r => setTimeout(r, 250));
+        continue;
+      }
+      throw new Error('dönüştürme hatası: ' + m);
+    }
+  }
   if (out && out.documentElement && !out.getElementsByTagName('parsererror').length) {
     return '<!DOCTYPE html>' + out.documentElement.outerHTML;
   }
