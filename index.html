@@ -7092,7 +7092,7 @@ async function invHtmlForPrint(key) {
   if (doc.xsltHash) {
     try {
       const xslt = await invDbGet('xslts', doc.xsltHash);
-      if (xslt) html = invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
+      if (xslt) html = await invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
     } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
   }
   return html || invFallbackHtml(doc.xml);
@@ -7612,7 +7612,33 @@ function txDocKeyOf(t) {
   return e && e.docKey ? e.docKey : null;
 }
 
-function invTransform(xmlText, xsltText) {
+// Chrome 155+ tarayıcıdan XSLTProcessor'ı kaldırdı; yoksa polyfill'i (WASM tabanlı) yükle.
+let _xsltReady = null;
+function ensureXslt() {
+  if (typeof XSLTProcessor !== 'undefined') return Promise.resolve(true);
+  if (_xsltReady) return _xsltReady;
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/xslt-polyfill@1.0.2/xslt-polyfill.min.js',
+    'https://cdn.jsdelivr.net/npm/xslt-polyfill@1/xslt-polyfill.min.js',
+    'https://unpkg.com/xslt-polyfill@1/xslt-polyfill.min.js'
+  ];
+  _xsltReady = (async () => {
+    for (const u of urls) {
+      const ok = await new Promise(res => {
+        const sc = document.createElement('script');
+        sc.src = u; sc.onload = () => res(true); sc.onerror = () => { sc.remove(); res(false); };
+        document.head.appendChild(sc);
+      });
+      if (ok && typeof XSLTProcessor !== 'undefined') return true;
+    }
+    return false;
+  })();
+  _xsltReady.then(ok => { if (!ok) _xsltReady = null; });
+  return _xsltReady;
+}
+
+async function invTransform(xmlText, xsltText) {
+  if (!(await ensureXslt())) throw new Error('XSLT desteği yüklenemedi — tarayıcı XSLT\'yi kaldırmış ve internetten eklenti indirilemedi');
   const p = new DOMParser();
   const xml = p.parseFromString(xmlText, 'application/xml');
   const xsl = p.parseFromString(xsltText, 'application/xml');
@@ -7672,7 +7698,7 @@ async function showInvoiceDoc(key) {
     try {
       const xslt = await invDbGet('xslts', doc.xsltHash);
       if (!xslt) reason = 'şablon cihazda bulunamadı';
-      else html = invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
+      else html = await invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
     } catch (e) { console.error('Fatura şablonu uygulanamadı', e); reason = (e && e.message) || String(e); }
   }
   if (!html) {
@@ -7688,7 +7714,7 @@ document.getElementById('invDocPrint').addEventListener('click', () => {
 });
 
 // İçeri aktarma listesinde, henüz kaydedilmemiş (dosyadan okunan) faturanın görselini gösterir
-function showInvoiceItemPreview(item) {
+async function showInvoiceItemPreview(item) {
   const frame = document.getElementById('invDocFrame');
   const note = document.getElementById('invDocNote');
   const msg = (x) => '<p style="font-family:Arial,sans-serif;padding:20px;color:#3A4657;">' + x + '</p>';
@@ -7698,7 +7724,7 @@ function showInvoiceItemPreview(item) {
   let html = null, reason = '';
   if (!item.xsltText) reason = 'bu XML\'in içinde şablon yok';
   else {
-    try { html = invTransform(item.xmlStripped, item.xsltText); } catch (e) { console.error('Fatura şablonu uygulanamadı', e); reason = (e && e.message) || String(e); }
+    try { html = await invTransform(item.xmlStripped, item.xsltText); } catch (e) { console.error('Fatura şablonu uygulanamadı', e); reason = (e && e.message) || String(e); }
   }
   if (!html) {
     html = invFallbackHtml(item.xmlStripped);
