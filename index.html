@@ -7616,12 +7616,25 @@ function invTransform(xmlText, xsltText) {
   const p = new DOMParser();
   const xml = p.parseFromString(xmlText, 'application/xml');
   const xsl = p.parseFromString(xsltText, 'application/xml');
-  if (xml.getElementsByTagName('parsererror').length || xsl.getElementsByTagName('parsererror').length) throw new Error('XML/XSLT okunamadı');
+  const xe = xml.getElementsByTagName('parsererror')[0], se = xsl.getElementsByTagName('parsererror')[0];
+  if (xe) throw new Error('fatura XML\'i okunamadı: ' + (xe.textContent || '').trim().slice(0, 140));
+  if (se) throw new Error('şablon okunamadı: ' + (se.textContent || '').trim().slice(0, 140));
   const proc = new XSLTProcessor();
-  proc.importStylesheet(xsl);
-  const out = proc.transformToDocument(xml);
-  if (!out || !out.documentElement || out.getElementsByTagName('parsererror').length) throw new Error('Dönüştürme başarısız');
-  return '<!DOCTYPE html>' + out.documentElement.outerHTML;
+  try { proc.importStylesheet(xsl); } catch (e) { throw new Error('şablon yüklenemedi: ' + (e && e.message || e)); }
+  let out = null;
+  try { out = proc.transformToDocument(xml); } catch (e) { throw new Error('dönüştürme hatası: ' + (e && e.message || e)); }
+  if (out && out.documentElement && !out.getElementsByTagName('parsererror').length) {
+    return '<!DOCTYPE html>' + out.documentElement.outerHTML;
+  }
+  // İkinci yol: sonucu belge parçası olarak al
+  try {
+    const frag = proc.transformToFragment(xml, document);
+    const div = document.createElement('div');
+    if (frag) div.appendChild(frag);
+    if (div.innerHTML.length > 200) return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' + div.innerHTML + '</body></html>';
+  } catch (e) { /* aşağıdaki hata yeterli */ }
+  const perr = out && out.getElementsByTagName('parsererror')[0];
+  throw new Error(perr ? 'çıktı geçersiz: ' + (perr.textContent || '').trim().slice(0, 140) : 'şablon boş çıktı üretti');
 }
 
 function invFallbackHtml(xmlText) {
@@ -7653,16 +7666,18 @@ async function showInvoiceDoc(key) {
     frame.srcdoc = msg('Bu faturanın görseli bu cihazda kayıtlı değil. Fatura XML\'ini Vergi Takibi → "Faturaları içeri aktar" ile yeniden seçin; görsel mevcut kayda eklenir.');
     return;
   }
-  let html = null;
-  if (doc.xsltHash) {
+  let html = null, reason = '';
+  if (!doc.xsltHash) reason = 'bu kayıtta fatura şablonu yok';
+  else {
     try {
       const xslt = await invDbGet('xslts', doc.xsltHash);
-      if (xslt) html = invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
-    } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
+      if (!xslt) reason = 'şablon cihazda bulunamadı';
+      else html = invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
+    } catch (e) { console.error('Fatura şablonu uygulanamadı', e); reason = (e && e.message) || String(e); }
   }
   if (!html) {
     html = invFallbackHtml(doc.xml);
-    note.textContent = 'Bu XML içinde fatura şablonu bulunamadı veya uygulanamadı; özet görünüm gösteriliyor.';
+    note.textContent = 'Fatura şablonu uygulanamadı (' + reason + '); özet görünüm gösteriliyor.';
   }
   frame.srcdoc = html;
 }
@@ -7680,13 +7695,14 @@ function showInvoiceItemPreview(item) {
   note.textContent = '';
   document.getElementById('invDocModalOverlay').style.display = 'flex';
   if (!item.xmlStripped) { frame.srcdoc = msg('Bu fatura için görsel verisi okunamadı.'); return; }
-  let html = null;
-  if (item.xsltText) {
-    try { html = invTransform(item.xmlStripped, item.xsltText); } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
+  let html = null, reason = '';
+  if (!item.xsltText) reason = 'bu XML\'in içinde şablon yok';
+  else {
+    try { html = invTransform(item.xmlStripped, item.xsltText); } catch (e) { console.error('Fatura şablonu uygulanamadı', e); reason = (e && e.message) || String(e); }
   }
   if (!html) {
     html = invFallbackHtml(item.xmlStripped);
-    note.textContent = 'Bu XML içinde fatura şablonu bulunamadı veya uygulanamadı; özet görünüm gösteriliyor.';
+    note.textContent = 'Fatura şablonu uygulanamadı (' + reason + '); özet görünüm gösteriliyor.';
   }
   frame.srcdoc = html;
 }
