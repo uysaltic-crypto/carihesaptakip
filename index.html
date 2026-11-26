@@ -7092,7 +7092,7 @@ async function invHtmlForPrint(key) {
   if (doc.xsltHash) {
     try {
       const xslt = await invDbGet('xslts', doc.xsltHash);
-      if (xslt) html = invTransform(doc.xml, xslt);
+      if (xslt) html = invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
     } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
   }
   return html || invFallbackHtml(doc.xml);
@@ -7563,6 +7563,20 @@ function stripInvoiceFiles(imp) {
   return imp;
 }
 
+// Her faturanın şablonuna o faturanın QR kodu gömülü olduğundan, ham şablonlar birbirinden farklı çıkar ve her biri
+// yaklaşık 240 KB yer kaplar. Görseller şablondan ayrılıp faturanın kaydında (küçük) saklanır; şablonun kendisi
+// (görselsiz) yalnızca birkaç farklı kopya olarak tutulur.
+const INV_IMG_RE = /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+\/=\s]+/g;
+function invSplitXslt(text) {
+  const imgs = [];
+  const norm = text.replace(INV_IMG_RE, m => { imgs.push(m.replace(/\s+/g, '')); return '__INVIMG' + (imgs.length - 1) + '__'; });
+  return { norm, imgs };
+}
+function invJoinXslt(norm, imgs) {
+  if (!imgs || !imgs.length) return norm;
+  return norm.replace(/__INVIMG(\d+)__/g, (m, i) => imgs[+i] !== undefined ? imgs[+i] : m);
+}
+
 function invDjb(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function invXsltHash(t) { return t.length + '_' + invDjb(t) + '_' + invDjb(t.split('').reverse().join('')); }
 function invDocKeyOf(item, dir) { return (item.ettn || '').toLowerCase() || (dir + '|' + invNoNorm(item.invoiceNo)); }
@@ -7573,12 +7587,17 @@ async function invStoreDoc(item, dir) {
   try {
     const key = invDocKeyOf(item, dir);
     let hash = null;
+    let imgs = [];
     if (item.xsltText) {
-      hash = invXsltHash(item.xsltText);
+      const sp = invSplitXslt(item.xsltText);
+      imgs = sp.imgs;
+      hash = invXsltHash(sp.norm);
       const have = await invDbGet('xslts', hash);
-      if (!have) await invDbPut('xslts', hash, item.xsltText);
+      if (!have) await invDbPut('xslts', hash, sp.norm);
     }
-    await invDbPut('docs', key, { xml: item.xmlStripped, xsltHash: hash });
+    const rec = { xml: item.xmlStripped, xsltHash: hash };
+    if (imgs.length) rec.imgs = imgs;
+    await invDbPut('docs', key, rec);
     return key;
   } catch (e) {
     console.error('Fatura görseli kaydedilemedi', e);
@@ -7638,7 +7657,7 @@ async function showInvoiceDoc(key) {
   if (doc.xsltHash) {
     try {
       const xslt = await invDbGet('xslts', doc.xsltHash);
-      if (xslt) html = invTransform(doc.xml, xslt);
+      if (xslt) html = invTransform(doc.xml, invJoinXslt(xslt, doc.imgs));
     } catch (e) { console.error('Fatura şablonu uygulanamadı', e); }
   }
   if (!html) {
@@ -9271,6 +9290,57 @@ function printVehicleInfoForm() {
     printVehicleInfoForm();
   });
 })();
+
+// ---- Eski kayıtları küçültme (bir defaya mahsus) ----
+// Daha önce kaydedilmiş faturaların şablonlarını (QR kodu ayrılmış hâliyle) tekilleştirir; kullanılmayan kopyaları siler.
+async function invCompactStore() {
+  if (localStorage.getItem('inv_compact_v1')) return { skipped: true };
+  const db = await invDbOpen();
+  const readAll = store => new Promise((res, rej) => {
+    const out = [];
+    const rq = db.transaction(store, 'readonly').objectStore(store).openCursor();
+    rq.onsuccess = () => { const c = rq.result; if (c) { out.push([c.key, c.value]); c.continue(); } else res(out); };
+    rq.onerror = () => rej(rq.error);
+  });
+  const readKeys = store => new Promise((res, rej) => {
+    const rq = db.transaction(store, 'readonly').objectStore(store).getAllKeys();
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  });
+  let converted = 0, removed = 0;
+  try {
+    const docs = await readAll('docs');            // faturaların XML'i küçüktür; şablonlar tek tek okunur
+    const known = new Set();                        // yazılmış normalize şablon özetleri
+    for (const [key, doc] of docs) {
+      if (!doc || !doc.xsltHash || doc.imgs) continue;
+      const xslt = await invDbGet('xslts', doc.xsltHash);
+      if (!xslt) continue;
+      const sp = invSplitXslt(xslt);
+      if (!sp.imgs.length) continue;                // zaten görselsiz
+      const newHash = invXsltHash(sp.norm);
+      if (!known.has(newHash)) {
+        if (!(await invDbGet('xslts', newHash))) await invDbPut('xslts', newHash, sp.norm);
+        known.add(newHash);
+      }
+      await invDbPut('docs', key, { xml: doc.xml, xsltHash: newHash, imgs: sp.imgs });
+      converted++;
+    }
+    // Artık hiçbir faturanın kullanmadığı şablonları sil
+    const used = new Set((await readAll('docs')).map(([k, d]) => d && d.xsltHash).filter(Boolean));
+    const keys = await readKeys('xslts');
+    const stale = keys.filter(k => !used.has(k));
+    if (stale.length) {
+      await new Promise((res, rej) => {
+        const tx = db.transaction('xslts', 'readwrite');
+        stale.forEach(k => tx.objectStore('xslts').delete(k));
+        tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+      });
+      removed = stale.length;
+    }
+    localStorage.setItem('inv_compact_v1', '1');
+  } finally { db.close(); }
+  return { converted, removed };
+}
+setTimeout(() => { invCompactStore().then(r => { if (r && !r.skipped) console.log('Fatura deposu küçültüldü', r); }).catch(e => console.error('Fatura deposu küçültülemedi', e)); }, 5000);
 
 </script>
 </body>
