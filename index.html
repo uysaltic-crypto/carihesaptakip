@@ -3143,8 +3143,8 @@ document.getElementById('addTxBtn').addEventListener('click', () => {
   renderReminders();
 });
 
-document.getElementById('exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+document.getElementById('exportBtn').addEventListener('click', async () => {
+  const blob = new Blob([JSON.stringify(await buildBackupObject(), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -3166,7 +3166,7 @@ document.getElementById('importFile').addEventListener('change', (e) => {
   reader.onload = () => {
     try {
       const imported = JSON.parse(reader.result);
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, stripInvoiceFiles(imported));
       save();
       updateTabStyles();
       renderList();
@@ -3644,7 +3644,7 @@ document.getElementById('gdriveBackupBtn').addEventListener('click', () => {
   gdriveSetStatus('Yedekleniyor...');
   try {
     const existing = await gdriveFindFile();
-    const content = JSON.stringify(data);
+    const content = JSON.stringify(await buildBackupObject());
     const metadata = { name: GDRIVE_FILENAME, mimeType: 'application/json' };
     const boundary = 'gdrive_boundary_' + Date.now();
     const body =
@@ -3680,7 +3680,7 @@ document.getElementById('gdriveRestoreBtn').addEventListener('click', async () =
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const imported = await res.json();
-      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, imported);
+      data = Object.assign({ accounts: [], transactions: {}, reminders: [], vehicles: [], fuelLogs: [], drivers: [], trips: [], tripDefs: [], irsaliyeler: [], seferSayfalari: [], genelSeferPageName: 'Genel', taxEntries: [] }, stripInvoiceFiles(imported));
       save();
       updateTabStyles();
       renderList();
@@ -7512,6 +7512,57 @@ async function invDbGet(store, key) {
     rq.onerror = () => { db.close(); rej(rq.error); };
   });
 }
+// ---- Yedeğe fatura görsellerini dahil etme ----
+// Fatura XML'leri ve şablonları tarayıcı deposunda (IndexedDB) durur; yedek JSON'una `invoiceFiles` olarak eklenir.
+async function invDbDumpAll() {
+  const db = await invDbOpen();
+  const dump = store => new Promise((res, rej) => {
+    const out = {};
+    const rq = db.transaction(store, 'readonly').objectStore(store).openCursor();
+    rq.onsuccess = () => { const c = rq.result; if (c) { out[c.key] = c.value; c.continue(); } else res(out); };
+    rq.onerror = () => rej(rq.error);
+  });
+  try { return { docs: await dump('docs'), xslts: await dump('xslts') }; } finally { db.close(); }
+}
+async function invDbRestoreAll(bundle) {
+  const db = await invDbOpen();
+  const put = (store, obj) => new Promise((res, rej) => {
+    const keys = Object.keys(obj || {});
+    if (!keys.length) { res(0); return; }
+    const tx = db.transaction(store, 'readwrite');
+    const st = tx.objectStore(store);
+    keys.forEach(k => st.put(obj[k], k));
+    tx.oncomplete = () => res(keys.length);
+    tx.onerror = () => rej(tx.error);
+  });
+  try {
+    const x = await put('xslts', bundle.xslts);
+    const d = await put('docs', bundle.docs);
+    return { docs: d, xslts: x };
+  } finally { db.close(); }
+}
+async function buildBackupObject() {
+  const obj = Object.assign({}, data);
+  delete obj.invoiceFiles;
+  try {
+    const inv = await invDbDumpAll();
+    if (Object.keys(inv.docs).length || Object.keys(inv.xslts).length) obj.invoiceFiles = inv;
+  } catch (e) { console.error('Fatura görselleri yedeğe eklenemedi', e); }
+  return obj;
+}
+// Yedekten okunan nesneden fatura görsellerini ayırır (program verisine karışmaz) ve arka planda depoya yazar.
+function stripInvoiceFiles(imp) {
+  const f = imp && imp.invoiceFiles;
+  if (imp) delete imp.invoiceFiles;
+  if (f && (f.docs || f.xslts)) {
+    invDbRestoreAll(f).then(r => {
+      alert(r.docs + ' fatura görseli yedekten geri yüklendi.');
+      try { if (typeof activeView !== 'undefined' && activeView === 'vergitakibi') renderVergiTakibi(); } catch (e) {}
+    }).catch(e => { console.error(e); alert('Fatura görselleri geri yüklenemedi.'); });
+  }
+  return imp;
+}
+
 function invDjb(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function invXsltHash(t) { return t.length + '_' + invDjb(t) + '_' + invDjb(t.split('').reverse().join('')); }
 function invDocKeyOf(item, dir) { return (item.ettn || '').toLowerCase() || (dir + '|' + invNoNorm(item.invoiceNo)); }
@@ -8482,11 +8533,12 @@ function autoBackupDue() {
 // Bütün veriyi Drive'daki yedek dosyasının üzerine yazar (gdriveAccessToken geçerli olmalı).
 async function gdriveRunBackup() {
   const existing = await gdriveFindFile();
+  const bodyJson = JSON.stringify(await buildBackupObject());
   const metadata = { name: GDRIVE_FILENAME, mimeType: 'application/json' };
   const boundary = 'gdrive_boundary_' + Date.now();
   const body =
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
-    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(data)}\r\n--${boundary}--`;
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${bodyJson}\r\n--${boundary}--`;
   const url = existing
     ? `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart`
     : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
