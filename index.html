@@ -7629,7 +7629,11 @@ function ensureXslt() {
         sc.src = u; sc.onload = () => res(true); sc.onerror = () => { sc.remove(); res(false); };
         document.head.appendChild(sc);
       });
-      if (ok && typeof XSLTProcessor !== 'undefined') return true;
+      if (ok && typeof XSLTProcessor !== 'undefined') {
+        // Polyfill'in WASM modülü asenkron hazırlanır; hazır olana kadar bekle
+        try { if (window.xsltPolyfillReady) await window.xsltPolyfillReady; } catch (e) { console.error('XSLT polyfill hazırlanamadı', e); continue; }
+        return true;
+      }
     }
     return false;
   })();
