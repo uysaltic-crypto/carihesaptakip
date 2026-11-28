@@ -7616,37 +7616,93 @@ function txDocKeyOf(t) {
   return e && e.docKey ? e.docKey : null;
 }
 
-// Chrome 155+ tarayıcıdan XSLTProcessor'ı kaldırdı; yoksa polyfill'i (WASM tabanlı) yükle.
-let _xsltReady = null;
-function ensureXslt() {
-  if (typeof XSLTProcessor !== 'undefined') return Promise.resolve(window.xsltPolyfillReady ? window.xsltPolyfillReady.then(() => true, () => true) : true);
-  if (_xsltReady) return _xsltReady;
-  const urls = [
-    'https://cdn.jsdelivr.net/npm/xslt-polyfill@1.0.2/xslt-polyfill.min.js',
-    'https://cdn.jsdelivr.net/npm/xslt-polyfill@1/xslt-polyfill.min.js',
-    'https://unpkg.com/xslt-polyfill@1/xslt-polyfill.min.js'
-  ];
-  _xsltReady = (async () => {
-    for (const u of urls) {
-      const ok = await new Promise(res => {
-        const sc = document.createElement('script');
-        sc.src = u; sc.onload = () => res(true); sc.onerror = () => { sc.remove(); res(false); };
-        document.head.appendChild(sc);
-      });
-      if (ok && typeof XSLTProcessor !== 'undefined') {
-        // Polyfill'in WASM modülü asenkron hazırlanır; hazır olana kadar bekle
-        try { if (window.xsltPolyfillReady) await window.xsltPolyfillReady; } catch (e) { console.error('XSLT polyfill hazırlanamadı', e); continue; }
-        return true;
-      }
-    }
-    return false;
-  })();
-  _xsltReady.then(ok => { if (!ok) _xsltReady = null; });
-  return _xsltReady;
+// Chrome 155+ tarayıcıdan XSLTProcessor'ı kaldırdı. Tarayıcıda yoksa, index.html ile aynı klasördeki
+// xslt-processor.js (saf JavaScript XSLT motoru, LGPL-3.0) kullanılır; internet bağlantısı gerekmez.
+let _xpLib = null;
+function loadXsltLib() {
+  if (window.XsltProcessor && window.XsltProcessor.Xslt) return Promise.resolve(true);
+  if (_xpLib) return _xpLib;
+  _xpLib = new Promise(res => {
+    const sc = document.createElement('script');
+    sc.src = 'xslt-processor.js?v=5.1.3';
+    sc.onload = () => res(!!(window.XsltProcessor && window.XsltProcessor.Xslt));
+    sc.onerror = () => { sc.remove(); res(false); };
+    document.head.appendChild(sc);
+  });
+  _xpLib.then(ok => { if (!ok) _xpLib = null; });
+  return _xpLib;
 }
-
-async function invTransform(xmlText, xsltText) {
-  if (!(await ensureXslt())) throw new Error('XSLT desteği yüklenemedi — tarayıcı XSLT\'yi kaldırmış ve internetten eklenti indirilemedi');
+// GİB e-fatura şablonunu JS motorunun anlayacağı biçime çevirir:
+//  - xsl:character-map (yalnızca süs; motor tanımıyor) çıkarılır
+//  - Avrupa sayı biçimi (decimal-format 'european'): format-number(...) çağrıları, ABD biçimiyle üretilip
+//    translate() ile ',' ve '.' yer değiştirilerek yeniden yazılır; NaN (boş değer) şablondaki gibi boş gösterilir
+function xsltPrepareForJs(text) {
+  let t = text
+    .replace(/<xsl:character-map[\s\S]*?<\/xsl:character-map>/g, '')
+    .replace(/\s+use-character-maps="[^"]*"/g, '')
+    .replace(/<xsl:decimal-format[^>]*\/>/g, '');
+  const swap = p => p.replace(/[.,]/g, c => c === '.' ? ',' : '.');
+  let out = '', i = 0;
+  const key = 'format-number(';
+  while (true) {
+    const k = t.indexOf(key, i);
+    if (k < 0) { out += t.slice(i); break; }
+    out += t.slice(i, k);
+    let depth = 0, j = k + key.length - 1, q = null, end = -1;
+    for (; j < t.length; j++) {
+      const c = t[j];
+      if (q) { if (c === q) q = null; continue; }
+      if (c === "'" || c === '"') { q = c; continue; }
+      if (c === '(') depth++;
+      else if (c === ')') { depth--; if (depth === 0) { end = j; break; } }
+    }
+    if (end < 0) { out += t.slice(k); break; }
+    const inner = t.slice(k + key.length, end);
+    const m = /^([\s\S]*),\s*'([#0.,]+)'\s*,\s*'european'\s*$/.exec(inner);
+    if (m) {
+      const s = 'translate(format-number(number(' + m[1] + "), '" + swap(m[2]) + "'), ',.', '.,')";
+      out += 'substring(' + s + ', 1, string-length(' + s + ") * (" + s + " != 'NaN'))";
+    } else out += t.slice(k, end + 1);
+    i = end + 1;
+  }
+  return out;
+}
+// Motor XML biçiminde (<title/>, <td/>) çıktı verir; HTML ayrıştırıcı bunları yanlış okur. Boş etiketler çift etikete çevrilir.
+function xmlOutToHtml(out) {
+  const VOID = new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
+  let res = '', i = 0;
+  while (i < out.length) {
+    const k = out.indexOf('<', i);
+    if (k < 0) { res += out.slice(i); break; }
+    res += out.slice(i, k);
+    const c = out[k + 1];
+    if (!c || !/[A-Za-z]/.test(c)) { res += '<'; i = k + 1; continue; }
+    let j = k + 1, q = null;
+    for (; j < out.length; j++) {
+      const ch = out[j];
+      if (q) { if (ch === q) q = null; continue; }
+      if (ch === '"' || ch === "'") { q = ch; continue; }
+      if (ch === '>') break;
+    }
+    const tag = out.slice(k, j + 1);
+    const m = /^<([A-Za-z][A-Za-z0-9:-]*)([\s\S]*?)\s*\/>$/.exec(tag);
+    if (m && !VOID.has(m[1].toLowerCase())) res += '<' + m[1] + m[2] + '></' + m[1] + '>';
+    else res += tag;
+    i = j + 1;
+  }
+  return res;
+}
+async function invTransformJs(xmlText, xsltText) {
+  if (!(await loadXsltLib())) throw new Error('XSLT motoru (xslt-processor.js) yüklenemedi — dosyanın index.html ile aynı klasörde olduğundan emin olun');
+  const X = window.XsltProcessor;
+  let out;
+  try {
+    out = await new X.Xslt().xsltProcess(new X.XmlParser().xmlParse(xmlText), new X.XmlParser().xmlParse(xsltPrepareForJs(xsltText)));
+  } catch (e) { throw new Error('dönüştürme hatası: ' + (e && e.message || e)); }
+  if (!out || out.length < 200) throw new Error('şablon boş çıktı üretti');
+  return '<!DOCTYPE html>' + xmlOutToHtml(out);
+}
+function invTransformNative(xmlText, xsltText) {
   const p = new DOMParser();
   const xml = p.parseFromString(xmlText, 'application/xml');
   const xsl = p.parseFromString(xsltText, 'application/xml');
@@ -7654,33 +7710,19 @@ async function invTransform(xmlText, xsltText) {
   if (xe) throw new Error('fatura XML\'i okunamadı: ' + (xe.textContent || '').trim().slice(0, 140));
   if (se) throw new Error('şablon okunamadı: ' + (se.textContent || '').trim().slice(0, 140));
   const proc = new XSLTProcessor();
-  try { proc.importStylesheet(xsl); } catch (e) { throw new Error('şablon yüklenemedi: ' + (e && e.message || e)); }
-  let out = null;
-  // Polyfill WASM modülü hazır değilse (hata mesajında "not yet loaded") kısa aralıklarla yeniden dene
-  for (let i = 0; ; i++) {
-    try { out = proc.transformToDocument(xml); break; }
-    catch (e) {
-      const m = String((e && e.message) || e);
-      if (i < 40 && /not yet loaded|xsltPolyfillReady/i.test(m)) {
-        try { if (window.xsltPolyfillReady) await window.xsltPolyfillReady; } catch (_) {}
-        await new Promise(r => setTimeout(r, 250));
-        continue;
-      }
-      throw new Error('dönüştürme hatası: ' + m);
-    }
-  }
+  proc.importStylesheet(xsl);
+  const out = proc.transformToDocument(xml);
   if (out && out.documentElement && !out.getElementsByTagName('parsererror').length) {
     return '<!DOCTYPE html>' + out.documentElement.outerHTML;
   }
-  // İkinci yol: sonucu belge parçası olarak al
-  try {
-    const frag = proc.transformToFragment(xml, document);
-    const div = document.createElement('div');
-    if (frag) div.appendChild(frag);
-    if (div.innerHTML.length > 200) return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' + div.innerHTML + '</body></html>';
-  } catch (e) { /* aşağıdaki hata yeterli */ }
-  const perr = out && out.getElementsByTagName('parsererror')[0];
-  throw new Error(perr ? 'çıktı geçersiz: ' + (perr.textContent || '').trim().slice(0, 140) : 'şablon boş çıktı üretti');
+  throw new Error('şablon boş veya geçersiz çıktı üretti');
+}
+async function invTransform(xmlText, xsltText) {
+  if (typeof XSLTProcessor !== 'undefined') {
+    try { return invTransformNative(xmlText, xsltText); }
+    catch (e) { console.warn('Tarayıcının XSLT\'si başarısız, JS motoruna geçiliyor', e); }
+  }
+  return invTransformJs(xmlText, xsltText);
 }
 
 function invFallbackHtml(xmlText) {
